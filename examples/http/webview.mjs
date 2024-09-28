@@ -1,9 +1,10 @@
+import { join } from 'node:path';
 import { Application, getWebviewVersion } from '../../index.js';
 import { Worker } from 'node:worker_threads';
 
 console.log('Initializing http server worker...');
 
-const worker = new Worker(new URL('./server.mjs', import.meta.url).pathname, {
+const worker = new Worker(join(import.meta.dirname, 'server.mjs'), {
   stdout: true,
   stderr: true,
 });

@@ -10,38 +10,38 @@ export const enum Theme {
   /** The dark theme. */
   Dark = 1,
   /** The system theme. */
-  System = 2,
+  System = 2
 }
 export interface BrowserWindowOptions {
   /** The URL to load. */
-  url?: string;
+  url?: string
   /** The HTML content to load. */
-  html?: string;
+  html?: string
   /** The width of the window. */
-  width?: number;
+  width?: number
   /** The height of the window. */
-  height?: number;
+  height?: number
   /** The x position of the window. */
-  x?: number;
+  x?: number
   /** The y position of the window. */
-  y?: number;
+  y?: number
   /** Whether to enable devtools. Default is `true`. */
-  enableDevtools?: boolean;
+  enableDevtools?: boolean
   /** Whether the window is resizable. Default is `true`. */
-  resizable?: boolean;
+  resizable?: boolean
   /** Whether the window is incognito. Default is `false`. */
-  incognito?: boolean;
+  incognito?: boolean
   /** Whether the window is transparent. Default is `false`. */
-  transparent?: boolean;
+  transparent?: boolean
   /** The window title. */
-  title?: string;
+  title?: string
   /** The default user agent. */
-  userAgent?: string;
+  userAgent?: string
   /** The default theme. */
-  theme?: Theme;
+  theme?: Theme
 }
 /** Returns the version of the webview. */
-export declare function getWebviewVersion(): string;
+export declare function getWebviewVersion(): string
 /** Represents the control flow of the application. */
 export const enum ControlFlow {
   /** The application will continue running. */
@@ -51,69 +51,69 @@ export const enum ControlFlow {
   /** The application will exit. */
   Exit = 2,
   /** The application will exit with the given exit code. */
-  ExitWithCode = 3,
+  ExitWithCode = 3
 }
 /** Represents the options for creating an application. */
 export interface ApplicationOptions {
   /** The control flow of the application. Default is `Poll`. */
-  controlFlow?: ControlFlow;
+  controlFlow?: ControlFlow
   /** The waiting time in ms for the application (only applicable if control flow is set to `WaitUntil`). */
-  waitTime?: number;
+  waitTime?: number
   /** The exit code of the application. Only applicable if control flow is set to `ExitWithCode`. */
-  exitCode?: number;
+  exitCode?: number
 }
 export declare class BrowserWindow {
   /** Whether the devtools is opened. */
-  isDevtoolsOpen(): boolean;
+  isDevtoolsOpen(): boolean
   /** Opens the devtools. */
-  openDevtools(): void;
+  openDevtools(): void
   /** Closes the devtools. */
-  closeDevtools(): void;
+  closeDevtools(): void
   /** Whether the window is focused. */
-  isFocused(): boolean;
+  isFocused(): boolean
   /** Whether the window is visible. */
-  isVisible(): boolean;
+  isVisible(): boolean
   /** Whether the window is decorated. */
-  isDecorated(): boolean;
+  isDecorated(): boolean
   /** Whether the window is closable. */
-  isClosable(): boolean;
+  isClosable(): boolean
   /** Whether the window is maximizable. */
-  isMaximizable(): boolean;
+  isMaximizable(): boolean
   /** Whether the window is minimizable. */
-  isMinimizable(): boolean;
+  isMinimizable(): boolean
   /** Whether the window is maximized. */
-  isMaximized(): boolean;
+  isMaximized(): boolean
   /** Whether the window is minimized. */
-  isMinimized(): boolean;
+  isMinimized(): boolean
   /** Whether the window is resizable. */
-  isResizable(): boolean;
+  isResizable(): boolean
   /** Loads the given URL. */
-  loadUrl(url: string): void;
+  loadUrl(url: string): void
   /** Loads the given HTML content. */
-  loadHtml(html: string): void;
+  loadHtml(html: string): void
   /** Sets the window title. */
-  setTitle(title: string): void;
+  setTitle(title: string): void
   /** Sets closable. */
-  setClosable(closable: boolean): void;
+  setClosable(closable: boolean): void
   /** Sets maximizable. */
-  setMaximizable(maximizable: boolean): void;
+  setMaximizable(maximizable: boolean): void
   /** Sets minimizable. */
-  setMinimizable(minimizable: boolean): void;
+  setMinimizable(minimizable: boolean): void
   /** Sets resizable. */
-  setResizable(resizable: boolean): void;
+  setResizable(resizable: boolean): void
   /** Gets the window theme. */
-  get theme(): Theme;
+  get theme(): Theme
   /** Sets the window theme. */
-  setTheme(theme: Theme): void;
+  setTheme(theme: Theme): void
   /** Evaluates the given JavaScript code. */
-  evaluateScript(js: string): void;
+  evaluateScript(js: string): void
 }
 /** Represents an application. */
 export declare class Application {
   /** Creates a new application. */
-  constructor(options?: ApplicationOptions | undefined | null);
+  constructor(options?: ApplicationOptions | undefined | null)
   /** Creates a new browser window. */
-  createBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow;
+  createBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow
   /** Runs the application. This method will block the current thread. */
-  run(): void;
+  run(): void
 }
