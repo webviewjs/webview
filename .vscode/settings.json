@@ -1,3 +1,3 @@
 {
-    "rust-analyzer.procMacro.attributes.enable": false
+  "rust-analyzer.procMacro.attributes.enable": false
 }

@@ -93,8 +93,8 @@ impl BrowserWindow {
           y: options.y.unwrap_or(0.0),
         }),
         size: tao::dpi::Size::Logical(tao::dpi::LogicalSize {
-          width: options.width.unwrap_or(200.0),
-          height: options.height.unwrap_or(200.0),
+          width: options.width.unwrap_or(800.0),
+          height: options.height.unwrap_or(600.0),
         }),
       })
       .with_incognito(options.incognito.unwrap_or(false));
