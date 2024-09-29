@@ -1,6 +1,6 @@
 {
   "name": "@webviewjs/webview",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Robust cross-platform webview library for Node.js written in Rust",
   "main": "index.js",
   "repository": "git@github.com:twlite/webview.git",
@@ -21,14 +21,10 @@
     "triples": {
       "defaults": true,
       "additional": [
-        "x86_64-unknown-linux-musl",
-        "aarch64-unknown-linux-gnu",
         "i686-pc-windows-msvc",
-        "armv7-unknown-linux-gnueabihf",
         "aarch64-apple-darwin",
         "aarch64-linux-android",
         "x86_64-unknown-freebsd",
-        "aarch64-unknown-linux-musl",
         "aarch64-pc-windows-msvc",
         "armv7-linux-androideabi"
       ]

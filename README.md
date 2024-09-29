@@ -12,6 +12,18 @@ Robust cross-platform webview library for Node.js written in Rust.
 npm install @webviewjs/webview
 ```
 
+# Supported platforms
+
+| Platform                | Supported |
+| ----------------------- | --------- |
+| x86_64-apple-darwin     | ✅        |
+| x86_64-pc-windows-msvc  | ✅        |
+| i686-pc-windows-msvc    | ✅        |
+| aarch64-apple-darwin    | ✅        |
+| aarch64-linux-android   | ✅        |
+| armv7-linux-androideabi | ✅        |
+| aarch64-pc-windows-msvc | ✅        |
+
 # Usage
 
 In this example, we will create a simple webview application that loads the Node.js website.

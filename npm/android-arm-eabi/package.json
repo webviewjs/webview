@@ -1,6 +1,6 @@
 {
   "name": "@webviewjs/webview-android-arm-eabi",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "os": [
     "android"
   ],
@@ -11,14 +11,13 @@
   "files": [
     "webview.android-arm-eabi.node"
   ],
-  "description": "Template project for writing node package with napi-rs",
+  "description": "Robust cross-platform webview library for Node.js written in Rust",
   "keywords": [
-    "napi-rs",
-    "NAPI",
-    "N-API",
-    "Rust",
-    "node-addon",
-    "node-addon-api"
+    "webview",
+    "node",
+    "rust",
+    "cross-platform",
+    "gui"
   ],
   "license": "MIT",
   "engines": {
@@ -28,5 +27,5 @@
     "registry": "https://registry.npmjs.org/",
     "access": "public"
   },
-  "repository": "git@github.com:napi-rs/webview.git"
+  "repository": "git@github.com:twlite/webview.git"
 }
