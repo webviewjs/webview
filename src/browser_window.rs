@@ -1,11 +1,32 @@
-use napi::Result;
+use napi::{Either, Result};
 use napi_derive::*;
 use tao::{
-  dpi::LogicalPosition,
+  dpi::{LogicalPosition, LogicalSize, PhysicalSize},
   event_loop::EventLoop,
-  window::{Window, WindowBuilder},
+  platform::windows::IconExtWindows,
+  window::{Icon, ProgressBarState, Window, WindowBuilder},
 };
 use wry::{Rect, WebView, WebViewBuilder};
+
+#[napi]
+pub enum JsProgressBarState {
+  None,
+  Normal,
+  /// Treated as normal in linux and macos
+  Indeterminate,
+  /// Treated as normal in linux
+  Paused,
+  /// Treated as normal in linux
+  Error,
+}
+
+#[napi(object)]
+pub struct JsProgressBar {
+  /// The progress state.
+  pub state: Option<JsProgressBarState>,
+  /// The progress value.
+  pub progress: Option<u32>,
+}
 
 #[napi(js_name = "Theme")]
 /// Represents the theme of the window.
@@ -56,7 +77,11 @@ pub struct BrowserWindow {
 
 #[napi]
 impl BrowserWindow {
-  pub fn new(event_loop: &EventLoop<()>, options: Option<BrowserWindowOptions>) -> Result<Self> {
+  pub fn new(
+    event_loop: &EventLoop<()>,
+    options: Option<BrowserWindowOptions>,
+    child: bool,
+  ) -> Result<Self> {
     let options = options.unwrap_or(BrowserWindowOptions {
       url: None,
       html: None,
@@ -72,6 +97,7 @@ impl BrowserWindow {
       user_agent: None,
       theme: None,
     });
+
     let mut window = WindowBuilder::new().with_resizable(options.resizable.unwrap_or(true));
 
     if let Some(title) = options.title {
@@ -85,17 +111,21 @@ impl BrowserWindow {
       )
     })?;
 
-    let mut webview = WebViewBuilder::new(&window)
+    let mut webview = if child {
+      WebViewBuilder::new_as_child(&window)
+    } else {
+      WebViewBuilder::new(&window)
+    };
+
+    webview = webview
       .with_devtools(options.enable_devtools.unwrap_or(true))
       .with_bounds(Rect {
-        position: tao::dpi::Position::Logical(LogicalPosition {
-          x: options.x.unwrap_or(0.0),
-          y: options.y.unwrap_or(0.0),
-        }),
-        size: tao::dpi::Size::Logical(tao::dpi::LogicalSize {
-          width: options.width.unwrap_or(800.0),
-          height: options.height.unwrap_or(600.0),
-        }),
+        position: LogicalPosition::new(options.x.unwrap_or(0.0), options.y.unwrap_or(0.0)).into(),
+        size: LogicalSize::new(
+          options.width.unwrap_or(800.0),
+          options.height.unwrap_or(600.0),
+        )
+        .into(),
       })
       .with_incognito(options.incognito.unwrap_or(false));
 
@@ -221,6 +251,12 @@ impl BrowserWindow {
     self.window.set_title(&title);
   }
 
+  #[napi(getter)]
+  /// Sets the window title.
+  pub fn get_title(&self) -> String {
+    self.window.title()
+  }
+
   #[napi]
   /// Sets closable.
   pub fn set_closable(&self, closable: bool) {
@@ -290,4 +326,67 @@ impl BrowserWindow {
   //       })
   //       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
   //   }
+
+  #[napi]
+  /// Sets the window icon.
+  pub fn set_window_icon(
+    &self,
+    icon: Either<Vec<u8>, String>,
+    width: u32,
+    height: u32,
+  ) -> Result<()> {
+    let ico = match icon {
+      Either::A(bytes) => Icon::from_rgba(bytes, width, height),
+      Either::B(path) => Icon::from_path(&path, PhysicalSize::new(width, height).into()),
+    };
+
+    let parsed = ico.map_err(|e| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to set window icon: {}", e),
+      )
+    })?;
+
+    self.window.set_window_icon(Some(parsed));
+
+    Ok(())
+  }
+
+  #[napi]
+  /// Removes the window icon.
+  pub fn remove_window_icon(&self) {
+    self.window.set_window_icon(None);
+  }
+
+  #[napi]
+  /// Modifies the window's visibility.
+  /// If `false`, this will hide all the window. If `true`, this will show the window.
+  pub fn set_visible(&self, visible: bool) {
+    self.window.set_visible(visible);
+  }
+
+  #[napi]
+  /// Modifies the window's progress bar.
+  pub fn set_progress_bar(&self, state: JsProgressBar) {
+    let progress_state = match state.state {
+      Some(JsProgressBarState::Normal) => Some(tao::window::ProgressState::Normal),
+      Some(JsProgressBarState::Indeterminate) => Some(tao::window::ProgressState::Indeterminate),
+      Some(JsProgressBarState::Paused) => Some(tao::window::ProgressState::Paused),
+      Some(JsProgressBarState::Error) => Some(tao::window::ProgressState::Error),
+      _ => None,
+    };
+
+    let progress_value = match state.progress {
+      Some(value) => Some(value as u64),
+      _ => None,
+    };
+
+    let progress = ProgressBarState {
+      progress: progress_value,
+      state: progress_state,
+      desktop_filename: None,
+    };
+
+    self.window.set_progress_bar(progress);
+  }
 }

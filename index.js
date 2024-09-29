@@ -310,8 +310,9 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { Theme, BrowserWindow, getWebviewVersion, ControlFlow, Application } = nativeBinding
+const { JsProgressBarState, Theme, BrowserWindow, getWebviewVersion, ControlFlow, Application } = nativeBinding
 
+module.exports.JsProgressBarState = JsProgressBarState
 module.exports.Theme = Theme
 module.exports.BrowserWindow = BrowserWindow
 module.exports.getWebviewVersion = getWebviewVersion

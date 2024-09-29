@@ -1,4 +1,5 @@
 #![deny(clippy::all)]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use browser_window::{BrowserWindow, BrowserWindowOptions};
 use napi::Result;
@@ -86,7 +87,27 @@ impl Application {
       ));
     }
 
-    let window = BrowserWindow::new(event_loop.unwrap(), options)?;
+    let window = BrowserWindow::new(event_loop.unwrap(), options, false)?;
+
+    Ok(window)
+  }
+
+  #[napi]
+  /// Creates a new browser window as a child window.
+  pub fn create_child_browser_window(
+    &self,
+    options: Option<BrowserWindowOptions>,
+  ) -> Result<BrowserWindow> {
+    let event_loop = self.event_loop.as_ref();
+
+    if event_loop.is_none() {
+      return Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "Event loop is not initialized",
+      ));
+    }
+
+    let window = BrowserWindow::new(event_loop.unwrap(), options, true)?;
 
     Ok(window)
   }
