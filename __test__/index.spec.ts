@@ -1,8 +1,7 @@
 import test from 'ava';
 
-import { plus100 } from '../index';
+import { getWebviewVersion } from '../index';
 
-test('sync function from native code', (t) => {
-  const fixture = 42;
-  t.is(plus100(fixture), fixture + 100);
+test('webview version', (t) => {
+  t.is(typeof getWebviewVersion(), 'string');
 });
