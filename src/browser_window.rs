@@ -3,10 +3,12 @@ use napi_derive::*;
 use tao::{
   dpi::{LogicalPosition, LogicalSize, PhysicalSize},
   event_loop::EventLoop,
-  platform::windows::IconExtWindows,
   window::{Icon, ProgressBarState, Window, WindowBuilder},
 };
 use wry::{Rect, WebView, WebViewBuilder};
+
+#[cfg(target_os = "windows")]
+use tao::platform::windows::IconExtWindows;
 
 #[napi]
 pub enum JsProgressBarState {
@@ -335,19 +337,22 @@ impl BrowserWindow {
     width: u32,
     height: u32,
   ) -> Result<()> {
-    let ico = match icon {
-      Either::A(bytes) => Icon::from_rgba(bytes, width, height),
-      Either::B(path) => Icon::from_path(&path, PhysicalSize::new(width, height).into()),
-    };
+    #[cfg(target_os = "windows")]
+    {
+      let ico = match icon {
+        Either::A(bytes) => Icon::from_rgba(bytes, width, height),
+        Either::B(path) => Icon::from_path(&path, PhysicalSize::new(width, height).into()),
+      };
 
-    let parsed = ico.map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to set window icon: {}", e),
-      )
-    })?;
+      let parsed = ico.map_err(|e| {
+        napi::Error::new(
+          napi::Status::GenericFailure,
+          format!("Failed to set window icon: {}", e),
+        )
+      })?;
 
-    self.window.set_window_icon(Some(parsed));
+      self.window.set_window_icon(Some(parsed));
+    }
 
     Ok(())
   }
