@@ -46,7 +46,7 @@ app.run();
 
 # Examples
 
-Check out [examples](./examples) directory for more examples.
+Check out [examples](./examples) directory for more examples, such as serving contents from a web server to webview, etc.
 
 # Building executables
 
