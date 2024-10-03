@@ -1,4 +1,4 @@
-import { Application, Theme } from '../index.js';
+import { Application, Theme } from '../dist/index.js';
 
 const app = new Application();
 const window = app.createBrowserWindow({

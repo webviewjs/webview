@@ -24,7 +24,7 @@ pub struct IpcMessage {
   /// The unique identifier of the window that sent the message.
   pub window_id: u32,
   /// The body of the message.
-  pub body: Vec<u8>,
+  pub body: Buffer,
   /// The HTTP method of the message.
   pub method: String,
   /// The http headers of the message.
@@ -78,14 +78,16 @@ pub struct Application {
   /// The unique identifier of the webviews created by this application.
   id_ref: u32,
   /// The ipc handler callback
-  ipc_handler: Option<JsFunction>,
+  ipc_handler: Option<FunctionRef<IpcMessage, ()>>,
+  /// The env
+  env: Env,
 }
 
 #[napi]
 impl Application {
   #[napi(constructor)]
   /// Creates a new application.
-  pub fn new(options: Option<ApplicationOptions>) -> Result<Self> {
+  pub fn new(env: Env, options: Option<ApplicationOptions>) -> Result<Self> {
     let event_loop = EventLoop::new();
 
     Ok(Self {
@@ -97,12 +99,13 @@ impl Application {
       }),
       id_ref: 0,
       ipc_handler: None,
+      env,
     })
   }
 
   #[napi]
   /// Sets the IPC handler callback.
-  pub fn on_ipc_message(&mut self, handler: Option<JsFunction>) {
+  pub fn on_ipc_message(&mut self, handler: Option<FunctionRef<IpcMessage, ()>>) {
     self.ipc_handler = handler;
   }
 
@@ -113,11 +116,15 @@ impl Application {
       return;
     }
 
-    let on_ipc_msg = func.unwrap();
+    let on_ipc_msg = func.unwrap().borrow_back(&self.env);
 
-    println!("Received IPC message: {:?}", req);
+    if on_ipc_msg.is_err() {
+      return;
+    }
 
-    let body = req.body().as_bytes().to_vec();
+    let on_ipc_msg = on_ipc_msg.unwrap();
+
+    let body = req.body().as_bytes().to_vec().into();
     let headers = req
       .headers()
       .iter()
@@ -138,13 +145,8 @@ impl Application {
       uri: req.uri().to_string(),
     };
 
-    match on_ipc_msg.call1::<IpcMessage, ()>(msg) {
-      Ok(_) => {
-        println!("onIpcMessage called successfully");
-      }
-      Err(e) => {
-        println!("onIpcMessage error: {:?}", e);
-      }
+    match on_ipc_msg.call(msg) {
+      _ => (),
     };
   }
 

@@ -1,14 +1,16 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
+    "target": "ES2020",
     "strict": true,
     "moduleResolution": "node",
     "module": "CommonJS",
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "outDir": "dist",
+    "declaration": true
   },
-  "include": ["."],
+  "include": ["./lib/**/*.ts"],
   "exclude": ["node_modules", "bench", "__test__"]
 }

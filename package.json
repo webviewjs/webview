@@ -6,7 +6,8 @@
     "webviewjs": "./cli/index.mjs"
   },
   "description": "Robust cross-platform webview library for Node.js written in Rust. It also works with deno and bun.",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "repository": "git@github.com:twlite/webview.git",
   "license": "MIT",
   "type": "commonjs",
@@ -19,8 +20,9 @@
   ],
   "files": [
     "cli",
-    "index.d.ts",
-    "index.js"
+    "dist",
+    "binding.d.ts",
+    "binding.js"
   ],
   "napi": {
     "name": "webview",
@@ -45,8 +47,9 @@
   },
   "scripts": {
     "artifacts": "napi artifacts",
-    "build": "napi build --platform --release",
-    "build:debug": "napi build --platform",
+    "build": "napi build --platform --release --dts binding.d.ts --js binding.js && yarn build:ts",
+    "build:debug": "napi build --platform --dts binding.d.ts --js binding.js && yarn build:ts",
+    "build:ts": "tsc",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
     "format:toml": "taplo format",
@@ -71,7 +74,7 @@
     "oxlint": "^0.9.0",
     "prettier": "^3.3.3",
     "tinybench": "^2.8.0",
-    "typescript": "^5.5.3"
+    "typescript": "^5.6.2"
   },
   "lint-staged": {
     "*.@(js|ts|tsx)": [

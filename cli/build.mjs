@@ -7,9 +7,7 @@ const isWindows = process.platform === 'win32';
 const isMac = process.platform === 'darwin';
 const NODE_SEA_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 
-const filename = (path) => path.split(sep).pop();
-
-function writeSeaConfig(main, dest, resources) {
+function writeSeaConfig(main, dest, resources = {}) {
     const config = {
         main,
         output: join(dirname(dest), 'sea-prep.blob'),
@@ -90,7 +88,7 @@ export function build(input, output, name, resources) {
         mkdirSync(output, { recursive: true });
     }
 
-    const assets = JSON.parse(readFileSync(resources, 'utf-8'));
+    const assets = resources ? JSON.parse(readFileSync(resources, 'utf-8')) : {};
     const configPath = join(output, 'sea-config.json');
     const execPath = copyNode(output, name);
 

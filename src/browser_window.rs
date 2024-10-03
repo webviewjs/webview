@@ -1,8 +1,4 @@
-use napi::{
-  bindgen_prelude::*,
-  threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode},
-  Either, Result,
-};
+use napi::{Either, Result};
 use napi_derive::*;
 use tao::{
   dpi::{LogicalPosition, LogicalSize, PhysicalSize},
@@ -62,7 +58,7 @@ pub struct Monitor {
   pub video_modes: Vec<JsVideoMode>,
 }
 
-#[napi]
+#[napi(js_name = "ProgressBarState")]
 pub enum JsProgressBarState {
   None,
   Normal,
@@ -136,6 +132,7 @@ pub struct BrowserWindowOptions {
 #[napi]
 pub struct BrowserWindow {
   id: u32,
+  is_child_window: bool,
   window: Window,
   webview: WebView,
 }
@@ -265,12 +262,19 @@ impl BrowserWindow {
       window,
       webview,
       id,
+      is_child_window: child,
     })
   }
 
-  #[napi]
+  #[napi(getter)]
+  /// Whether or not the window is a child window.
+  pub fn is_child(&self) -> bool {
+    self.is_child_window
+  }
+
+  #[napi(getter)]
   /// The unique identifier of this window.
-  pub fn id(&self) -> u32 {
+  pub fn get_id(&self) -> u32 {
     self.id
   }
 
@@ -468,33 +472,23 @@ impl BrowserWindow {
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
   }
 
-  #[napi]
-  /// Evaluates the given JavaScript code with a callback.
-  pub fn evaluate_script_with_callback(&self, js: String, callback: JsFunction) -> Result<()> {
-    let tsfn: ThreadsafeFunction<String, ErrorStrategy::CalleeHandled> = callback
-      .create_threadsafe_function(
-        0,
-        |ctx: napi::threadsafe_function::ThreadSafeCallContext<String>| {
-          ctx
-            .env
-            .create_string(&ctx.value.to_string())
-            .map(|v| vec![v])
-        },
-      )
-      .map_err(|e| {
-        napi::Error::new(
-          napi::Status::GenericFailure,
-          format!("Failed to create threadsafe function: {}", e),
-        )
-      })?;
+  // #[napi]
+  // /// Evaluates the given JavaScript code with a callback.
+  // pub fn evaluate_script_with_callback(
+  //   &self,
+  //   js: String,
+  //   callback: Function<String, ()>,
+  //   env: Env,
+  // ) -> Result<()> {
+  //   let cb_ref = callback.create_ref()?;
 
-    self
-      .webview
-      .evaluate_script_with_callback(&js, move |val| {
-        tsfn.call(Ok(val), ThreadsafeFunctionCallMode::Blocking);
-      })
-      .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
-  }
+  //   self
+  //     .webview
+  //     .evaluate_script_with_callback(&js, move |val| {
+  //       let cb = cb_ref.borrow_back(&env);
+  //     })
+  //     .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
+  // }
 
   #[napi]
   /// Sets the window icon.

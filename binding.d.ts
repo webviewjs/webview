@@ -41,7 +41,7 @@ export interface Monitor {
   /** The video modes of the monitor. */
   videoModes: Array<VideoMode>
 }
-export const enum JsProgressBarState {
+export const enum ProgressBarState {
   None = 0,
   Normal = 1,
   /** Treated as normal in linux and macos */
@@ -53,7 +53,7 @@ export const enum JsProgressBarState {
 }
 export interface JsProgressBar {
   /** The progress state. */
-  state?: JsProgressBarState
+  state?: ProgressBarState
   /** The progress value. */
   progress?: number
 }
@@ -112,10 +112,10 @@ export interface IpcMessage {
   /** The unique identifier of the window that sent the message. */
   windowId: number
   /** The body of the message. */
-  body: Array<number>
+  body: Buffer
   /** The HTTP method of the message. */
   method: string
-  /** The headers of the message. */
+  /** The http headers of the message. */
   headers: Array<HeaderData>
   /** The URI of the message. */
   uri: string
@@ -143,8 +143,10 @@ export interface ApplicationOptions {
   exitCode?: number
 }
 export declare class BrowserWindow {
+  /** Whether or not the window is a child window. */
+  get isChild(): boolean
   /** The unique identifier of this window. */
-  id(): number
+  get id(): number
   /** Launch a print modal for this window's contents. */
   print(): void
   /** Set webview zoom level. */
@@ -197,8 +199,6 @@ export declare class BrowserWindow {
   setTheme(theme: Theme): void
   /** Evaluates the given JavaScript code. */
   evaluateScript(js: string): void
-  /** Evaluates the given JavaScript code with a callback. */
-  evaluateScriptWithCallback(js: string, callback: (...args: any[]) => any): void
   /** Sets the window icon. */
   setWindowIcon(icon: Array<number> | string, width: number, height: number): void
   /** Removes the window icon. */
@@ -242,7 +242,7 @@ export declare class Application {
   /** Creates a new application. */
   constructor(options?: ApplicationOptions | undefined | null)
   /** Sets the IPC handler callback. */
-  onIpcMessage(handler?: (...args: any[]) => any | undefined | null): void
+  onIpcMessage(handler?: (arg: IpcMessage) => void | undefined | null): void
   /** Creates a new browser window. */
   createBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow
   /** Creates a new browser window as a child window. */
