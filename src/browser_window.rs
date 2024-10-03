@@ -225,24 +225,9 @@ impl BrowserWindow {
       webview = webview.with_hotkeys_zoom(hotkeys_zoom);
     }
 
+    #[cfg(target_os = "windows")]
     {
-      #[cfg(target_os = "windows")]
       use wry::WebViewBuilderExtWindows;
-
-      #[cfg(any(target_os = "macos", target_os = "ios",))]
-      use wry::WebViewBuilderExtDarwin;
-
-      #[cfg(target_os = "android")]
-      use wry::WebViewBuilderExtAndroid;
-
-      #[cfg(any(
-        target_os = "linux",
-        target_os = "dragonfly",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "openbsd",
-      ))]
-      use wry::WebViewBuilderExtUnix;
 
       if let Some(theme) = options.theme {
         let theme = match theme {
