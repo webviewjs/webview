@@ -6,8 +6,8 @@
     "webviewjs": "./cli/index.mjs"
   },
   "description": "Robust cross-platform webview library for Node.js written in Rust. It also works with deno and bun.",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./index.js",
+  "types": "./index.d.ts",
   "repository": "git@github.com:twlite/webview.git",
   "license": "MIT",
   "type": "commonjs",
@@ -20,7 +20,8 @@
   ],
   "files": [
     "cli",
-    "dist",
+    "index.d.ts",
+    "index.js",
     "binding.d.ts",
     "binding.js"
   ],

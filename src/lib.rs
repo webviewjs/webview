@@ -15,7 +15,9 @@ pub mod browser_window;
 
 #[napi(object)]
 pub struct HeaderData {
+  /// The key of the header.
   pub key: String,
+  /// The value of the header.
   pub value: Option<String>,
 }
 
@@ -109,6 +111,7 @@ impl Application {
     self.ipc_handler = handler;
   }
 
+  /// Handles the IPC message.
   fn handle_ipc_message(&self, req: Request<String>, id: &u32) {
     let func = &self.ipc_handler.as_ref();
 

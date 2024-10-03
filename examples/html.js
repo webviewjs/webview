@@ -1,6 +1,6 @@
 // const requireScript = require('node:module').createRequire(__filename);
 // const { Application } = requireScript('../index.js');
-const { Application } = require('../dist/index.js');
+const { Application } = require('../index.js');
 
 const app = new Application();
 
