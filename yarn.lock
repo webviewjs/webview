@@ -484,6 +484,7 @@ __metadata:
     typescript: "npm:^5.5.3"
   bin:
     webview: ./cli/index.mjs
+    webviewjs: ./cli/index.mjs
   languageName: unknown
   linkType: soft
 
