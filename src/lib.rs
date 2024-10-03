@@ -27,7 +27,7 @@ pub struct IpcMessage {
   pub body: Vec<u8>,
   /// The HTTP method of the message.
   pub method: String,
-  /// The headers of the message.
+  /// The http headers of the message.
   pub headers: Vec<HeaderData>,
   /// The URI of the message.
   pub uri: String,
