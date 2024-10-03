@@ -482,6 +482,8 @@ __metadata:
     prettier: "npm:^3.3.3"
     tinybench: "npm:^2.8.0"
     typescript: "npm:^5.5.3"
+  bin:
+    webview: ./cli/index.mjs
   languageName: unknown
   linkType: soft
 

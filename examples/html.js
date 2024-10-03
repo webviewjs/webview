@@ -1,8 +1,9 @@
-import { Application } from '../index.js';
+const requireScript = require('node:module').createRequire(__filename);
+const { Application } = requireScript('../index.js');
 
 const app = new Application();
 const window = app.createBrowserWindow({
-  html: `<!DOCTYPE html>
+    html: `<!DOCTYPE html>
     <html>
         <head>
             <title>Webview</title>

@@ -50,4 +50,13 @@ Check out [examples](./examples) directory for more examples.
 
 # Building executables
 
-You can use [Single Executable Applications](https://nodejs.org/api/single-executable-applications.html) feature of Node.js to build an executable file.
+> [!WARNING]
+> The CLI feature is very experimental and may not work as expected. Please report any issues you find.
+
+You can use [Single Executable Applications](https://nodejs.org/api/single-executable-applications.html) feature of Node.js to build an executable file. WebviewJS comes with a helper cli script to make this process easier.
+
+```bash
+webview --build --input ./path/to/your/script.js --output ./path/to/output-directory --name my-app
+```
+
+You can pass `--resources ./my-resource.json` to include additional resources in the executable. This resource can be imported using `getAsset()` or `getRawAsset()` functions from `node:sea` module.

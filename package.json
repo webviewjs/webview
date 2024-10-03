@@ -1,6 +1,10 @@
 {
   "name": "@webviewjs/webview",
   "version": "0.1.0",
+  "bin": {
+    "webview": "./cli/index.mjs",
+    "webviewjs": "./cli/index.mjs"
+  },
   "description": "Robust cross-platform webview library for Node.js written in Rust",
   "main": "index.js",
   "repository": "git@github.com:twlite/webview.git",
@@ -48,7 +52,8 @@
     "format:rs": "cargo fmt",
     "lint": "oxlint .",
     "prepublishOnly": "napi prepublish -t npm",
-    "version": "napi version"
+    "version": "napi version",
+    "test": "node --test './__test__/**/*.test.*'"
   },
   "devDependencies": {
     "@napi-rs/cli": "^2.18.4",
