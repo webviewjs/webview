@@ -9,10 +9,10 @@ use tao::{
   event_loop::EventLoop,
   window::{Fullscreen, Icon, ProgressBarState, Window, WindowBuilder},
 };
-use wry::{http::Request, Rect, WebView, WebViewBuilder, WebViewBuilderExtWindows};
+use wry::{http::Request, Rect, WebView, WebViewBuilder};
 
-#[cfg(target_os = "windows")]
-use tao::platform::windows::IconExtWindows;
+// #[cfg(target_os = "windows")]
+// use tao::platform::windows::IconExtWindows;
 
 #[napi]
 pub enum FullscreenType {
@@ -225,14 +225,34 @@ impl BrowserWindow {
       webview = webview.with_hotkeys_zoom(hotkeys_zoom);
     }
 
-    if let Some(theme) = options.theme {
-      let theme = match theme {
-        JsTheme::Light => wry::Theme::Light,
-        JsTheme::Dark => wry::Theme::Dark,
-        _ => wry::Theme::Auto,
-      };
+    {
+      #[cfg(target_os = "windows")]
+      use wry::WebViewBuilderExtWindows;
 
-      webview = webview.with_theme(theme)
+      #[cfg(any(target_os = "macos", target_os = "ios",))]
+      use wry::WebViewBuilderExtDarwin;
+
+      #[cfg(target_os = "android")]
+      use wry::WebViewBuilderExtAndroid;
+
+      #[cfg(any(
+        target_os = "linux",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+      ))]
+      use wry::WebViewBuilderExtUnix;
+
+      if let Some(theme) = options.theme {
+        let theme = match theme {
+          JsTheme::Light => wry::Theme::Light,
+          JsTheme::Dark => wry::Theme::Dark,
+          _ => wry::Theme::Auto,
+        };
+
+        webview = webview.with_theme(theme)
+      }
     }
 
     if let Some(user_agent) = options.user_agent {
@@ -501,6 +521,8 @@ impl BrowserWindow {
   ) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
+      use tao::platform::windows::IconExtWindows;
+
       let ico = match icon {
         Either::A(bytes) => Icon::from_rgba(bytes, width, height),
         Either::B(path) => Icon::from_path(&path, PhysicalSize::new(width, height).into()),
