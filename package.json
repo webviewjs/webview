@@ -18,6 +18,7 @@
     "gui"
   ],
   "files": [
+    "cli",
     "index.d.ts",
     "index.js"
   ],
