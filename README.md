@@ -6,6 +6,9 @@ Robust cross-platform webview library for Node.js written in Rust.
 
 ![preview](https://github.com/twlite/webview/raw/main/assets/preview.png)
 
+> [!CAUTION]
+> This library is still in development and not ready for production use. Feel free to experiment with it and report any issues you find.
+
 # Installation
 
 ```bash

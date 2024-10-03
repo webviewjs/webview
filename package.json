@@ -5,6 +5,7 @@
   "main": "index.js",
   "repository": "git@github.com:twlite/webview.git",
   "license": "MIT",
+  "type": "commonjs",
   "keywords": [
     "webview",
     "node",
