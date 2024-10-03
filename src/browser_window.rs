@@ -1,14 +1,66 @@
-use napi::{Either, Result};
+use napi::{
+  bindgen_prelude::*,
+  threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode},
+  Either, Result,
+};
 use napi_derive::*;
 use tao::{
   dpi::{LogicalPosition, LogicalSize, PhysicalSize},
   event_loop::EventLoop,
-  window::{Icon, ProgressBarState, Window, WindowBuilder},
+  window::{Fullscreen, Icon, ProgressBarState, Window, WindowBuilder},
 };
-use wry::{Rect, WebView, WebViewBuilder};
+use wry::{http::Request, Rect, WebView, WebViewBuilder, WebViewBuilderExtWindows};
 
 #[cfg(target_os = "windows")]
 use tao::platform::windows::IconExtWindows;
+
+#[napi]
+pub enum FullscreenType {
+  /// Exclusive fullscreen.
+  Exclusive,
+  /// Borderless fullscreen.
+  Borderless,
+}
+
+#[napi(object)]
+pub struct Dimensions {
+  /// The width of the size.
+  pub width: u32,
+  /// The height of the size.
+  pub height: u32,
+}
+
+#[napi(object)]
+pub struct Position {
+  /// The x position.
+  pub x: i32,
+  /// The y position.
+  pub y: i32,
+}
+
+#[napi(object, js_name = "VideoMode")]
+pub struct JsVideoMode {
+  /// The size of the video mode.
+  pub size: Dimensions,
+  /// The bit depth of the video mode.
+  pub bit_depth: u16,
+  /// The refresh rate of the video mode.
+  pub refresh_rate: u16,
+}
+
+#[napi(object)]
+pub struct Monitor {
+  /// The name of the monitor.
+  pub name: Option<String>,
+  /// The scale factor of the monitor.
+  pub scale_factor: f64,
+  /// The size of the monitor.
+  pub size: Dimensions,
+  /// The position of the monitor.
+  pub position: Position,
+  /// The video modes of the monitor.
+  pub video_modes: Vec<JsVideoMode>,
+}
 
 #[napi]
 pub enum JsProgressBarState {
@@ -69,10 +121,21 @@ pub struct BrowserWindowOptions {
   pub user_agent: Option<String>,
   /// The default theme.
   pub theme: Option<JsTheme>,
+  /// The preload script
+  pub preload: Option<String>,
+  /// Whether the window is zoomable via hotkeys or gestures.
+  pub hotkeys_zoom: Option<bool>,
+  /// Whether the clipboard access is enabled.
+  pub clipboard: Option<bool>,
+  /// Whether the autoplay policy is enabled.
+  pub autoplay: Option<bool>,
+  /// Indicates whether horizontal swipe gestures trigger backward and forward page navigation.
+  pub back_forward_navigation_gestures: Option<bool>,
 }
 
 #[napi]
 pub struct BrowserWindow {
+  id: u32,
   window: Window,
   webview: WebView,
 }
@@ -82,7 +145,9 @@ impl BrowserWindow {
   pub fn new(
     event_loop: &EventLoop<()>,
     options: Option<BrowserWindowOptions>,
+    id: u32,
     child: bool,
+    ipc_handler: impl Fn(Request<String>) + 'static,
   ) -> Result<Self> {
     let options = options.unwrap_or(BrowserWindowOptions {
       url: None,
@@ -98,6 +163,11 @@ impl BrowserWindow {
       title: Some("WebviewJS".to_string()),
       user_agent: None,
       theme: None,
+      preload: None,
+      autoplay: None,
+      back_forward_navigation_gestures: None,
+      clipboard: None,
+      hotkeys_zoom: None,
     });
 
     let mut window = WindowBuilder::new().with_resizable(options.resizable.unwrap_or(true));
@@ -131,6 +201,40 @@ impl BrowserWindow {
       })
       .with_incognito(options.incognito.unwrap_or(false));
 
+    if let Some(preload) = options.preload {
+      webview = webview.with_initialization_script(&preload);
+    }
+
+    if let Some(transparent) = options.transparent {
+      webview = webview.with_transparent(transparent);
+    }
+
+    if let Some(autoplay) = options.autoplay {
+      webview = webview.with_autoplay(autoplay);
+    }
+
+    if let Some(clipboard) = options.clipboard {
+      webview = webview.with_clipboard(clipboard);
+    }
+
+    if let Some(back_forward_navigation_gestures) = options.back_forward_navigation_gestures {
+      webview = webview.with_back_forward_navigation_gestures(back_forward_navigation_gestures);
+    }
+
+    if let Some(hotkeys_zoom) = options.hotkeys_zoom {
+      webview = webview.with_hotkeys_zoom(hotkeys_zoom);
+    }
+
+    if let Some(theme) = options.theme {
+      let theme = match theme {
+        JsTheme::Light => wry::Theme::Light,
+        JsTheme::Dark => wry::Theme::Dark,
+        _ => wry::Theme::Auto,
+      };
+
+      webview = webview.with_theme(theme)
+    }
+
     if let Some(user_agent) = options.user_agent {
       webview = webview.with_user_agent(&user_agent);
     }
@@ -143,6 +247,8 @@ impl BrowserWindow {
       webview = webview.with_url(&url);
     }
 
+    webview = webview.with_ipc_handler(ipc_handler);
+
     let webview = webview.build().map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
@@ -150,7 +256,50 @@ impl BrowserWindow {
       )
     })?;
 
-    Ok(Self { window, webview })
+    Ok(Self {
+      window,
+      webview,
+      id,
+    })
+  }
+
+  #[napi]
+  /// The unique identifier of this window.
+  pub fn id(&self) -> u32 {
+    self.id
+  }
+
+  #[napi]
+  /// Launch a print modal for this window's contents.
+  pub fn print(&self) -> Result<()> {
+    self.webview.print().map_err(|e| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to print: {}", e),
+      )
+    })
+  }
+
+  #[napi]
+  /// Set webview zoom level.
+  pub fn zoom(&self, scale_facotr: f64) -> Result<()> {
+    self.webview.zoom(scale_facotr).map_err(|e| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to zoom: {}", e),
+      )
+    })
+  }
+
+  #[napi]
+  /// Hides or shows the webview.
+  pub fn set_webview_visibility(&self, visible: bool) -> Result<()> {
+    self.webview.set_visible(visible).map_err(|e| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to set webview visibility: {}", e),
+      )
+    })
   }
 
   #[napi]
@@ -314,20 +463,33 @@ impl BrowserWindow {
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
   }
 
-  //   #[napi]
-  //   /// Evaluates the given JavaScript code with a callback.
-  //   pub fn evaluate_script_with_callback<T: Fn(String) -> Result<()> + Send>(
-  //     &self,
-  //     js: String,
-  //     cb: T,
-  //   ) -> Result<()> {
-  //     self
-  //       .webview
-  //       .evaluate_script_with_callback(&js, |val| {
-  //         cb(val).unwrap_or(());
-  //       })
-  //       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
-  //   }
+  #[napi]
+  /// Evaluates the given JavaScript code with a callback.
+  pub fn evaluate_script_with_callback(&self, js: String, callback: JsFunction) -> Result<()> {
+    let tsfn: ThreadsafeFunction<String, ErrorStrategy::CalleeHandled> = callback
+      .create_threadsafe_function(
+        0,
+        |ctx: napi::threadsafe_function::ThreadSafeCallContext<String>| {
+          ctx
+            .env
+            .create_string(&ctx.value.to_string())
+            .map(|v| vec![v])
+        },
+      )
+      .map_err(|e| {
+        napi::Error::new(
+          napi::Status::GenericFailure,
+          format!("Failed to create threadsafe function: {}", e),
+        )
+      })?;
+
+    self
+      .webview
+      .evaluate_script_with_callback(&js, move |val| {
+        tsfn.call(Ok(val), ThreadsafeFunctionCallMode::Blocking);
+      })
+      .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
+  }
 
   #[napi]
   /// Sets the window icon.
@@ -393,5 +555,206 @@ impl BrowserWindow {
     };
 
     self.window.set_progress_bar(progress);
+  }
+
+  #[napi]
+  /// Maximizes the window.
+  pub fn set_maximized(&self, value: bool) {
+    self.window.set_maximized(value);
+  }
+
+  #[napi]
+  /// Minimizes the window.
+  pub fn set_minimized(&self, value: bool) {
+    self.window.set_minimized(value);
+  }
+
+  #[napi]
+  /// Bring the window to front and focus.
+  pub fn focus(&self) {
+    self.window.set_focus();
+  }
+
+  #[napi]
+  /// Get available monitors.
+  pub fn get_available_monitors(&self) -> Vec<Monitor> {
+    self
+      .window
+      .available_monitors()
+      .map(|m| Monitor {
+        name: m.name(),
+        scale_factor: m.scale_factor(),
+        size: Dimensions {
+          width: m.size().width,
+          height: m.size().height,
+        },
+        position: Position {
+          x: m.position().x,
+          y: m.position().y,
+        },
+        video_modes: m
+          .video_modes()
+          .map(|v| JsVideoMode {
+            size: Dimensions {
+              width: v.size().width,
+              height: v.size().height,
+            },
+            bit_depth: v.bit_depth(),
+            refresh_rate: v.refresh_rate(),
+          })
+          .collect(),
+      })
+      .collect()
+  }
+
+  #[napi]
+  /// Get the current monitor.
+  pub fn get_current_monitor(&self) -> Option<Monitor> {
+    match self.window.current_monitor() {
+      Some(monitor) => Some(Monitor {
+        name: monitor.name(),
+        scale_factor: monitor.scale_factor(),
+        size: Dimensions {
+          width: monitor.size().width,
+          height: monitor.size().height,
+        },
+        position: Position {
+          x: monitor.position().x,
+          y: monitor.position().y,
+        },
+        video_modes: monitor
+          .video_modes()
+          .map(|v| JsVideoMode {
+            size: Dimensions {
+              width: v.size().width,
+              height: v.size().height,
+            },
+            bit_depth: v.bit_depth(),
+            refresh_rate: v.refresh_rate(),
+          })
+          .collect(),
+      }),
+      _ => None,
+    }
+  }
+
+  #[napi]
+  /// Get the primary monitor.
+  pub fn get_primary_monitor(&self) -> Option<Monitor> {
+    match self.window.primary_monitor() {
+      Some(monitor) => Some(Monitor {
+        name: monitor.name(),
+        scale_factor: monitor.scale_factor(),
+        size: Dimensions {
+          width: monitor.size().width,
+          height: monitor.size().height,
+        },
+        position: Position {
+          x: monitor.position().x,
+          y: monitor.position().y,
+        },
+        video_modes: monitor
+          .video_modes()
+          .map(|v| JsVideoMode {
+            size: Dimensions {
+              width: v.size().width,
+              height: v.size().height,
+            },
+            bit_depth: v.bit_depth(),
+            refresh_rate: v.refresh_rate(),
+          })
+          .collect(),
+      }),
+      _ => None,
+    }
+  }
+
+  #[napi]
+  /// Get the monitor from the given point.
+  pub fn get_monitor_from_point(&self, x: f64, y: f64) -> Option<Monitor> {
+    match self.window.monitor_from_point(x, y) {
+      Some(monitor) => Some(Monitor {
+        name: monitor.name(),
+        scale_factor: monitor.scale_factor(),
+        size: Dimensions {
+          width: monitor.size().width,
+          height: monitor.size().height,
+        },
+        position: Position {
+          x: monitor.position().x,
+          y: monitor.position().y,
+        },
+        video_modes: monitor
+          .video_modes()
+          .map(|v| JsVideoMode {
+            size: Dimensions {
+              width: v.size().width,
+              height: v.size().height,
+            },
+            bit_depth: v.bit_depth(),
+            refresh_rate: v.refresh_rate(),
+          })
+          .collect(),
+      }),
+      _ => None,
+    }
+  }
+
+  #[napi]
+  /// Prevents the window contents from being captured by other apps.
+  pub fn set_content_protection(&self, enabled: bool) {
+    self.window.set_content_protection(enabled);
+  }
+
+  #[napi]
+  /// Sets the window always on top.
+  pub fn set_always_on_top(&self, enabled: bool) {
+    self.window.set_always_on_top(enabled);
+  }
+
+  #[napi]
+  /// Sets always on bottom.
+  pub fn set_always_on_bottom(&self, enabled: bool) {
+    self.window.set_always_on_bottom(enabled);
+  }
+
+  #[napi]
+  /// Turn window decorations on or off.
+  pub fn set_decorations(&self, enabled: bool) {
+    self.window.set_decorations(enabled);
+  }
+
+  #[napi(getter)]
+  /// Gets the window's current fullscreen state.
+  pub fn get_fullscreen(&self) -> Option<FullscreenType> {
+    match self.window.fullscreen() {
+      None => None,
+      Some(Fullscreen::Borderless(None)) => Some(FullscreenType::Borderless),
+      _ => Some(FullscreenType::Exclusive),
+    }
+  }
+
+  #[napi]
+  /// Sets the window to fullscreen or back.
+  pub fn set_fullscreen(&self, fullscreen_type: Option<FullscreenType>) {
+    let monitor = self.window.current_monitor();
+
+    if monitor.is_none() {
+      return;
+    };
+
+    let video_mode = monitor.unwrap().video_modes().next();
+
+    if video_mode.is_none() {
+      return;
+    };
+
+    let fs = match fullscreen_type {
+      Some(FullscreenType::Exclusive) => Some(Fullscreen::Exclusive(video_mode.unwrap())),
+      Some(FullscreenType::Borderless) => Some(Fullscreen::Borderless(None)),
+      _ => None,
+    };
+
+    self.window.set_fullscreen(fs);
   }
 }
