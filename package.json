@@ -1,6 +1,6 @@
 {
   "name": "@webviewjs/webview",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "bin": {
     "webview": "./cli/index.mjs",
     "webviewjs": "./cli/index.mjs"
