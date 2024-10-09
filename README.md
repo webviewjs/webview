@@ -2,7 +2,7 @@
 
 ![https://github.com/webviewjs/webview/actions](https://github.com/webviewjs/webview/workflows/CI/badge.svg)
 
-Robust cross-platform webview library for Node.js written in Rust.
+Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [tao](https://github.com/tauri-apps/tao) and [wry](https://github.com/tauri-apps/wry) allowing you to easily manage cross platform windowing and webview.
 
 ![preview](https://github.com/twlite/webview/raw/main/assets/preview.png)
 
@@ -27,11 +27,11 @@ npm install @webviewjs/webview
 | armv7-linux-androideabi | ✅        |
 | aarch64-pc-windows-msvc | ✅        |
 
-# Usage
+# Examples
 
-In this example, we will create a simple webview application that loads the Node.js website.
+## Load external url
 
-```javascript
+```js
 import { Application } from '@webviewjs/webview';
 // or
 const { Application } = require('@webviewjs/webview');
@@ -44,7 +44,45 @@ window.loadUrl('https://nodejs.org');
 app.run();
 ```
 
-# Examples
+## IPC
+
+```js
+import { Application } from '@webviewjs/webview';
+
+const app = new Application();
+
+app.onIpcMessage((data) => {
+  const reply = `You sent ${data.body.toString('utf-8')}`;
+  window.evaluateScript(`onIpcMessage("${reply}")`);
+});
+
+const window = app.createBrowserWindow({
+  html: `<!DOCTYPE html>
+    <html>
+        <head>
+            <title>Webview</title>
+        </head>
+        <body>
+            <h1 id="output">Hello world!</h1>
+            <button id="btn">Click me!</button>
+            <script>
+                btn.onclick = function send() {
+                    window.ipc.postMessage('Hello from webview');
+                }
+            </script>
+        </body>
+    </html>
+    `,
+  preload: `window.onIpcMessage = function(data) {
+        const output = document.getElementById('output');
+        output.innerText = \`Server Sent A Message: \${data}\`;
+    }`,
+});
+
+window.setTitle('WebviewJS + Node');
+
+app.run();
+```
 
 Check out [examples](./examples) directory for more examples, such as serving contents from a web server to webview, etc.
 

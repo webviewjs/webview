@@ -105,7 +105,9 @@ export interface BrowserWindowOptions {
   backForwardNavigationGestures?: boolean
 }
 export interface HeaderData {
+  /** The key of the header. */
   key: string
+  /** The value of the header. */
   value?: string
 }
 export interface IpcMessage {
