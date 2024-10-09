@@ -46,9 +46,8 @@
   },
   "scripts": {
     "artifacts": "napi artifacts",
-    "build": "napi build --platform --release && yarn build:ts",
-    "build:debug": "napi build --platform && yarn build:ts",
-    "build:ts": "tsc",
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
     "format:toml": "taplo format",
