@@ -7,8 +7,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "noEmit": true
+    "allowSyntheticDefaultImports": true
   },
   "include": ["."],
   "exclude": ["node_modules", "bench", "__test__"]

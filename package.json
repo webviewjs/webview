@@ -21,9 +21,7 @@
   "files": [
     "cli",
     "index.d.ts",
-    "index.js",
-    "binding.d.ts",
-    "binding.js"
+    "index.js"
   ],
   "napi": {
     "name": "webview",
@@ -48,8 +46,8 @@
   },
   "scripts": {
     "artifacts": "napi artifacts",
-    "build": "napi build --platform --release --dts binding.d.ts --js binding.js && yarn build:ts",
-    "build:debug": "napi build --platform --dts binding.d.ts --js binding.js && yarn build:ts",
+    "build": "napi build --platform --release && yarn build:ts",
+    "build:debug": "napi build --platform && yarn build:ts",
     "build:ts": "tsc",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
