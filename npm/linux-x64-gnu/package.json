@@ -27,7 +27,7 @@
     "registry": "https://registry.npmjs.org/",
     "access": "public"
   },
-  "repository": "git@github.com:twlite/webview.git",
+  "repository": "git@github.com:webviewjs/webview.git",
   "libc": [
     "glibc"
   ]

@@ -4,7 +4,7 @@
 
 Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [tao](https://github.com/tauri-apps/tao) and [wry](https://github.com/tauri-apps/wry) allowing you to easily manage cross platform windowing and webview.
 
-![preview](https://github.com/twlite/webview/raw/main/assets/preview.png)
+![preview](https://github.com/webviewjs/webview/raw/main/assets/preview.png)
 
 > [!CAUTION]
 > This library is still in development and not ready for production use. Feel free to experiment with it and report any issues you find.
