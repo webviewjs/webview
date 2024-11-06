@@ -18,9 +18,10 @@ function createWindow() {
 
   const app = new Application();
   const window = app.createBrowserWindow();
+  const webview = window.createWebview();
 
-  if (!window.isDevtoolsOpen()) window.openDevtools();
-  window.loadUrl('http://localhost:3000');
+  if (!webview.isDevtoolsOpen()) webview.openDevtools();
+  webview.loadUrl('http://localhost:3000');
 
   app.run();
 }

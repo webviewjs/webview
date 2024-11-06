@@ -3,13 +3,9 @@
 const { Application } = require('../index.js');
 
 const app = new Application();
+const window = app.createBrowserWindow();
 
-app.onIpcMessage((data) => {
-    const reply = `You sent ${data.body.toString('utf-8')}`;
-    window.evaluateScript(`onIpcMessage("${reply}")`)
-})
-
-const window = app.createBrowserWindow({
+const webview = window.createWebview({
     html: `<!DOCTYPE html>
     <html>
         <head>
@@ -32,6 +28,11 @@ const window = app.createBrowserWindow({
     }`
 });
 
-window.setTitle('WebviewJS + Node');
+if (!webview.isDevtoolsOpen()) webview.openDevtools();
+
+webview.onIpcMessage((data) => {
+    const reply = `You sent ${data.body.toString('utf-8')}`;
+    window.evaluateScript(`onIpcMessage("${reply}")`)
+})
 
 app.run();

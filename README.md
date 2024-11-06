@@ -38,8 +38,9 @@ const { Application } = require('@webviewjs/webview');
 
 const app = new Application();
 const window = app.createBrowserWindow();
+const webview = window.createWebview();
 
-window.loadUrl('https://nodejs.org');
+webview.loadUrl('https://nodejs.org');
 
 app.run();
 ```
@@ -56,7 +57,8 @@ app.onIpcMessage((data) => {
   window.evaluateScript(`onIpcMessage("${reply}")`);
 });
 
-const window = app.createBrowserWindow({
+const window = app.createBrowserWindow();
+const webview = window.createWebview({
   html: `<!DOCTYPE html>
     <html>
         <head>
