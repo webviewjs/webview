@@ -1,11 +1,12 @@
-use napi::{Either, Result};
+use napi::{Either, Env, Result};
 use napi_derive::*;
 use tao::{
-  dpi::{LogicalPosition, LogicalSize, PhysicalSize},
+  dpi::{LogicalPosition, PhysicalSize},
   event_loop::EventLoop,
   window::{Fullscreen, Icon, ProgressBarState, Window, WindowBuilder},
 };
-use wry::{http::Request, Rect, WebView, WebViewBuilder};
+
+use crate::webview::{JsTheme, JsWebview, WebviewOptions};
 
 // #[cfg(target_os = "windows")]
 // use tao::platform::windows::IconExtWindows;
@@ -78,23 +79,12 @@ pub struct JsProgressBar {
   pub progress: Option<u32>,
 }
 
-#[napi(js_name = "Theme")]
-/// Represents the theme of the window.
-pub enum JsTheme {
-  /// The light theme.
-  Light,
-  /// The dark theme.
-  Dark,
-  /// The system theme.
-  System,
-}
-
 #[napi(object)]
 pub struct BrowserWindowOptions {
-  /// The URL to load.
-  pub url: Option<String>,
-  /// The HTML content to load.
-  pub html: Option<String>,
+  /// Whether the window is resizable. Default is `true`.
+  pub resizable: Option<bool>,
+  /// The window title.
+  pub title: Option<String>,
   /// The width of the window.
   pub width: Option<f64>,
   /// The height of the window.
@@ -103,38 +93,61 @@ pub struct BrowserWindowOptions {
   pub x: Option<f64>,
   /// The y position of the window.
   pub y: Option<f64>,
-  /// Whether to enable devtools. Default is `true`.
-  pub enable_devtools: Option<bool>,
-  /// Whether the window is resizable. Default is `true`.
-  pub resizable: Option<bool>,
-  /// Whether the window is incognito. Default is `false`.
-  pub incognito: Option<bool>,
-  /// Whether the window is transparent. Default is `false`.
+  /// Whether or not the window should be created with content protection mode.
+  pub content_protection: Option<bool>,
+  /// Whether or not the window is always on top.
+  pub always_on_top: Option<bool>,
+  /// Whether or not the window is always on bottom.
+  pub always_on_bottom: Option<bool>,
+  /// Whether or not the window is visible.
+  pub visible: Option<bool>,
+  /// Whether or not the window decorations are enabled.
+  pub decorations: Option<bool>,
+  /// Whether or not the window is visible on all workspaces
+  pub visible_on_all_workspaces: Option<bool>,
+  /// Whether or not the window is maximized.
+  pub maximized: Option<bool>,
+  /// Whether or not the window is maximizable
+  pub maximizable: Option<bool>,
+  /// Whether or not the window is minimizable
+  pub minimizable: Option<bool>,
+  /// Whether or not the window is focused
+  pub focused: Option<bool>,
+  /// Whether or not the window is transparent
   pub transparent: Option<bool>,
-  /// The window title.
-  pub title: Option<String>,
-  /// The default user agent.
-  pub user_agent: Option<String>,
-  /// The default theme.
-  pub theme: Option<JsTheme>,
-  /// The preload script
-  pub preload: Option<String>,
-  /// Whether the window is zoomable via hotkeys or gestures.
-  pub hotkeys_zoom: Option<bool>,
-  /// Whether the clipboard access is enabled.
-  pub clipboard: Option<bool>,
-  /// Whether the autoplay policy is enabled.
-  pub autoplay: Option<bool>,
-  /// Indicates whether horizontal swipe gestures trigger backward and forward page navigation.
-  pub back_forward_navigation_gestures: Option<bool>,
+  /// The fullscreen state of the window.
+  pub fullscreen: Option<FullscreenType>,
+}
+
+impl Default for BrowserWindowOptions {
+  fn default() -> Self {
+    Self {
+      resizable: Some(true),
+      title: Some("WebviewJS".to_owned()),
+      width: Some(800.0),
+      height: Some(600.0),
+      x: Some(0.0),
+      y: Some(0.0),
+      content_protection: Some(false),
+      always_on_top: Some(false),
+      always_on_bottom: Some(false),
+      visible: Some(true),
+      decorations: Some(true),
+      visible_on_all_workspaces: Some(false),
+      maximized: Some(false),
+      maximizable: Some(true),
+      minimizable: Some(true),
+      focused: Some(true),
+      transparent: Some(false),
+      fullscreen: None,
+    }
+  }
 }
 
 #[napi]
 pub struct BrowserWindow {
-  id: u32,
   is_child_window: bool,
   window: Window,
-  webview: WebView,
 }
 
 #[napi]
@@ -142,32 +155,69 @@ impl BrowserWindow {
   pub fn new(
     event_loop: &EventLoop<()>,
     options: Option<BrowserWindowOptions>,
-    id: u32,
     child: bool,
-    ipc_handler: impl Fn(Request<String>) + 'static,
   ) -> Result<Self> {
-    let options = options.unwrap_or(BrowserWindowOptions {
-      url: None,
-      html: None,
-      width: None,
-      height: None,
-      x: None,
-      y: None,
-      enable_devtools: None,
-      resizable: None,
-      incognito: None,
-      transparent: None,
-      title: Some("WebviewJS".to_string()),
-      user_agent: None,
-      theme: None,
-      preload: None,
-      autoplay: None,
-      back_forward_navigation_gestures: None,
-      clipboard: None,
-      hotkeys_zoom: None,
-    });
+    let options = options.unwrap_or(BrowserWindowOptions::default());
 
-    let mut window = WindowBuilder::new().with_resizable(options.resizable.unwrap_or(true));
+    let mut window = WindowBuilder::new();
+
+    if let Some(resizable) = options.resizable {
+      window = window.with_resizable(resizable);
+    }
+
+    if let Some(width) = options.width {
+      window = window.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+    }
+
+    if let Some(x) = options.x {
+      window = window.with_position(LogicalPosition::new(x, options.y.unwrap()));
+    }
+
+    if let Some(visible) = options.visible {
+      window = window.with_visible(visible);
+    }
+
+    if let Some(decorations) = options.decorations {
+      window = window.with_decorations(decorations);
+    }
+
+    if let Some(always_on_top) = options.always_on_top {
+      window = window.with_always_on_top(always_on_top);
+    }
+
+    if let Some(always_on_bottom) = options.always_on_bottom {
+      window = window.with_always_on_bottom(always_on_bottom);
+    }
+
+    if let Some(visible_on_all_workspaces) = options.visible_on_all_workspaces {
+      window = window.with_visible_on_all_workspaces(visible_on_all_workspaces);
+    }
+
+    if let Some(maximized) = options.maximized {
+      window = window.with_maximized(maximized);
+    }
+
+    if let Some(maximizable) = options.maximizable {
+      window = window.with_maximizable(maximizable);
+    }
+
+    if let Some(minimizable) = options.minimizable {
+      window = window.with_minimizable(minimizable);
+    }
+
+    if let Some(focused) = options.focused {
+      window = window.with_focused(focused);
+    }
+
+    if let Some(fullscreen) = options.fullscreen {
+      let fs = match fullscreen {
+        // Some(FullscreenType::Exclusive) => Some(Fullscreen::Exclusive()),
+        FullscreenType::Borderless => Some(Fullscreen::Borderless(None)),
+        _ => None,
+      };
+
+      window = window.with_fullscreen(fs);
+    }
 
     if let Some(title) = options.title {
       window = window.with_title(&title);
@@ -180,153 +230,23 @@ impl BrowserWindow {
       )
     })?;
 
-    let mut webview = if child {
-      WebViewBuilder::new_as_child(&window)
-    } else {
-      WebViewBuilder::new(&window)
-    };
-
-    webview = webview
-      .with_devtools(options.enable_devtools.unwrap_or(true))
-      .with_bounds(Rect {
-        position: LogicalPosition::new(options.x.unwrap_or(0.0), options.y.unwrap_or(0.0)).into(),
-        size: LogicalSize::new(
-          options.width.unwrap_or(800.0),
-          options.height.unwrap_or(600.0),
-        )
-        .into(),
-      })
-      .with_incognito(options.incognito.unwrap_or(false));
-
-    if let Some(preload) = options.preload {
-      webview = webview.with_initialization_script(&preload);
-    }
-
-    if let Some(transparent) = options.transparent {
-      webview = webview.with_transparent(transparent);
-    }
-
-    if let Some(autoplay) = options.autoplay {
-      webview = webview.with_autoplay(autoplay);
-    }
-
-    if let Some(clipboard) = options.clipboard {
-      webview = webview.with_clipboard(clipboard);
-    }
-
-    if let Some(back_forward_navigation_gestures) = options.back_forward_navigation_gestures {
-      webview = webview.with_back_forward_navigation_gestures(back_forward_navigation_gestures);
-    }
-
-    if let Some(hotkeys_zoom) = options.hotkeys_zoom {
-      webview = webview.with_hotkeys_zoom(hotkeys_zoom);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-      use wry::WebViewBuilderExtWindows;
-
-      if let Some(theme) = options.theme {
-        let theme = match theme {
-          JsTheme::Light => wry::Theme::Light,
-          JsTheme::Dark => wry::Theme::Dark,
-          _ => wry::Theme::Auto,
-        };
-
-        webview = webview.with_theme(theme)
-      }
-    }
-
-    if let Some(user_agent) = options.user_agent {
-      webview = webview.with_user_agent(&user_agent);
-    }
-
-    if let Some(html) = options.html {
-      webview = webview.with_html(&html);
-    }
-
-    if let Some(url) = options.url {
-      webview = webview.with_url(&url);
-    }
-
-    webview = webview.with_ipc_handler(ipc_handler);
-
-    let webview = webview.build().map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to create webview: {}", e),
-      )
-    })?;
-
     Ok(Self {
       window,
-      webview,
-      id,
       is_child_window: child,
     })
+  }
+
+  #[napi]
+  /// Creates a webview on this window.
+  pub fn create_webview(&mut self, env: Env, options: Option<WebviewOptions>) -> Result<JsWebview> {
+    let webview = JsWebview::create(&env, &self.window, options.unwrap_or(Default::default()))?;
+    Ok(webview)
   }
 
   #[napi(getter)]
   /// Whether or not the window is a child window.
   pub fn is_child(&self) -> bool {
     self.is_child_window
-  }
-
-  #[napi(getter)]
-  /// The unique identifier of this window.
-  pub fn get_id(&self) -> u32 {
-    self.id
-  }
-
-  #[napi]
-  /// Launch a print modal for this window's contents.
-  pub fn print(&self) -> Result<()> {
-    self.webview.print().map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to print: {}", e),
-      )
-    })
-  }
-
-  #[napi]
-  /// Set webview zoom level.
-  pub fn zoom(&self, scale_facotr: f64) -> Result<()> {
-    self.webview.zoom(scale_facotr).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to zoom: {}", e),
-      )
-    })
-  }
-
-  #[napi]
-  /// Hides or shows the webview.
-  pub fn set_webview_visibility(&self, visible: bool) -> Result<()> {
-    self.webview.set_visible(visible).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to set webview visibility: {}", e),
-      )
-    })
-  }
-
-  #[napi]
-  /// Whether the devtools is opened.
-  pub fn is_devtools_open(&self) -> bool {
-    self.webview.is_devtools_open()
-  }
-
-  #[napi]
-  /// Opens the devtools.
-  pub fn open_devtools(&self) {
-    self.webview.open_devtools();
-  }
-
-  #[napi]
-  /// Closes the devtools.
-  pub fn close_devtools(&self) {
-    self.webview.close_devtools();
   }
 
   #[napi]
@@ -381,28 +301,6 @@ impl BrowserWindow {
   /// Whether the window is resizable.
   pub fn is_resizable(&self) -> bool {
     self.window.is_resizable()
-  }
-
-  #[napi]
-  /// Loads the given URL.
-  pub fn load_url(&self, url: String) -> Result<()> {
-    self.webview.load_url(&url).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to load URL: {}", e),
-      )
-    })
-  }
-
-  #[napi]
-  /// Loads the given HTML content.
-  pub fn load_html(&self, html: String) -> Result<()> {
-    self.webview.load_html(&html).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to load HTML: {}", e),
-      )
-    })
   }
 
   #[napi]
@@ -462,33 +360,6 @@ impl BrowserWindow {
 
     self.window.set_theme(theme);
   }
-
-  #[napi]
-  /// Evaluates the given JavaScript code.
-  pub fn evaluate_script(&self, js: String) -> Result<()> {
-    self
-      .webview
-      .evaluate_script(&js)
-      .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
-  }
-
-  // #[napi]
-  // /// Evaluates the given JavaScript code with a callback.
-  // pub fn evaluate_script_with_callback(
-  //   &self,
-  //   js: String,
-  //   callback: Function<String, ()>,
-  //   env: Env,
-  // ) -> Result<()> {
-  //   let cb_ref = callback.create_ref()?;
-
-  //   self
-  //     .webview
-  //     .evaluate_script_with_callback(&js, move |val| {
-  //       let cb = cb_ref.borrow_back(&env);
-  //     })
-  //     .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
-  // }
 
   #[napi]
   /// Sets the window icon.

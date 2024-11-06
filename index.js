@@ -310,12 +310,14 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { FullscreenType, ProgressBarState, Theme, BrowserWindow, getWebviewVersion, ControlFlow, Application } = nativeBinding
+const { FullscreenType, ProgressBarState, BrowserWindow, Theme, Webview, WebviewApplicationEvent, getWebviewVersion, ControlFlow, Application } = nativeBinding
 
 module.exports.FullscreenType = FullscreenType
 module.exports.ProgressBarState = ProgressBarState
-module.exports.Theme = Theme
 module.exports.BrowserWindow = BrowserWindow
+module.exports.Theme = Theme
+module.exports.Webview = Webview
+module.exports.WebviewApplicationEvent = WebviewApplicationEvent
 module.exports.getWebviewVersion = getWebviewVersion
 module.exports.ControlFlow = ControlFlow
 module.exports.Application = Application

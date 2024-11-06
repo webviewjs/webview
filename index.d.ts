@@ -57,6 +57,44 @@ export interface JsProgressBar {
   /** The progress value. */
   progress?: number
 }
+export interface BrowserWindowOptions {
+  /** Whether the window is resizable. Default is `true`. */
+  resizable?: boolean
+  /** The window title. */
+  title?: string
+  /** The width of the window. */
+  width?: number
+  /** The height of the window. */
+  height?: number
+  /** The x position of the window. */
+  x?: number
+  /** The y position of the window. */
+  y?: number
+  /** Whether or not the window should be created with content protection mode. */
+  contentProtection?: boolean
+  /** Whether or not the window is always on top. */
+  alwaysOnTop?: boolean
+  /** Whether or not the window is always on bottom. */
+  alwaysOnBottom?: boolean
+  /** Whether or not the window is visible. */
+  visible?: boolean
+  /** Whether or not the window decorations are enabled. */
+  decorations?: boolean
+  /** Whether or not the window is visible on all workspaces */
+  visibleOnAllWorkspaces?: boolean
+  /** Whether or not the window is maximized. */
+  maximized?: boolean
+  /** Whether or not the window is maximizable */
+  maximizable?: boolean
+  /** Whether or not the window is minimizable */
+  minimizable?: boolean
+  /** Whether or not the window is focused */
+  focused?: boolean
+  /** Whether or not the window is transparent */
+  transparent?: boolean
+  /** The fullscreen state of the window. */
+  fullscreen?: FullscreenType
+}
 /** Represents the theme of the window. */
 export const enum Theme {
   /** The light theme. */
@@ -66,7 +104,7 @@ export const enum Theme {
   /** The system theme. */
   System = 2
 }
-export interface BrowserWindowOptions {
+export interface WebviewOptions {
   /** The URL to load. */
   url?: string
   /** The HTML content to load. */
@@ -81,20 +119,18 @@ export interface BrowserWindowOptions {
   y?: number
   /** Whether to enable devtools. Default is `true`. */
   enableDevtools?: boolean
-  /** Whether the window is resizable. Default is `true`. */
-  resizable?: boolean
   /** Whether the window is incognito. Default is `false`. */
   incognito?: boolean
-  /** Whether the window is transparent. Default is `false`. */
-  transparent?: boolean
-  /** The window title. */
-  title?: string
   /** The default user agent. */
   userAgent?: string
+  /** Whether the webview should be built as a child. */
+  child?: boolean
+  /** The preload script to inject. */
+  preload?: string
+  /** Whether the window is transparent. Default is `false`. */
+  transparent?: boolean
   /** The default theme. */
   theme?: Theme
-  /** The preload script */
-  preload?: string
   /** Whether the window is zoomable via hotkeys or gestures. */
   hotkeysZoom?: boolean
   /** Whether the clipboard access is enabled. */
@@ -104,6 +140,11 @@ export interface BrowserWindowOptions {
   /** Indicates whether horizontal swipe gestures trigger backward and forward page navigation. */
   backForwardNavigationGestures?: boolean
 }
+/** TODO */
+export const enum WebviewApplicationEvent {
+  /** Window close event. */
+  WindowCloseRequested = 0
+}
 export interface HeaderData {
   /** The key of the header. */
   key: string
@@ -111,8 +152,6 @@ export interface HeaderData {
   value?: string
 }
 export interface IpcMessage {
-  /** The unique identifier of the window that sent the message. */
-  windowId: number
   /** The body of the message. */
   body: Buffer
   /** The HTTP method of the message. */
@@ -144,23 +183,16 @@ export interface ApplicationOptions {
   /** The exit code of the application. Only applicable if control flow is set to `ExitWithCode`. */
   exitCode?: number
 }
+/** Represents an event for the application. */
+export interface ApplicationEvent {
+  /** The event type. */
+  event: WebviewApplicationEvent
+}
 export declare class BrowserWindow {
+  /** Creates a webview on this window. */
+  createWebview(options?: WebviewOptions | undefined | null): JsWebview
   /** Whether or not the window is a child window. */
   get isChild(): boolean
-  /** The unique identifier of this window. */
-  get id(): number
-  /** Launch a print modal for this window's contents. */
-  print(): void
-  /** Set webview zoom level. */
-  zoom(scaleFacotr: number): void
-  /** Hides or shows the webview. */
-  setWebviewVisibility(visible: boolean): void
-  /** Whether the devtools is opened. */
-  isDevtoolsOpen(): boolean
-  /** Opens the devtools. */
-  openDevtools(): void
-  /** Closes the devtools. */
-  closeDevtools(): void
   /** Whether the window is focused. */
   isFocused(): boolean
   /** Whether the window is visible. */
@@ -179,10 +211,6 @@ export declare class BrowserWindow {
   isMinimized(): boolean
   /** Whether the window is resizable. */
   isResizable(): boolean
-  /** Loads the given URL. */
-  loadUrl(url: string): void
-  /** Loads the given HTML content. */
-  loadHtml(html: string): void
   /** Sets the window title. */
   setTitle(title: string): void
   /** Sets the window title. */
@@ -196,11 +224,9 @@ export declare class BrowserWindow {
   /** Sets resizable. */
   setResizable(resizable: boolean): void
   /** Gets the window theme. */
-  get theme(): Theme
+  get theme(): JsTheme
   /** Sets the window theme. */
-  setTheme(theme: Theme): void
-  /** Evaluates the given JavaScript code. */
-  evaluateScript(js: string): void
+  setTheme(theme: JsTheme): void
   /** Sets the window icon. */
   setWindowIcon(icon: Array<number> | string, width: number, height: number): void
   /** Removes the window icon. */
@@ -239,12 +265,37 @@ export declare class BrowserWindow {
   /** Sets the window to fullscreen or back. */
   setFullscreen(fullscreenType?: FullscreenType | undefined | null): void
 }
+export type JsWebview = Webview
+export declare class Webview {
+  constructor()
+  /** Sets the IPC handler callback. */
+  onIpcMessage(handler?: (arg: IpcMessage) => void | undefined | null): void
+  /** Launch a print modal for this window's contents. */
+  print(): void
+  /** Set webview zoom level. */
+  zoom(scaleFacotr: number): void
+  /** Hides or shows the webview. */
+  setWebviewVisibility(visible: boolean): void
+  /** Whether the devtools is opened. */
+  isDevtoolsOpen(): boolean
+  /** Opens the devtools. */
+  openDevtools(): void
+  /** Closes the devtools. */
+  closeDevtools(): void
+  /** Loads the given URL. */
+  loadUrl(url: string): void
+  /** Loads the given HTML content. */
+  loadHtml(html: string): void
+  /** Evaluates the given JavaScript code. */
+  evaluateScript(js: string): void
+  evaluateScriptWithCallback(js: string, callback: (err: Error | null, arg: string) => any): void
+}
 /** Represents an application. */
 export declare class Application {
   /** Creates a new application. */
   constructor(options?: ApplicationOptions | undefined | null)
-  /** Sets the IPC handler callback. */
-  onIpcMessage(handler?: (arg: IpcMessage) => void | undefined | null): void
+  /** Sets the event handler callback. */
+  onEvent(handler?: (arg: ApplicationEvent) => void | undefined | null): void
   /** Creates a new browser window. */
   createBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow
   /** Creates a new browser window as a child window. */

@@ -1,6 +1,9 @@
 #![deny(clippy::all)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use browser_window::{BrowserWindow, BrowserWindowOptions};
 use napi::bindgen_prelude::*;
 use napi::Result;
@@ -9,9 +12,16 @@ use tao::{
   event::{Event, WindowEvent},
   event_loop::{ControlFlow, EventLoop},
 };
-use wry::http::Request;
 
 pub mod browser_window;
+pub mod webview;
+
+#[napi]
+/// TODO
+pub enum WebviewApplicationEvent {
+  /// Window close event.
+  WindowCloseRequested,
+}
 
 #[napi(object)]
 pub struct HeaderData {
@@ -23,8 +33,6 @@ pub struct HeaderData {
 
 #[napi(object)]
 pub struct IpcMessage {
-  /// The unique identifier of the window that sent the message.
-  pub window_id: u32,
   /// The body of the message.
   pub body: Buffer,
   /// The HTTP method of the message.
@@ -70,6 +78,13 @@ pub struct ApplicationOptions {
   pub exit_code: Option<i32>,
 }
 
+#[napi(object)]
+/// Represents an event for the application.
+pub struct ApplicationEvent {
+  /// The event type.
+  pub event: WebviewApplicationEvent,
+}
+
 #[napi]
 /// Represents an application.
 pub struct Application {
@@ -77,10 +92,8 @@ pub struct Application {
   event_loop: Option<EventLoop<()>>,
   /// The options for creating the application.
   options: ApplicationOptions,
-  /// The unique identifier of the webviews created by this application.
-  id_ref: u32,
-  /// The ipc handler callback
-  ipc_handler: Option<FunctionRef<IpcMessage, ()>>,
+  /// The event handler for the application.
+  handler: Rc<RefCell<Option<FunctionRef<ApplicationEvent, ()>>>>,
   /// The env
   env: Env,
 }
@@ -99,58 +112,15 @@ impl Application {
         wait_time: None,
         exit_code: None,
       }),
-      id_ref: 0,
-      ipc_handler: None,
+      handler: Rc::new(RefCell::new(None::<FunctionRef<ApplicationEvent, ()>>)),
       env,
     })
   }
 
   #[napi]
-  /// Sets the IPC handler callback.
-  pub fn on_ipc_message(&mut self, handler: Option<FunctionRef<IpcMessage, ()>>) {
-    self.ipc_handler = handler;
-  }
-
-  /// Handles the IPC message.
-  fn handle_ipc_message(&self, req: Request<String>, id: &u32) {
-    let func = &self.ipc_handler.as_ref();
-
-    if func.is_none() {
-      return;
-    }
-
-    let on_ipc_msg = func.unwrap().borrow_back(&self.env);
-
-    if on_ipc_msg.is_err() {
-      return;
-    }
-
-    let on_ipc_msg = on_ipc_msg.unwrap();
-
-    let body = req.body().as_bytes().to_vec().into();
-    let headers = req
-      .headers()
-      .iter()
-      .map(|(k, v)| HeaderData {
-        key: k.as_str().to_string(),
-        value: match v.to_str() {
-          Ok(v) => Some(v.to_string()),
-          Err(_) => None,
-        },
-      })
-      .collect::<Vec<_>>();
-
-    let msg = IpcMessage {
-      window_id: id.clone(),
-      body,
-      method: req.method().to_string(),
-      headers,
-      uri: req.uri().to_string(),
-    };
-
-    match on_ipc_msg.call(msg) {
-      _ => (),
-    };
+  /// Sets the event handler callback.
+  pub fn on_event(&mut self, handler: Option<FunctionRef<ApplicationEvent, ()>>) {
+    *self.handler.borrow_mut() = handler;
   }
 
   #[napi]
@@ -168,15 +138,7 @@ impl Application {
       ));
     }
 
-    self.id_ref += 1;
-
-    let next_id = &self.id_ref;
-
-    let cb = |req: Request<String>| {
-      self.handle_ipc_message(req, next_id);
-    };
-
-    let window = BrowserWindow::new(event_loop.unwrap(), options, self.id_ref, false, cb)?;
+    let window = BrowserWindow::new(event_loop.unwrap(), options, false)?;
 
     Ok(window)
   }
@@ -196,15 +158,7 @@ impl Application {
       ));
     }
 
-    self.id_ref += 1;
-
-    let next_id = &self.id_ref;
-
-    let cb = |req: Request<String>| {
-      self.handle_ipc_message(req, next_id);
-    };
-
-    let window = BrowserWindow::new(event_loop.unwrap(), options, self.id_ref, true, cb)?;
+    let window = BrowserWindow::new(event_loop.unwrap(), options, true)?;
 
     Ok(window)
   }
@@ -229,6 +183,9 @@ impl Application {
     };
 
     if let Some(event_loop) = self.event_loop.take() {
+      let handler = self.handler.clone();
+      let env = self.env.clone();
+
       event_loop.run(move |event, _, control_flow| {
         *control_flow = ctrl;
 
@@ -236,7 +193,23 @@ impl Application {
           Event::WindowEvent {
             event: WindowEvent::CloseRequested,
             ..
-          } => *control_flow = ControlFlow::Exit,
+          } => {
+            let callback = handler.borrow();
+            if callback.is_some() {
+              let callback = callback.as_ref().unwrap().borrow_back(&env);
+
+              if callback.is_ok() {
+                let callback = callback.unwrap();
+                match callback.call(ApplicationEvent {
+                  event: WebviewApplicationEvent::WindowCloseRequested,
+                }) {
+                  _ => (),
+                };
+              }
+            }
+
+            *control_flow = ControlFlow::Exit
+          }
           _ => (),
         }
       });
