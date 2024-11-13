@@ -209,6 +209,15 @@ impl BrowserWindow {
       window = window.with_focused(focused);
     }
 
+    if let Some(transparent) = options.transparent {
+      window = window.with_transparent(transparent);
+      #[cfg(target_os = "windows")]
+      {
+        use tao::platform::windows::WindowBuilderExtWindows;
+        window = window.with_undecorated_shadow(false);
+      }
+    }
+
     if let Some(fullscreen) = options.fullscreen {
       let fs = match fullscreen {
         // Some(FullscreenType::Exclusive) => Some(Fullscreen::Exclusive()),
