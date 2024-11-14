@@ -95,11 +95,12 @@ pub struct JsWebview {
 #[napi]
 impl JsWebview {
   pub fn create(env: &Env, window: &tao::window::Window, options: WebviewOptions) -> Result<Self> {
-    let mut webview = if options.child.unwrap_or(false) {
-      WebViewBuilder::new_as_child(window)
-    } else {
-      WebViewBuilder::new(window)
-    };
+    // let mut webview = if options.child.unwrap_or(false) {
+    //   WebViewBuilder::new_as_child(window)
+    // } else {
+    //   WebViewBuilder::new(window)
+    // };
+    let mut webview = WebViewBuilder::new();
 
     if let Some(devtools) = options.enable_devtools {
       webview = webview.with_devtools(devtools);
@@ -210,12 +211,34 @@ impl JsWebview {
 
     webview = webview.with_ipc_handler(ipc_handler);
 
-    let webview = webview.build().map_err(|e| {
+    let handle_build_error = |e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to create webview: {}", e),
       )
-    })?;
+    };
+
+    #[cfg(not(target_os = "linux"))]
+    let webview = {
+      if options.child.unwrap_or(false) {
+        webview.build_as_child(&window).map_err(handle_build_error)
+      } else {
+        webview.build(&window).map_err(handle_build_error)
+      }
+    }?;
+
+    #[cfg(target_os = "linux")]
+    let webview = {
+      if options.child.unwrap_or(false) {
+        webview
+          .build_as_child(window.gtk_window())
+          .map_err(handle_build_error)
+      } else {
+        webview
+          .build(window.gtk_window())
+          .map_err(handle_build_error)
+      }
+    };
 
     Ok(Self {
       webview_inner: webview,
