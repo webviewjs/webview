@@ -48,18 +48,11 @@ app.run();
 ## IPC
 
 ```js
-import { Application } from '@webviewjs/webview';
-
 const app = new Application();
-
-app.onIpcMessage((data) => {
-  const reply = `You sent ${data.body.toString('utf-8')}`;
-  window.evaluateScript(`onIpcMessage("${reply}")`);
-});
-
 const window = app.createBrowserWindow();
+
 const webview = window.createWebview({
-  html: `<!DOCTYPE html>
+    html: `<!DOCTYPE html>
     <html>
         <head>
             <title>Webview</title>
@@ -75,13 +68,18 @@ const webview = window.createWebview({
         </body>
     </html>
     `,
-  preload: `window.onIpcMessage = function(data) {
+    preload: `window.onIpcMessage = function(data) {
         const output = document.getElementById('output');
         output.innerText = \`Server Sent A Message: \${data}\`;
-    }`,
+    }`
 });
 
-window.setTitle('WebviewJS + Node');
+if (!webview.isDevtoolsOpen()) webview.openDevtools();
+
+webview.onIpcMessage((data) => {
+    const reply = `You sent ${data.body.toString('utf-8')}`;
+    window.evaluateScript(`onIpcMessage("${reply}")`)
+})
 
 app.run();
 ```
