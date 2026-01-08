@@ -1,0 +1,16 @@
+# Bun configuration file
+
+[install]
+# Use bun's lockfile
+lockfile = true
+# Save exact versions
+exact = false
+
+[install.scopes]
+# Configure scope registries if needed
+
+[test]
+# Test configuration
+
+[run]
+# Run configuration

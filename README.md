@@ -98,3 +98,23 @@ webview --build --input ./path/to/your/script.js --output ./path/to/output-direc
 ```
 
 You can pass `--resources ./my-resource.json` to include additional resources in the executable. This resource can be imported using `getAsset()` or `getRawAsset()` functions from `node:sea` module.
+
+# Development
+
+## Prerequisites
+
+- [Bun](https://bun.sh/) >= 1.3.0
+- [Rust](https://www.rust-lang.org/) stable toolchain
+- [Node.js](https://nodejs.org/) >= 18 (for testing)
+
+## Setup
+
+```bash
+bun install
+```
+
+## Build
+
+```bash
+bun run build
+```

@@ -12,7 +12,7 @@ use wry::{http::Request, Rect, WebViewBuilder};
 use crate::{HeaderData, IpcMessage};
 
 /// Represents the theme of the window.
-#[napi(js_name = "Theme")]
+#[napi]
 pub enum JsTheme {
   /// The light theme.
   Light,
@@ -273,8 +273,8 @@ impl JsWebview {
 
   #[napi]
   /// Set webview zoom level.
-  pub fn zoom(&self, scale_facotr: f64) -> Result<()> {
-    self.webview_inner.zoom(scale_facotr).map_err(|e| {
+  pub fn zoom(&self, scale_factor: f64) -> Result<()> {
+    self.webview_inner.zoom(scale_factor).map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to zoom: {}", e),
@@ -348,12 +348,10 @@ impl JsWebview {
     js: String,
     callback: ThreadsafeFunction<String>,
   ) -> Result<()> {
-    let tsfn = callback.clone();
-
     self
       .webview_inner
       .evaluate_script_with_callback(&js, move |val| {
-        tsfn.call(Ok(val), ThreadsafeFunctionCallMode::Blocking);
+        callback.call(Ok(val), ThreadsafeFunctionCallMode::Blocking);
       })
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
   }
