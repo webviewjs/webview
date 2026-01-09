@@ -9,9 +9,6 @@ use napi_derive::*;
 use tao::dpi::{LogicalPosition, LogicalSize};
 use wry::{http::Request, Rect, WebViewBuilder};
 
-#[cfg(target_os = "linux")]
-use tao::platform::unix::WindowExtUnix;
-
 use crate::{HeaderData, IpcMessage};
 
 /// Represents the theme of the window.
