@@ -12,8 +12,6 @@ export declare class Application {
   createBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow
   /** Creates a new browser window as a child window. */
   createChildBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow
-  /** Closes a specific window by ID. */
-  closeWindow(windowId: number): void
   /** Exits the application gracefully. This will trigger the close event and clean up resources. */
   exit(): void
   /** Runs the application. This method will block the current thread. */
@@ -25,15 +23,6 @@ export declare class BrowserWindow {
   createWebview(options?: WebviewOptions | undefined | null): JsWebview
   /** Whether or not the window is a child window. */
   get isChild(): boolean
-  /** Gets the unique identifier for this window. */
-  get id(): number
-  /**
-   * Destroys the window by hiding it permanently.
-   * This is a more permanent close than hide(), as it indicates the window
-   * should not be reopened. Use this when you want to close a specific window
-   * (like a login window) permanently.
-   */
-  destroy(): void
   /** Whether the window is focused. */
   isFocused(): boolean
   /** Whether the window is visible. */
@@ -105,12 +94,6 @@ export declare class BrowserWindow {
   get fullscreen(): FullscreenType | null
   /** Sets the window to fullscreen or back. */
   setFullscreen(fullscreenType?: FullscreenType | undefined | null): void
-  /**
-   * Closes the window by hiding it. Note: This hides the window rather than closing it completely,
-   * as tao requires the event loop to handle window closing. Use this when you want to
-   * close a specific window (like a login window) and potentially reopen it later.
-   */
-  close(): void
   /** Hides the window without destroying it. */
   hide(): void
   /** Shows the window if it was hidden. */
@@ -159,12 +142,6 @@ export interface ApplicationOptions {
   waitTime?: number
   /** The exit code of the application. Only applicable if control flow is set to `ExitWithCode`. */
   exitCode?: number
-  /**
-   * Whether to prevent the application from closing when all windows are closed.
-   * Default is `false`, meaning the application will exit when all windows are closed.
-   * When `true`, you must explicitly call `app.exit()` to close the application.
-   */
-  preventClose?: boolean
 }
 
 export interface BrowserWindowOptions {
