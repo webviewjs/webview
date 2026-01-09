@@ -6,7 +6,7 @@ use tao::{
   window::{Fullscreen, Icon, ProgressBarState, Window, WindowBuilder},
 };
 
-use crate::webview::{JsTheme, JsWebview, WebviewOptions};
+use crate::webview::{Theme, JsWebview, WebviewOptions};
 
 // #[cfg(target_os = "windows")]
 // use tao::platform::windows::IconExtWindows;
@@ -350,20 +350,20 @@ impl BrowserWindow {
 
   #[napi(getter)]
   /// Gets the window theme.
-  pub fn get_theme(&self) -> JsTheme {
+  pub fn get_theme(&self) -> Theme {
     match self.window.theme() {
-      tao::window::Theme::Light => JsTheme::Light,
-      tao::window::Theme::Dark => JsTheme::Dark,
-      _ => JsTheme::System,
+      tao::window::Theme::Light => Theme::Light,
+      tao::window::Theme::Dark => Theme::Dark,
+      _ => Theme::System,
     }
   }
 
   #[napi]
   /// Sets the window theme.
-  pub fn set_theme(&self, theme: JsTheme) {
+  pub fn set_theme(&self, theme: Theme) {
     let theme = match theme {
-      JsTheme::Light => Some(tao::window::Theme::Light),
-      JsTheme::Dark => Some(tao::window::Theme::Dark),
+      Theme::Light => Some(tao::window::Theme::Light),
+      Theme::Dark => Some(tao::window::Theme::Dark),
       _ => None,
     };
 

@@ -13,7 +13,7 @@ use crate::{HeaderData, IpcMessage};
 
 /// Represents the theme of the window.
 #[napi]
-pub enum JsTheme {
+pub enum Theme {
   /// The light theme.
   Light,
   /// The dark theme.
@@ -49,7 +49,7 @@ pub struct WebviewOptions {
   /// Whether the window is transparent. Default is `false`.
   pub transparent: Option<bool>,
   /// The default theme.
-  pub theme: Option<JsTheme>,
+  pub theme: Option<Theme>,
   /// Whether the window is zoomable via hotkeys or gestures.
   pub hotkeys_zoom: Option<bool>,
   /// Whether the clipboard access is enabled.
@@ -149,8 +149,8 @@ impl JsWebview {
 
       if let Some(theme) = options.theme {
         let theme = match theme {
-          JsTheme::Light => wry::Theme::Light,
-          JsTheme::Dark => wry::Theme::Dark,
+          Theme::Light => wry::Theme::Light,
+          Theme::Dark => wry::Theme::Dark,
           _ => wry::Theme::Auto,
         };
 

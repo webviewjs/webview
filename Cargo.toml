@@ -10,10 +10,10 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi        = { version = "3", default-features = true, features = ["napi9"] }
-napi-derive = "3"
+napi        = { version = "3.8.2", default-features = true, features = ["napi9"] }
+napi-derive = "3.5.1"
 tao         = "0.34.5"
-wry         = { version = "0.48.0", features = ["devtools", "fullscreen"] }
+wry         = { version = "0.53.5", features = ["devtools", "fullscreen"] }
 
 [build-dependencies]
 napi-build = "2"

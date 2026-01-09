@@ -50,9 +50,9 @@ export declare class BrowserWindow {
   /** Sets resizable. */
   setResizable(resizable: boolean): void
   /** Gets the window theme. */
-  get theme(): JsTheme
+  get theme(): Theme
   /** Sets the window theme. */
-  setTheme(theme: JsTheme): void
+  setTheme(theme: Theme): void
   /** Sets the window icon. */
   setWindowIcon(icon: Array<number> | string, width: number, height: number): void
   /** Removes the window icon. */
@@ -227,16 +227,6 @@ export interface JsProgressBar {
   progress?: number
 }
 
-/** Represents the theme of the window. */
-export declare const enum JsTheme {
-  /** The light theme. */
-  Light = 0,
-  /** The dark theme. */
-  Dark = 1,
-  /** The system theme. */
-  System = 2
-}
-
 export interface Monitor {
   /** The name of the monitor. */
   name?: string
@@ -266,6 +256,16 @@ export declare const enum ProgressBarState {
   Paused = 3,
   /** Treated as normal in linux */
   Error = 4
+}
+
+/** Represents the theme of the window. */
+export declare const enum Theme {
+  /** The light theme. */
+  Light = 0,
+  /** The dark theme. */
+  Dark = 1,
+  /** The system theme. */
+  System = 2
 }
 
 export interface VideoMode {
@@ -309,7 +309,7 @@ export interface WebviewOptions {
   /** Whether the window is transparent. Default is `false`. */
   transparent?: boolean
   /** The default theme. */
-  theme?: JsTheme
+  theme?: Theme
   /** Whether the window is zoomable via hotkeys or gestures. */
   hotkeysZoom?: boolean
   /** Whether the clipboard access is enabled. */
