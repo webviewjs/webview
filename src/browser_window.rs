@@ -628,6 +628,14 @@ impl BrowserWindow {
   }
 
   #[napi]
+  /// Closes the window by hiding it. Note: This hides the window rather than closing it completely,
+  /// as tao requires the event loop to handle window closing. Use this when you want to
+  /// close a specific window (like a login window) and potentially reopen it later.
+  pub fn close(&self) {
+    self.window.set_visible(false);
+  }
+
+  #[napi]
   /// Hides the window without destroying it.
   pub fn hide(&self) {
     self.window.set_visible(false);

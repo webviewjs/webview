@@ -2,7 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use browser_window::{BrowserWindow, BrowserWindowOptions};
 use napi::bindgen_prelude::*;
@@ -15,6 +17,17 @@ use tao::{
 
 pub mod browser_window;
 pub mod webview;
+
+/// Window commands that can be sent from JavaScript
+#[napi]
+pub enum WindowCommand {
+  /// Close the window
+  Close,
+  /// Show the window
+  Show,
+  /// Hide the window
+  Hide,
+}
 
 #[napi]
 /// Represents application events

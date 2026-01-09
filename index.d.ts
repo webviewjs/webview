@@ -6,6 +6,8 @@ export declare class Application {
   constructor(options?: ApplicationOptions | undefined | null)
   /** Sets the event handler callback. */
   onEvent(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void
+  /** Alias for on_event() - binds an event handler callback. */
+  bind(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void
   /** Creates a new browser window. */
   createBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow
   /** Creates a new browser window as a child window. */

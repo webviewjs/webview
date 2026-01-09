@@ -94,7 +94,8 @@ const window = app.createBrowserWindow();
 const webview = window.createWebview({ url: 'https://nodejs.org' });
 
 // Set up event handler for close events
-app.onEvent((event) => {
+// You can use either onEvent() or bind() - they are equivalent
+app.bind((event) => {
   if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
     console.log('Application is closing, cleaning up resources...');
     // Perform cleanup here: save data, close connections, etc.
