@@ -84,6 +84,41 @@ webview.onIpcMessage((data) => {
 app.run();
 ```
 
+## Closing the Application
+
+You can close the application, windows, and webviews gracefully to ensure all resources (including temporary folders) are cleaned up properly.
+
+```js
+const app = new Application();
+const window = app.createBrowserWindow();
+const webview = window.createWebview({ url: 'https://nodejs.org' });
+
+// Set up event handler for close events
+app.onEvent((event) => {
+  if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
+    console.log('Application is closing, cleaning up resources...');
+    // Perform cleanup here: save data, close connections, etc.
+  }
+  
+  if (event.event === WebviewApplicationEvent.WindowCloseRequested) {
+    console.log('Window close requested');
+    // Perform window-specific cleanup
+  }
+});
+
+// Close the application gracefully (cleans up temp folders)
+app.exit();
+
+// Or hide/show the window
+window.hide(); // Hide the window
+window.show(); // Show the window again
+
+// Or reload the webview
+webview.reload();
+```
+
+For more details on closing applications and cleaning up resources, see the [Closing Guide](./docs/CLOSING_GUIDE.md).
+
 Check out [examples](./examples) directory for more examples, such as serving contents from a web server to webview, etc.
 
 # Building executables

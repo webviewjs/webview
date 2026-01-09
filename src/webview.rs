@@ -352,4 +352,15 @@ impl JsWebview {
       })
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
   }
+
+  #[napi]
+  /// Reloads the webview.
+  pub fn reload(&self) -> Result<()> {
+    self.webview_inner.reload().map_err(|e| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to reload: {}", e),
+      )
+    })
+  }
 }

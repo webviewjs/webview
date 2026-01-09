@@ -17,10 +17,12 @@ pub mod browser_window;
 pub mod webview;
 
 #[napi]
-/// TODO
+/// Represents application events
 pub enum WebviewApplicationEvent {
   /// Window close event.
   WindowCloseRequested,
+  /// Application close event.
+  ApplicationCloseRequested,
 }
 
 #[napi(object)]
@@ -96,6 +98,8 @@ pub struct Application {
   handler: Rc<RefCell<Option<FunctionRef<ApplicationEvent, ()>>>>,
   /// The env
   env: Env,
+  /// Whether the application should exit
+  should_exit: Rc<RefCell<bool>>,
 }
 
 #[napi]
@@ -114,12 +118,19 @@ impl Application {
       }),
       handler: Rc::new(RefCell::new(None::<FunctionRef<ApplicationEvent, ()>>)),
       env,
+      should_exit: Rc::new(RefCell::new(false)),
     })
   }
 
   #[napi]
   /// Sets the event handler callback.
   pub fn on_event(&mut self, handler: Option<FunctionRef<ApplicationEvent, ()>>) {
+    *self.handler.borrow_mut() = handler;
+  }
+
+  #[napi]
+  /// Alias for on_event() - binds an event handler callback.
+  pub fn bind(&mut self, handler: Option<FunctionRef<ApplicationEvent, ()>>) {
     *self.handler.borrow_mut() = handler;
   }
 
@@ -164,6 +175,12 @@ impl Application {
   }
 
   #[napi]
+  /// Exits the application gracefully. This will trigger the close event and clean up resources.
+  pub fn exit(&self) {
+    *self.should_exit.borrow_mut() = true;
+  }
+
+  #[napi]
   /// Runs the application. This method will block the current thread.
   pub fn run(&mut self) -> Result<()> {
     let ctrl = match self.options.control_flow {
@@ -185,9 +202,24 @@ impl Application {
     if let Some(event_loop) = self.event_loop.take() {
       let handler = self.handler.clone();
       let env = self.env;
+      let should_exit = self.should_exit.clone();
 
       event_loop.run(move |event, _, control_flow| {
         *control_flow = ctrl;
+
+        // Check if exit was requested
+        if *should_exit.borrow() {
+          let callback = handler.borrow();
+          if let Some(callback) = callback.as_ref() {
+            if let Ok(on_exit) = callback.borrow_back(&env) {
+              let _ = on_exit.call(ApplicationEvent {
+                event: WebviewApplicationEvent::ApplicationCloseRequested,
+              });
+            }
+          }
+          *control_flow = ControlFlow::Exit;
+          return;
+        }
 
         if let Event::WindowEvent {
           event: WindowEvent::CloseRequested,

@@ -10,6 +10,8 @@ export declare class Application {
   createBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow
   /** Creates a new browser window as a child window. */
   createChildBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow
+  /** Exits the application gracefully. This will trigger the close event and clean up resources. */
+  exit(): void
   /** Runs the application. This method will block the current thread. */
   run(): void
 }
@@ -90,6 +92,10 @@ export declare class BrowserWindow {
   get fullscreen(): FullscreenType | null
   /** Sets the window to fullscreen or back. */
   setFullscreen(fullscreenType?: FullscreenType | undefined | null): void
+  /** Hides the window without destroying it. */
+  hide(): void
+  /** Shows the window if it was hidden. */
+  show(): void
 }
 
 export declare class Webview {
@@ -115,6 +121,8 @@ export declare class Webview {
   /** Evaluates the given JavaScript code. */
   evaluateScript(js: string): void
   evaluateScriptWithCallback(js: string, callback: ((err: Error | null, arg: string) => any)): void
+  /** Reloads the webview. */
+  reload(): void
 }
 export type JsWebview = Webview
 
@@ -277,10 +285,12 @@ export interface VideoMode {
   refreshRate: number
 }
 
-/** TODO */
+/** Represents application events */
 export declare const enum WebviewApplicationEvent {
   /** Window close event. */
-  WindowCloseRequested = 0
+  WindowCloseRequested = 0,
+  /** Application close event. */
+  ApplicationCloseRequested = 1
 }
 
 export interface WebviewOptions {

@@ -626,4 +626,16 @@ impl BrowserWindow {
 
     self.window.set_fullscreen(fs);
   }
+
+  #[napi]
+  /// Hides the window without destroying it.
+  pub fn hide(&self) {
+    self.window.set_visible(false);
+  }
+
+  #[napi]
+  /// Shows the window if it was hidden.
+  pub fn show(&self) {
+    self.window.set_visible(true);
+  }
 }
