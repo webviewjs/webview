@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use napi::{
   bindgen_prelude::FunctionRef,
@@ -12,8 +12,8 @@ use wry::{http::Request, Rect, WebViewBuilder};
 use crate::{HeaderData, IpcMessage};
 
 /// Represents the theme of the window.
-#[napi(js_name = "Theme")]
-pub enum JsTheme {
+#[napi]
+pub enum Theme {
   /// The light theme.
   Light,
   /// The dark theme.
@@ -49,7 +49,7 @@ pub struct WebviewOptions {
   /// Whether the window is transparent. Default is `false`.
   pub transparent: Option<bool>,
   /// The default theme.
-  pub theme: Option<JsTheme>,
+  pub theme: Option<Theme>,
   /// Whether the window is zoomable via hotkeys or gestures.
   pub hotkeys_zoom: Option<bool>,
   /// Whether the clipboard access is enabled.
@@ -149,8 +149,8 @@ impl JsWebview {
 
       if let Some(theme) = options.theme {
         let theme = match theme {
-          JsTheme::Light => wry::Theme::Light,
-          JsTheme::Dark => wry::Theme::Dark,
+          Theme::Light => wry::Theme::Light,
+          Theme::Dark => wry::Theme::Dark,
           _ => wry::Theme::Auto,
         };
 
@@ -172,13 +172,12 @@ impl JsWebview {
 
     let ipc_state = Rc::new(RefCell::new(None::<FunctionRef<IpcMessage, ()>>));
     let ipc_state_clone = ipc_state.clone();
+    let env_copy = *env;
 
-    let env = env.clone();
     let ipc_handler = move |req: Request<String>| {
-      let callback: &RefCell<Option<FunctionRef<IpcMessage, ()>>> = ipc_state_clone.borrow();
-      let callback = callback.borrow();
-      if let Some(func) = callback.as_ref() {
-        let on_ipc_msg = func.borrow_back(&env);
+      let borrowed = RefCell::borrow(&ipc_state_clone);
+      if let Some(func) = borrowed.as_ref() {
+        let on_ipc_msg = func.borrow_back(&env_copy);
 
         if on_ipc_msg.is_err() {
           return;
@@ -203,9 +202,7 @@ impl JsWebview {
           uri: req.uri().to_string(),
         };
 
-        match on_ipc_msg.call(ipc_message) {
-          _ => {}
-        };
+        let _ = on_ipc_msg.call(ipc_message);
       }
     };
 
@@ -231,12 +228,10 @@ impl JsWebview {
     let webview = {
       if options.child.unwrap_or(false) {
         webview
-          .build_as_child(window.gtk_window())
-          .map_err(handle_build_error)
+          .build_as_child(&window)
+          .map_err(handle_build_error)?
       } else {
-        webview
-          .build(window.gtk_window())
-          .map_err(handle_build_error)
+        webview.build(&window).map_err(handle_build_error)?
       }
     };
 
@@ -273,8 +268,8 @@ impl JsWebview {
 
   #[napi]
   /// Set webview zoom level.
-  pub fn zoom(&self, scale_facotr: f64) -> Result<()> {
-    self.webview_inner.zoom(scale_facotr).map_err(|e| {
+  pub fn zoom(&self, scale_factor: f64) -> Result<()> {
+    self.webview_inner.zoom(scale_factor).map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to zoom: {}", e),
@@ -348,13 +343,22 @@ impl JsWebview {
     js: String,
     callback: ThreadsafeFunction<String>,
   ) -> Result<()> {
-    let tsfn = callback.clone();
-
     self
       .webview_inner
       .evaluate_script_with_callback(&js, move |val| {
-        tsfn.call(Ok(val), ThreadsafeFunctionCallMode::Blocking);
+        callback.call(Ok(val), ThreadsafeFunctionCallMode::Blocking);
       })
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
+  }
+
+  #[napi]
+  /// Reloads the webview.
+  pub fn reload(&self) -> Result<()> {
+    self.webview_inner.reload().map_err(|e| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to reload: {}", e),
+      )
+    })
   }
 }

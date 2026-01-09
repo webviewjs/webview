@@ -84,6 +84,42 @@ webview.onIpcMessage((data) => {
 app.run();
 ```
 
+## Closing the Application
+
+You can close the application, windows, and webviews gracefully to ensure all resources (including temporary folders) are cleaned up properly.
+
+```js
+const app = new Application();
+const window = app.createBrowserWindow();
+const webview = window.createWebview({ url: 'https://nodejs.org' });
+
+// Set up event handler for close events
+// You can use either onEvent() or bind() - they are equivalent
+app.bind((event) => {
+  if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
+    console.log('Application is closing, cleaning up resources...');
+    // Perform cleanup here: save data, close connections, etc.
+  }
+  
+  if (event.event === WebviewApplicationEvent.WindowCloseRequested) {
+    console.log('Window close requested');
+    // Perform window-specific cleanup
+  }
+});
+
+// Close the application gracefully (cleans up temp folders)
+app.exit();
+
+// Or hide/show the window
+window.hide(); // Hide the window
+window.show(); // Show the window again
+
+// Or reload the webview
+webview.reload();
+```
+
+For more details on closing applications and cleaning up resources, see the [Closing Guide](./docs/CLOSING_GUIDE.md).
+
 Check out [examples](./examples) directory for more examples, such as serving contents from a web server to webview, etc.
 
 # Building executables
@@ -98,3 +134,23 @@ webview --build --input ./path/to/your/script.js --output ./path/to/output-direc
 ```
 
 You can pass `--resources ./my-resource.json` to include additional resources in the executable. This resource can be imported using `getAsset()` or `getRawAsset()` functions from `node:sea` module.
+
+# Development
+
+## Prerequisites
+
+- [Bun](https://bun.sh/) >= 1.3.0
+- [Rust](https://www.rust-lang.org/) stable toolchain
+- [Node.js](https://nodejs.org/) >= 18 (for testing)
+
+## Setup
+
+```bash
+bun install
+```
+
+## Build
+
+```bash
+bun run build
+```

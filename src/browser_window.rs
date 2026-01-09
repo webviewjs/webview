@@ -3,10 +3,10 @@ use napi_derive::*;
 use tao::{
   dpi::{LogicalPosition, PhysicalSize},
   event_loop::EventLoop,
-  window::{Fullscreen, Icon, ProgressBarState, Window, WindowBuilder},
+  window::{Fullscreen, ProgressBarState, Window, WindowBuilder},
 };
 
-use crate::webview::{JsTheme, JsWebview, WebviewOptions};
+use crate::webview::{JsWebview, Theme, WebviewOptions};
 
 // #[cfg(target_os = "windows")]
 // use tao::platform::windows::IconExtWindows;
@@ -157,7 +157,7 @@ impl BrowserWindow {
     options: Option<BrowserWindowOptions>,
     child: bool,
   ) -> Result<Self> {
-    let options = options.unwrap_or(BrowserWindowOptions::default());
+    let options = options.unwrap_or_default();
 
     let mut window = WindowBuilder::new();
 
@@ -248,7 +248,7 @@ impl BrowserWindow {
   #[napi]
   /// Creates a webview on this window.
   pub fn create_webview(&mut self, env: Env, options: Option<WebviewOptions>) -> Result<JsWebview> {
-    let webview = JsWebview::create(&env, &self.window, options.unwrap_or(Default::default()))?;
+    let webview = JsWebview::create(&env, &self.window, options.unwrap_or_default())?;
     Ok(webview)
   }
 
@@ -350,20 +350,20 @@ impl BrowserWindow {
 
   #[napi(getter)]
   /// Gets the window theme.
-  pub fn get_theme(&self) -> JsTheme {
+  pub fn get_theme(&self) -> Theme {
     match self.window.theme() {
-      tao::window::Theme::Light => JsTheme::Light,
-      tao::window::Theme::Dark => JsTheme::Dark,
-      _ => JsTheme::System,
+      tao::window::Theme::Light => Theme::Light,
+      tao::window::Theme::Dark => Theme::Dark,
+      _ => Theme::System,
     }
   }
 
   #[napi]
   /// Sets the window theme.
-  pub fn set_theme(&self, theme: JsTheme) {
+  pub fn set_theme(&self, theme: Theme) {
     let theme = match theme {
-      JsTheme::Light => Some(tao::window::Theme::Light),
-      JsTheme::Dark => Some(tao::window::Theme::Dark),
+      Theme::Light => Some(tao::window::Theme::Light),
+      Theme::Dark => Some(tao::window::Theme::Dark),
       _ => None,
     };
 
@@ -372,6 +372,7 @@ impl BrowserWindow {
 
   #[napi]
   /// Sets the window icon.
+  #[allow(unused_variables)]
   pub fn set_window_icon(
     &self,
     icon: Either<Vec<u8>, String>,
@@ -381,6 +382,7 @@ impl BrowserWindow {
     #[cfg(target_os = "windows")]
     {
       use tao::platform::windows::IconExtWindows;
+      use tao::window::Icon;
 
       let ico = match icon {
         Either::A(bytes) => Icon::from_rgba(bytes, width, height),
@@ -424,10 +426,7 @@ impl BrowserWindow {
       _ => None,
     };
 
-    let progress_value = match state.progress {
-      Some(value) => Some(value as u64),
-      _ => None,
-    };
+    let progress_value = state.progress.map(|value| value as u64);
 
     let progress = ProgressBarState {
       progress: progress_value,
@@ -491,94 +490,85 @@ impl BrowserWindow {
   #[napi]
   /// Get the current monitor.
   pub fn get_current_monitor(&self) -> Option<Monitor> {
-    match self.window.current_monitor() {
-      Some(monitor) => Some(Monitor {
-        name: monitor.name(),
-        scale_factor: monitor.scale_factor(),
-        size: Dimensions {
-          width: monitor.size().width,
-          height: monitor.size().height,
-        },
-        position: Position {
-          x: monitor.position().x,
-          y: monitor.position().y,
-        },
-        video_modes: monitor
-          .video_modes()
-          .map(|v| JsVideoMode {
-            size: Dimensions {
-              width: v.size().width,
-              height: v.size().height,
-            },
-            bit_depth: v.bit_depth(),
-            refresh_rate: v.refresh_rate(),
-          })
-          .collect(),
-      }),
-      _ => None,
-    }
+    self.window.current_monitor().map(|monitor| Monitor {
+      name: monitor.name(),
+      scale_factor: monitor.scale_factor(),
+      size: Dimensions {
+        width: monitor.size().width,
+        height: monitor.size().height,
+      },
+      position: Position {
+        x: monitor.position().x,
+        y: monitor.position().y,
+      },
+      video_modes: monitor
+        .video_modes()
+        .map(|v| JsVideoMode {
+          size: Dimensions {
+            width: v.size().width,
+            height: v.size().height,
+          },
+          bit_depth: v.bit_depth(),
+          refresh_rate: v.refresh_rate(),
+        })
+        .collect(),
+    })
   }
 
   #[napi]
   /// Get the primary monitor.
   pub fn get_primary_monitor(&self) -> Option<Monitor> {
-    match self.window.primary_monitor() {
-      Some(monitor) => Some(Monitor {
-        name: monitor.name(),
-        scale_factor: monitor.scale_factor(),
-        size: Dimensions {
-          width: monitor.size().width,
-          height: monitor.size().height,
-        },
-        position: Position {
-          x: monitor.position().x,
-          y: monitor.position().y,
-        },
-        video_modes: monitor
-          .video_modes()
-          .map(|v| JsVideoMode {
-            size: Dimensions {
-              width: v.size().width,
-              height: v.size().height,
-            },
-            bit_depth: v.bit_depth(),
-            refresh_rate: v.refresh_rate(),
-          })
-          .collect(),
-      }),
-      _ => None,
-    }
+    self.window.primary_monitor().map(|monitor| Monitor {
+      name: monitor.name(),
+      scale_factor: monitor.scale_factor(),
+      size: Dimensions {
+        width: monitor.size().width,
+        height: monitor.size().height,
+      },
+      position: Position {
+        x: monitor.position().x,
+        y: monitor.position().y,
+      },
+      video_modes: monitor
+        .video_modes()
+        .map(|v| JsVideoMode {
+          size: Dimensions {
+            width: v.size().width,
+            height: v.size().height,
+          },
+          bit_depth: v.bit_depth(),
+          refresh_rate: v.refresh_rate(),
+        })
+        .collect(),
+    })
   }
 
   #[napi]
   /// Get the monitor from the given point.
   pub fn get_monitor_from_point(&self, x: f64, y: f64) -> Option<Monitor> {
-    match self.window.monitor_from_point(x, y) {
-      Some(monitor) => Some(Monitor {
-        name: monitor.name(),
-        scale_factor: monitor.scale_factor(),
-        size: Dimensions {
-          width: monitor.size().width,
-          height: monitor.size().height,
-        },
-        position: Position {
-          x: monitor.position().x,
-          y: monitor.position().y,
-        },
-        video_modes: monitor
-          .video_modes()
-          .map(|v| JsVideoMode {
-            size: Dimensions {
-              width: v.size().width,
-              height: v.size().height,
-            },
-            bit_depth: v.bit_depth(),
-            refresh_rate: v.refresh_rate(),
-          })
-          .collect(),
-      }),
-      _ => None,
-    }
+    self.window.monitor_from_point(x, y).map(|monitor| Monitor {
+      name: monitor.name(),
+      scale_factor: monitor.scale_factor(),
+      size: Dimensions {
+        width: monitor.size().width,
+        height: monitor.size().height,
+      },
+      position: Position {
+        x: monitor.position().x,
+        y: monitor.position().y,
+      },
+      video_modes: monitor
+        .video_modes()
+        .map(|v| JsVideoMode {
+          size: Dimensions {
+            width: v.size().width,
+            height: v.size().height,
+          },
+          bit_depth: v.bit_depth(),
+          refresh_rate: v.refresh_rate(),
+        })
+        .collect(),
+    })
   }
 
   #[napi]
@@ -637,5 +627,25 @@ impl BrowserWindow {
     };
 
     self.window.set_fullscreen(fs);
+  }
+
+  #[napi]
+  /// Closes the window by hiding it. Note: This hides the window rather than closing it completely,
+  /// as tao requires the event loop to handle window closing. Use this when you want to
+  /// close a specific window (like a login window) and potentially reopen it later.
+  pub fn close(&self) {
+    self.window.set_visible(false);
+  }
+
+  #[napi]
+  /// Hides the window without destroying it.
+  pub fn hide(&self) {
+    self.window.set_visible(false);
+  }
+
+  #[napi]
+  /// Shows the window if it was hidden.
+  pub fn show(&self) {
+    self.window.set_visible(true);
   }
 }
