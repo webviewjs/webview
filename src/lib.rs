@@ -2,9 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU32, Ordering};
 
 use browser_window::{BrowserWindow, BrowserWindowOptions};
 use napi::bindgen_prelude::*;

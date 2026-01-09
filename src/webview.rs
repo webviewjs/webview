@@ -9,6 +9,9 @@ use napi_derive::*;
 use tao::dpi::{LogicalPosition, LogicalSize};
 use wry::{http::Request, Rect, WebViewBuilder};
 
+#[cfg(target_os = "linux")]
+use tao::platform::unix::WindowExtUnix;
+
 use crate::{HeaderData, IpcMessage};
 
 /// Represents the theme of the window.
@@ -229,11 +232,11 @@ impl JsWebview {
       if options.child.unwrap_or(false) {
         webview
           .build_as_child(window.gtk_window())
-          .map_err(handle_build_error)
+          .map_err(handle_build_error)?
       } else {
         webview
           .build(window.gtk_window())
-          .map_err(handle_build_error)
+          .map_err(handle_build_error)?
       }
     };
 
