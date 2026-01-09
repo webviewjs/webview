@@ -36,16 +36,16 @@ jobs:
         run: bun install
 
       - name: ESLint
-        run: yarn lint
+        run: bun run lint
 
       - name: Cargo fmt
         run: cargo fmt -- --check
 
       - name: Clippy
-        run: yarn clippy
+        run: bun run clippy
 
       - name: Cargo check
-        run: yarn check
+        run: bun run check
 
       - name: Run tests
-        run: yarn test
+        run: bun run test

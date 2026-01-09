@@ -184,33 +184,26 @@ impl Application {
 
     if let Some(event_loop) = self.event_loop.take() {
       let handler = self.handler.clone();
-      let env = self.env.clone();
+      let env = self.env;
 
       event_loop.run(move |event, _, control_flow| {
         *control_flow = ctrl;
 
-        match event {
-          Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-          } => {
-            let callback = handler.borrow();
-            if callback.is_some() {
-              let callback = callback.as_ref().unwrap().borrow_back(&env);
-
-              if callback.is_ok() {
-                let callback = callback.unwrap();
-                match callback.call(ApplicationEvent {
-                  event: WebviewApplicationEvent::WindowCloseRequested,
-                }) {
-                  _ => (),
-                };
-              }
+        if let Event::WindowEvent {
+          event: WindowEvent::CloseRequested,
+          ..
+        } = event
+        {
+          let callback = handler.borrow();
+          if let Some(callback) = callback.as_ref() {
+            if let Ok(on_ipc_msg) = callback.borrow_back(&env) {
+              let _ = on_ipc_msg.call(ApplicationEvent {
+                event: WebviewApplicationEvent::WindowCloseRequested,
+              });
             }
-
-            *control_flow = ControlFlow::Exit
           }
-          _ => (),
+
+          *control_flow = ControlFlow::Exit
         }
       });
     }

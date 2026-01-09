@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use napi::{
   bindgen_prelude::FunctionRef,
@@ -172,13 +172,12 @@ impl JsWebview {
 
     let ipc_state = Rc::new(RefCell::new(None::<FunctionRef<IpcMessage, ()>>));
     let ipc_state_clone = ipc_state.clone();
+    let env_copy = *env;
 
-    let env = env.clone();
     let ipc_handler = move |req: Request<String>| {
-      let callback: &RefCell<Option<FunctionRef<IpcMessage, ()>>> = ipc_state_clone.borrow();
-      let callback = callback.borrow();
-      if let Some(func) = callback.as_ref() {
-        let on_ipc_msg = func.borrow_back(&env);
+      let borrowed = RefCell::borrow(&ipc_state_clone);
+      if let Some(func) = borrowed.as_ref() {
+        let on_ipc_msg = func.borrow_back(&env_copy);
 
         if on_ipc_msg.is_err() {
           return;
@@ -203,9 +202,7 @@ impl JsWebview {
           uri: req.uri().to_string(),
         };
 
-        match on_ipc_msg.call(ipc_message) {
-          _ => {}
-        };
+        let _ = on_ipc_msg.call(ipc_message);
       }
     };
 
