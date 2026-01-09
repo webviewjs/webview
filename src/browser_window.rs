@@ -3,7 +3,7 @@ use napi_derive::*;
 use tao::{
   dpi::{LogicalPosition, PhysicalSize},
   event_loop::EventLoop,
-  window::{Fullscreen, Icon, ProgressBarState, Window, WindowBuilder},
+  window::{Fullscreen, ProgressBarState, Window, WindowBuilder},
 };
 
 use crate::webview::{JsWebview, Theme, WebviewOptions};
@@ -372,6 +372,7 @@ impl BrowserWindow {
 
   #[napi]
   /// Sets the window icon.
+  #[allow(unused_variables)]
   pub fn set_window_icon(
     &self,
     icon: Either<Vec<u8>, String>,
@@ -381,6 +382,7 @@ impl BrowserWindow {
     #[cfg(target_os = "windows")]
     {
       use tao::platform::windows::IconExtWindows;
+      use tao::window::Icon;
 
       let ico = match icon {
         Either::A(bytes) => Icon::from_rgba(bytes, width, height),

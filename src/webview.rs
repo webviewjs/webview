@@ -231,12 +231,10 @@ impl JsWebview {
     let webview = {
       if options.child.unwrap_or(false) {
         webview
-          .build_as_child(window.gtk_window())
+          .build_as_child(&window)
           .map_err(handle_build_error)?
       } else {
-        webview
-          .build(window.gtk_window())
-          .map_err(handle_build_error)?
+        webview.build(&window).map_err(handle_build_error)?
       }
     };
 
