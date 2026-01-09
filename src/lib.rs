@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -18,16 +18,8 @@ use tao::{
 pub mod browser_window;
 pub mod webview;
 
-/// Window commands that can be sent from JavaScript
-#[napi]
-pub enum WindowCommand {
-  /// Close the window
-  Close,
-  /// Show the window
-  Show,
-  /// Hide the window
-  Hide,
-}
+/// Global counter for window IDs
+static WINDOW_ID_COUNTER: AtomicU32 = AtomicU32::new(1);
 
 #[napi]
 /// Represents application events
@@ -91,6 +83,10 @@ pub struct ApplicationOptions {
   pub wait_time: Option<i32>,
   /// The exit code of the application. Only applicable if control flow is set to `ExitWithCode`.
   pub exit_code: Option<i32>,
+  /// Whether to prevent the application from closing when all windows are closed.
+  /// Default is `false`, meaning the application will exit when all windows are closed.
+  /// When `true`, you must explicitly call `app.exit()` to close the application.
+  pub prevent_close: Option<bool>,
 }
 
 #[napi(object)]
@@ -113,6 +109,8 @@ pub struct Application {
   env: Env,
   /// Whether the application should exit
   should_exit: Rc<RefCell<bool>>,
+  /// Set of open window IDs
+  open_windows: Rc<RefCell<HashSet<u32>>>,
 }
 
 #[napi]
@@ -128,10 +126,12 @@ impl Application {
         control_flow: Some(JsControlFlow::Poll),
         wait_time: None,
         exit_code: None,
+        prevent_close: Some(false),
       }),
       handler: Rc::new(RefCell::new(None::<FunctionRef<ApplicationEvent, ()>>)),
       env,
       should_exit: Rc::new(RefCell::new(false)),
+      open_windows: Rc::new(RefCell::new(HashSet::new())),
     })
   }
 
@@ -162,7 +162,11 @@ impl Application {
       ));
     }
 
-    let window = BrowserWindow::new(event_loop.unwrap(), options, false)?;
+    let window_id = WINDOW_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let window = BrowserWindow::new(event_loop.unwrap(), options, false, window_id)?;
+
+    // Register window in open_windows set
+    self.open_windows.borrow_mut().insert(window_id);
 
     Ok(window)
   }
@@ -182,9 +186,19 @@ impl Application {
       ));
     }
 
-    let window = BrowserWindow::new(event_loop.unwrap(), options, true)?;
+    let window_id = WINDOW_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let window = BrowserWindow::new(event_loop.unwrap(), options, true, window_id)?;
+
+    // Register window in open_windows set
+    self.open_windows.borrow_mut().insert(window_id);
 
     Ok(window)
+  }
+
+  #[napi]
+  /// Closes a specific window by ID.
+  pub fn close_window(&self, window_id: u32) {
+    self.open_windows.borrow_mut().remove(&window_id);
   }
 
   #[napi]
@@ -195,6 +209,8 @@ impl Application {
 
   #[napi]
   /// Runs the application. This method will block the current thread.
+  /// IMPORTANT: This method is BLOCKING and will prevent JavaScript from executing.
+  /// All setTimeout/setInterval callbacks must be scheduled BEFORE calling this method.
   pub fn run(&mut self) -> Result<()> {
     let ctrl = match self.options.control_flow {
       None => ControlFlow::Poll,
@@ -211,6 +227,9 @@ impl Application {
         ControlFlow::ExitWithCode(exit_code)
       }
     };
+
+    let prevent_close = self.options.prevent_close.unwrap_or(false);
+    let open_windows = self.open_windows.clone();
 
     if let Some(event_loop) = self.event_loop.take() {
       let handler = self.handler.clone();
@@ -248,7 +267,10 @@ impl Application {
             }
           }
 
-          *control_flow = ControlFlow::Exit
+          // Check if all windows are closed and prevent_close is false
+          if !prevent_close && open_windows.borrow().is_empty() {
+            *control_flow = ControlFlow::Exit;
+          }
         }
       });
     }

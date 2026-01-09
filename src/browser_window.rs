@@ -148,6 +148,8 @@ impl Default for BrowserWindowOptions {
 pub struct BrowserWindow {
   is_child_window: bool,
   window: Window,
+  /// Unique identifier for this window
+  id: u32,
 }
 
 #[napi]
@@ -156,6 +158,7 @@ impl BrowserWindow {
     event_loop: &EventLoop<()>,
     options: Option<BrowserWindowOptions>,
     child: bool,
+    window_id: u32,
   ) -> Result<Self> {
     let options = options.unwrap_or_default();
 
@@ -242,6 +245,7 @@ impl BrowserWindow {
     Ok(Self {
       window,
       is_child_window: child,
+      id: window_id,
     })
   }
 
@@ -256,6 +260,21 @@ impl BrowserWindow {
   /// Whether or not the window is a child window.
   pub fn is_child(&self) -> bool {
     self.is_child_window
+  }
+
+  #[napi(getter)]
+  /// Gets the unique identifier for this window.
+  pub fn id(&self) -> u32 {
+    self.id
+  }
+
+  #[napi]
+  /// Destroys the window by hiding it permanently.
+  /// This is a more permanent close than hide(), as it indicates the window
+  /// should not be reopened. Use this when you want to close a specific window
+  /// (like a login window) permanently.
+  pub fn destroy(&self) {
+    self.window.set_visible(false);
   }
 
   #[napi]

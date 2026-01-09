@@ -10,7 +10,7 @@
   "types": "./index.d.ts",
   "repository": "git@github.com:webviewjs/webview.git",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
   "keywords": [
     "webview",
     "node",
