@@ -70,42 +70,42 @@ jobs:
           # Linux ARM64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
+            cross_arch: arm64
+            cross_sys_deps: libglib2.0-dev:arm64 libwebkit2gtk-4.1-dev:arm64 libsoup-3.0-dev:arm64 libcairo2-dev:arm64 libpango1.0-dev:arm64 libatk1.0-dev:arm64 libgdk-pixbuf2.0-dev:arm64 libgtk-3-dev:arm64
+            cross_gcc: gcc-aarch64-linux-gnu
+            cross_gpp: g++-aarch64-linux-gnu
+            cross_triplet: aarch64-linux-gnu
             build_script: |
               set -e
               rustup target add aarch64-unknown-linux-gnu
               export PKG_CONFIG_ALLOW_CROSS=1
-              export PKG_CONFIG_PATH=""
-              export PKG_CONFIG_LIBDIR=""
-              export GLIB_NO_PKG_CONFIG=1
-              export GOBJECT_NO_PKG_CONFIG=1
-              export GIO_NO_PKG_CONFIG=1
-              export WEBKIT2GTK_NO_PKG_CONFIG=1
-              export CC="zig cc -target aarch64-linux-gnu.2.28"
-              export CXX="zig c++ -target aarch64-linux-gnu.2.28"
-              export AR="zig ar"
-              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=zig
+              export PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu
+              export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+              export CC=aarch64-linux-gnu-gcc
+              export CXX=aarch64-linux-gnu-g++
+              export AR=aarch64-linux-gnu-ar
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
               bun run build --target aarch64-unknown-linux-gnu
-            use_zig: true
           
           # Linux ARMv7
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
+            cross_arch: armhf
+            cross_sys_deps: libglib2.0-dev:armhf libwebkit2gtk-4.1-dev:armhf libsoup-3.0-dev:armhf libcairo2-dev:armhf libpango1.0-dev:armhf libatk1.0-dev:armhf libgdk-pixbuf2.0-dev:armhf libgtk-3-dev:armhf
+            cross_gcc: gcc-arm-linux-gnueabihf
+            cross_gpp: g++-arm-linux-gnueabihf
+            cross_triplet: arm-linux-gnueabihf
             build_script: |
               set -e
               rustup target add armv7-unknown-linux-gnueabihf
               export PKG_CONFIG_ALLOW_CROSS=1
-              export PKG_CONFIG_PATH=""
-              export PKG_CONFIG_LIBDIR=""
-              export GLIB_NO_PKG_CONFIG=1
-              export GOBJECT_NO_PKG_CONFIG=1
-              export GIO_NO_PKG_CONFIG=1
-              export WEBKIT2GTK_NO_PKG_CONFIG=1
-              export CC="zig cc -target arm-linux-gnueabihf -mcpu=generic+v7a"
-              export CXX="zig c++ -target arm-linux-gnueabihf -mcpu=generic+v7a"
-              export AR="zig ar"
-              export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=zig
+              export PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf
+              export PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig
+              export CC=arm-linux-gnueabihf-gcc
+              export CXX=arm-linux-gnueabihf-g++
+              export AR=arm-linux-gnueabihf-ar
+              export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc
               bun run build --target armv7-unknown-linux-gnueabihf
-            use_zig: true
           
           # Android
           - os: ubuntu-latest
@@ -180,6 +180,16 @@ jobs:
         if: runner.os == 'Linux' && matrix.settings.sys_deps
         run: |
           sudo apt-get install -y ${{ matrix.settings.sys_deps }}
+
+      - name: Install cross-compilation dependencies (Linux ARM)
+        if: runner.os == 'Linux' && matrix.settings.cross_arch
+        run: |
+          sudo dpkg --add-architecture ${{ matrix.settings.cross_arch }}
+          sudo apt-get update
+          sudo apt-get install -y \
+            ${{ matrix.settings.cross_gcc }} \
+            ${{ matrix.settings.cross_gpp }} \
+            ${{ matrix.settings.cross_sys_deps }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
