@@ -50,9 +50,9 @@ jobs:
             target: x86_64-apple-darwin
           - os: macos-latest
             target: aarch64-apple-darwin
-            cross_compile: true
-            env_vars: |
-              PKG_CONFIG_ALLOW_CROSS=1
+            build_script: |
+              export PKG_CONFIG_ALLOW_CROSS=1
+              bun run build --target aarch64-apple-darwin
           
           # Windows
           - os: windows-latest
@@ -67,45 +67,33 @@ jobs:
             target: x86_64-unknown-linux-gnu
             sys_deps: pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev
           
-          # Linux i686
-          - os: ubuntu-latest
-            target: i686-unknown-linux-gnu
-            sys_deps: gcc-multilib g++-multilib pkg-config
-            cross_compile: true
-            rust_target: i686-unknown-linux-gnu
-            env_vars: |
-              PKG_CONFIG_ALLOW_CROSS=1
-              PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
-              RUSTFLAGS="-L /usr/lib/i386-linux-gnu"
-          
           # Linux ARM64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            cross_compile: true
+            build_script: |
+              set -e
+              rustup target add aarch64-unknown-linux-gnu
+              export PKG_CONFIG_ALLOW_CROSS=1
+              export CC="zig cc -target aarch64-linux-gnu.2.28"
+              export CXX="zig c++ -target aarch64-linux-gnu.2.28"
+              export AR="zig ar"
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=zig
+              bun run build --target aarch64-unknown-linux-gnu
             use_zig: true
-            zig_target: aarch64-linux-gnu.2.28
-            rust_target: aarch64-unknown-linux-gnu
-            env_vars: |
-              PKG_CONFIG_ALLOW_CROSS=1
-              CC="zig cc -target aarch64-linux-gnu.2.28"
-              CXX="zig c++ -target aarch64-linux-gnu.2.28"
-              AR="zig ar"
-              CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=zig
           
           # Linux ARMv7
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
-            cross_compile: true
+            build_script: |
+              set -e
+              rustup target add armv7-unknown-linux-gnueabihf
+              export PKG_CONFIG_ALLOW_CROSS=1
+              export CC="zig cc -target arm-linux-gnueabihf -mcpu=generic+v7a"
+              export CXX="zig c++ -target arm-linux-gnueabihf -mcpu=generic+v7a"
+              export AR="zig ar"
+              export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=zig
+              bun run build --target armv7-unknown-linux-gnueabihf
             use_zig: true
-            zig_target: arm-linux-gnueabihf
-            zig_cpu: generic+v7a
-            rust_target: armv7-unknown-linux-gnueabihf
-            env_vars: |
-              PKG_CONFIG_ALLOW_CROSS=1
-              CC="zig cc -target arm-linux-gnueabihf -mcpu=generic+v7a"
-              CXX="zig c++ -target arm-linux-gnueabihf -mcpu=generic+v7a"
-              AR="zig ar"
-              CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=zig
           
           # Android
           - os: ubuntu-latest
@@ -176,33 +164,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.settings.sys_deps }}
 
-      - name: Install i686 system dependencies
-        if: matrix.settings.target == 'i686-unknown-linux-gnu'
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y \
-            pkg-config:i386 \
-            libwebkit2gtk-4.1-dev:i386 \
-            libsoup-3.0-dev:i386 \
-            libglib2.0-dev:i386 \
-            libcairo2-dev:i386 \
-            libpango1.0-dev:i386 \
-            libatk1.0-dev:i386 \
-            libgdk-pixbuf-2.0-dev:i386 \
-            libgtk-3-dev:i386
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Set cross-compilation environment
-        if: matrix.settings.env_vars
-        run: |
-          ${{ matrix.settings.env_vars }}
-        shell: bash
-
       - name: Build
-        run: bun run build --target ${{ matrix.settings.target }}
+        run: ${{ matrix.settings.build_script || format('bun run build --target {0}', matrix.settings.target) }}
         shell: bash
 
       - name: Upload artifact
