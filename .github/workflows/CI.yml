@@ -81,16 +81,20 @@ jobs:
           - host: ubuntu-latest
             target: aarch64-unknown-linux-musl
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
-            docker_platform: linux/arm64
             build: |
-              if [ -f /usr/local/bin/node ]; then rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx; fi
+              set -e
+              # Install cross-compilation tools for aarch64-musl
               apk update && apk upgrade --no-cache
-              apk add --no-cache pkgconf webkit2gtk-4.1-dev libsoup3-dev nodejs npm
-              rustup update stable && rustup default stable && rustup target add aarch64-unknown-linux-musl
+              apk add --no-cache pkgconf nodejs npm clang lld
+              # Update rust and add target
+              rustup update stable && rustup default stable
+              rustup target add aarch64-unknown-linux-musl
               npm install
+              # Configure cross-compilation environment
               export PKG_CONFIG_ALLOW_CROSS=1
-              export CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc
-              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld
+              export CC_aarch64_unknown_linux_musl=clang
+              export CFLAGS_aarch64_unknown_linux_musl="--target=aarch64-unknown-linux-musl"
               npm run build -- --target aarch64-unknown-linux-musl
           - host: macos-latest
             target: aarch64-apple-darwin
@@ -100,20 +104,31 @@ jobs:
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
-            docker_platform: linux/arm64
             build: |
+              set -e
+              # Remove pre-installed node if exists
               if [ -f /usr/local/bin/node ]; then rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx; fi
+              # Add arm64 architecture for cross-compilation libraries
               dpkg --add-architecture arm64
-              apt-get update && apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config libwebkit2gtk-4.1-dev:arm64 libsoup-3.0-dev:arm64 libglib2.0-dev:arm64 libcairo2-dev:arm64 libpango1.0-dev:arm64 libatk1.0-dev:arm64 libgdk-pixbuf2.0-dev:arm64 libgtk-3-dev:arm64 curl
+              apt-get update
+              # Install cross-compiler and arm64 libraries
+              apt-get install -y --no-install-recommends \
+                gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+                pkg-config curl
+              # Install Node.js 24
               curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
               apt-get install -y nodejs
-              rustup update stable && rustup default stable && rustup target add aarch64-unknown-linux-gnu
+              # Update rust and add target
+              rustup update stable && rustup default stable
+              rustup target add aarch64-unknown-linux-gnu
               npm install
+              # Configure cross-compilation environment
               export PKG_CONFIG_ALLOW_CROSS=1
-              export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
+              export PKG_CONFIG_SYSROOT_DIR=/
               export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
+              export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++
+              export AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar
               export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-              export RUSTFLAGS="-L /usr/lib/aarch64-linux-gnu"
               npm run build -- --target aarch64-unknown-linux-gnu
           # - host: ubuntu-latest
           #   target: armv7-unknown-linux-gnueabihf
