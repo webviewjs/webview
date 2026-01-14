@@ -78,9 +78,10 @@ jobs:
               npm install
               export PKG_CONFIG_ALLOW_CROSS=1
               npm run build -- --target x86_64-unknown-linux-musl
-          - host: ubuntu-24.04-arm64
+          - host: ubuntu-latest
             target: aarch64-unknown-linux-musl
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+            docker_platform: linux/arm64
             build: |
               if [ -f /usr/local/bin/node ]; then rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx; fi
               apk update && apk upgrade --no-cache
@@ -94,12 +95,13 @@ jobs:
             build: |
               export PKG_CONFIG_ALLOW_CROSS=1
               bun run build --target aarch64-apple-darwin
-          - host: ubuntu-24.04-arm64
+          - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
+            docker_platform: linux/arm64
             build: |
               if [ -f /usr/local/bin/node ]; then rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx; fi
-              # Unset cross-compilation variables to use native system compiler
+              # Unset cross-compilation variables to use native system compiler in emulated environment
               unset CC_aarch64_unknown_linux_gnu
               unset AR_aarch64_unknown_linux_gnu
               apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev curl
@@ -131,7 +133,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        if: ${{ matrix.settings.docker && matrix.settings.host != 'ubuntu-24.04-arm64' }}
+        if: ${{ matrix.settings.docker }}
       - name: Setup bun
         uses: oven-sh/setup-bun@v2
         if: ${{ !matrix.settings.docker }}
