@@ -53,7 +53,6 @@
     "build:debug": "napi build --platform",
     "build:all": "napi build --release",
     "build:prebuilds": "napi build --platform --release --strip",
-    "build:arm64": "bash scripts/build-arm.sh",
     "clean": "napi clean && cargo clean",
     "format": "run-p format:prettier format:rs",
     "format:prettier": "prettier . -w",
