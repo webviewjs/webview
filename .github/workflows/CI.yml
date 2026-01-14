@@ -39,53 +39,58 @@ jobs:
           - host: windows-latest
             build: bun run build --target i686-pc-windows-msvc
             target: i686-pc-windows-msvc
-          # - host: ubuntu-latest
-          #   target: x86_64-unknown-linux-gnu
-          #   docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
-          #   setup: |
-          #     sudo apt-get update
-          #     sudo apt-get install pkg-config -y
-          #   build: bun run build --target x86_64-unknown-linux-gnu
-          # - host: ubuntu-latest
-          #   target: x86_64-unknown-linux-musl
-          #   docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
-          #   setup: |
-          #     sudo apt-get update
-          #     sudo apt-get install pkg-config -y
-          #   build: bun run build --target x86_64-unknown-linux-musl
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
+            setup: |
+              apt-get update
+              apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev
+            build: bun run build --target x86_64-unknown-linux-gnu
+          - host: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
+            setup: |
+              dpkg --add-architecture i386
+              apt-get update
+              apt-get install -y pkg-config libwebkit2gtk-4.1-dev:i386 libsoup-3.0-dev:i386 gcc-multilib
+            build: bun run build --target i686-unknown-linux-gnu
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+            setup: |
+              apk add pkgconf webkit2gtk-dev libsoup3-dev
+            build: bun run build --target x86_64-unknown-linux-musl
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+            setup: |
+              apk add pkgconf webkit2gtk-dev libsoup3-dev
+            build: bun run build --target aarch64-unknown-linux-musl
           - host: macos-latest
             target: aarch64-apple-darwin
             build: bun run build --target aarch64-apple-darwin
-          # - host: ubuntu-latest
-          #   target: aarch64-unknown-linux-gnu
-          #   docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
-          #   setup: |
-          #     sudo apt-get update
-          #     sudo apt-get install pkg-config -y
-          #   build: bun run build --target aarch64-unknown-linux-gnu
-          # - host: ubuntu-latest
-          #   target: armv7-unknown-linux-gnueabihf
-          #   setup: |
-          #     sudo apt-get update
-          #     sudo apt-get install gcc-arm-linux-gnueabihf -y
-          #   build: |
-          #     bun run build --target armv7-unknown-linux-gnueabihf
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
+            setup: |
+              apt-get update
+              apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev
+            build: bun run build --target aarch64-unknown-linux-gnu
+          - host: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            setup: |
+              sudo apt-get update
+              sudo apt-get install -y gcc-arm-linux-gnueabihf pkg-config
+            build: |
+              # Webview cross-build for ARMv7 on host is complex due to GTK headers
+              # This might need a specialized docker image for true success
+              bun run build --target armv7-unknown-linux-gnueabihf
           - host: ubuntu-latest
             target: aarch64-linux-android
             build: bun run build --target aarch64-linux-android
           - host: ubuntu-latest
             target: armv7-linux-androideabi
             build: bun run build --target armv7-linux-androideabi
-          # - host: ubuntu-latest
-          #   target: aarch64-unknown-linux-musl
-          #   docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
-          #   setup: |
-          #     sudo apt-get update
-          #     sudo apt-get install pkg-config -y
-          #   build: |-
-          #     set -e &&
-          #     rustup target add aarch64-unknown-linux-musl &&
-          #     bun run build --target aarch64-unknown-linux-musl
           - host: windows-latest
             target: aarch64-pc-windows-msvc
             build: bun run build --target aarch64-pc-windows-msvc

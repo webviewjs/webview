@@ -32,6 +32,11 @@
       "x86_64-apple-darwin",
       "aarch64-apple-darwin",
       "x86_64-unknown-linux-gnu",
+      "i686-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "armv7-unknown-linux-gnueabihf",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-musl",
       "aarch64-linux-android",
       "armv7-linux-androideabi",
       "x86_64-unknown-freebsd"
@@ -63,7 +68,8 @@
     "check": "cargo check",
     "clippy": "cargo clippy -- -D warnings",
     "docs": "cargo doc --no-deps --open",
-    "update": "bun update"
+    "update": "bun update",
+    "setup": "bash ./scripts/install-linux-deps.sh"
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.5.1",
