@@ -185,6 +185,20 @@ jobs:
         if: runner.os == 'Linux' && matrix.settings.cross_arch
         run: |
           sudo dpkg --add-architecture ${{ matrix.settings.cross_arch }}
+          # Update existing sources to be amd64-only to avoid 404s on foreign arches
+          # Handle traditional .list files
+          sudo find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i 's/^deb /deb [arch=amd64] /g' {} +
+          if [ -f /etc/apt/sources.list ]; then
+            sudo sed -i 's/^deb /deb [arch=amd64] /g' /etc/apt/sources.list
+          fi
+          # Handle Ubuntu 24.04+ .sources files (DEB822 format)
+          sudo find /etc/apt/sources.list.d/ /etc/apt/ -type f -name "*.sources" -exec sh -c 'grep -q "Architectures:" "$1" || sed -i "/^Types: deb/a Architectures: amd64" "$1"' _ {} \;
+          
+          # Add ports for the cross-architecture
+          echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc) main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/ports.list
+          echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc)-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ports.list
+          echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc)-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ports.list
+          
           sudo apt-get update
           sudo apt-get install -y \
             ${{ matrix.settings.cross_gcc }} \
