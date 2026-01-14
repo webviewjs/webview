@@ -2,22 +2,22 @@ name: CI
 env:
   DEBUG: napi:*
   APP_NAME: webview
-  MACOSX_DEPLOYMENT_TARGET: '10.13'
-  CARGO_INCREMENTAL: '1'
+  MACOSX_DEPLOYMENT_TARGET: "10.13"
+  CARGO_INCREMENTAL: "1"
   CARGO_TERM_COLOR: always
 permissions:
   contents: write
   id-token: write
-'on':
+"on":
   push:
     branches:
       - main
     tags-ignore:
-      - '**'
+      - "**"
     paths-ignore:
-      - '**/*.md'
+      - "**/*.md"
       - LICENSE
-      - '**/*.gitignore'
+      - "**/*.gitignore"
       - .editorconfig
       - docs/**
   pull_request: null
@@ -80,15 +80,14 @@ jobs:
               npm run build -- --target x86_64-unknown-linux-musl
           - host: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+            docker: alpine:latest
             docker_platform: linux/arm64
             build: |
-              if [ -f /usr/local/bin/node ]; then rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx; fi
               apk update && apk upgrade --no-cache
-              apk add --no-cache pkgconf webkit2gtk-4.1-dev libsoup3-dev nodejs npm
-              rustup update stable && rustup default stable
+              apk add --no-cache pkgconf webkit2gtk-4.1-dev libsoup3-dev nodejs npm curl bash
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+              source "$HOME/.cargo/env"
               npm install
-              export PKG_CONFIG_ALLOW_CROSS=1
               npm run build -- --target aarch64-unknown-linux-musl
           - host: macos-latest
             target: aarch64-apple-darwin
@@ -97,19 +96,15 @@ jobs:
               bun run build --target aarch64-apple-darwin
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
+            docker: debian:bookworm
             docker_platform: linux/arm64
             build: |
-              if [ -f /usr/local/bin/node ]; then rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx; fi
-              # Unset cross-compilation variables to use native system compiler in emulated environment
-              unset CC_aarch64_unknown_linux_gnu
-              unset AR_aarch64_unknown_linux_gnu
               apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev curl
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
               curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
               apt-get install -y nodejs
-              rustup update stable && rustup default stable
+              source "$HOME/.cargo/env"
               npm install
-              export PKG_CONFIG_ALLOW_CROSS=1
               npm run build -- --target aarch64-unknown-linux-gnu
           # - host: ubuntu-latest
           #   target: armv7-unknown-linux-gnueabihf
