@@ -43,7 +43,9 @@ jobs:
             target: x86_64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
             build: |
-              apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev
+              apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev curl
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
               rustup update stable && rustup default stable
               npm install
               export PKG_CONFIG_ALLOW_CROSS=1
@@ -54,7 +56,9 @@ jobs:
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
             build: |
               dpkg --add-architecture i386
-              apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev:i386 libsoup-3.0-dev:i386
+              apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev:i386 libsoup-3.0-dev:i386 curl
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
               rustup update stable && rustup default stable
               npm install
               export PKG_CONFIG_ALLOW_CROSS=1
@@ -64,7 +68,7 @@ jobs:
             target: x86_64-unknown-linux-musl
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
             build: |
-              apk add --no-cache pkgconf webkit2gtk-dev libsoup3-dev
+              apk add --no-cache pkgconf webkit2gtk-dev libsoup3-dev nodejs-current npm
               rustup update stable && rustup default stable
               npm install
               export PKG_CONFIG_ALLOW_CROSS=1
@@ -73,7 +77,7 @@ jobs:
             target: aarch64-unknown-linux-musl
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
             build: |
-              apk add --no-cache pkgconf webkit2gtk-dev libsoup3-dev
+              apk add --no-cache pkgconf webkit2gtk-dev libsoup3-dev nodejs-current npm
               rustup update stable && rustup default stable
               npm install
               export PKG_CONFIG_ALLOW_CROSS=1
@@ -87,7 +91,9 @@ jobs:
             target: aarch64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
             build: |
-              apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev
+              apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev curl
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
               rustup update stable && rustup default stable
               npm install
               export PKG_CONFIG_ALLOW_CROSS=1
