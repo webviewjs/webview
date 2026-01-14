@@ -61,7 +61,7 @@ jobs:
               apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev:i386 libsoup-3.0-dev:i386 libglib2.0-dev:i386 libcairo2-dev:i386 libpango1.0-dev:i386 libatk1.0-dev:i386 libgdk-pixbuf2.0-dev:i386 libgtk-3-dev:i386 curl
               curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
               apt-get install -y nodejs
-              rustup update stable && rustup default stable
+              rustup update stable && rustup default stable && rustup target add i686-unknown-linux-gnu
               npm install
               export PKG_CONFIG_ALLOW_CROSS=1
               export RUSTFLAGS="-L /usr/lib/i386-linux-gnu"
@@ -97,8 +97,12 @@ jobs:
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
+            docker_platform: linux/arm64
             build: |
               if [ -f /usr/local/bin/node ]; then rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx; fi
+              # Unset cross-compilation variables to use native system compiler in emulated environment
+              unset CC_aarch64_unknown_linux_gnu
+              unset AR_aarch64_unknown_linux_gnu
               apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev curl
               curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
               apt-get install -y nodejs
