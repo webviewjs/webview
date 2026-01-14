@@ -42,49 +42,47 @@ jobs:
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
-            setup: |
+            build: |
               apt-get update
               apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev
-            build: bun run build --target x86_64-unknown-linux-gnu
+              bun run build --target x86_64-unknown-linux-gnu
           - host: ubuntu-latest
             target: i686-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
-            setup: |
+            build: |
               dpkg --add-architecture i386
               apt-get update
               apt-get install -y pkg-config libwebkit2gtk-4.1-dev:i386 libsoup-3.0-dev:i386 gcc-multilib
-            build: bun run build --target i686-unknown-linux-gnu
+              bun run build --target i686-unknown-linux-gnu
           - host: ubuntu-latest
             target: x86_64-unknown-linux-musl
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
-            setup: |
+            build: |
               apk add pkgconf webkit2gtk-dev libsoup3-dev
-            build: bun run build --target x86_64-unknown-linux-musl
+              bun run build --target x86_64-unknown-linux-musl
           - host: ubuntu-latest
             target: aarch64-unknown-linux-musl
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
-            setup: |
+            build: |
               apk add pkgconf webkit2gtk-dev libsoup3-dev
-            build: bun run build --target aarch64-unknown-linux-musl
+              bun run build --target aarch64-unknown-linux-musl
           - host: macos-latest
             target: aarch64-apple-darwin
             build: bun run build --target aarch64-apple-darwin
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
-            setup: |
+            build: |
               apt-get update
               apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev
-            build: bun run build --target aarch64-unknown-linux-gnu
-          - host: ubuntu-latest
-            target: armv7-unknown-linux-gnueabihf
-            setup: |
-              sudo apt-get update
-              sudo apt-get install -y gcc-arm-linux-gnueabihf pkg-config
-            build: |
-              # Webview cross-build for ARMv7 on host is complex due to GTK headers
-              # This might need a specialized docker image for true success
-              bun run build --target armv7-unknown-linux-gnueabihf
+              bun run build --target aarch64-unknown-linux-gnu
+          # - host: ubuntu-latest
+          #   target: armv7-unknown-linux-gnueabihf
+          #   setup: |
+          #     sudo apt-get update
+          #     sudo apt-get install -y gcc-arm-linux-gnueabihf pkg-config
+          #   build: |
+          #     bun run build --target armv7-unknown-linux-gnueabihf
           - host: ubuntu-latest
             target: aarch64-linux-android
             build: bun run build --target aarch64-linux-android
@@ -130,7 +128,7 @@ jobs:
           version: 0.13.0
       - name: Setup toolchain
         run: ${{ matrix.settings.setup }}
-        if: ${{ matrix.settings.setup }}
+        if: ${{ matrix.settings.setup && !matrix.settings.docker }}
         shell: bash
       - name: Install dependencies
         run: bun install
