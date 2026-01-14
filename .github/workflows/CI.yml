@@ -71,9 +71,13 @@ jobs:
             target: x86_64-unknown-linux-musl
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
             build: |
-              if [ -f /usr/local/bin/node ]; then rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx; fi
+              set -e
+              # Remove pre-installed Node.js 18 from napi-rs image (we need Node.js 24+)
+              rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx 2>/dev/null || true
               apk update && apk upgrade --no-cache
-              apk add --no-cache pkgconf webkit2gtk-4.1-dev libsoup3-dev nodejs npm
+              apk add --no-cache pkgconf nodejs npm
+              # Verify Node.js version
+              echo "Node.js version: $(node --version)"
               rustup update stable && rustup default stable
               npm install
               export PKG_CONFIG_ALLOW_CROSS=1
@@ -83,9 +87,13 @@ jobs:
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
             build: |
               set -e
+              # Remove pre-installed Node.js 18 from napi-rs image (we need Node.js 24+)
+              rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx 2>/dev/null || true
               # Install cross-compilation tools for aarch64-musl
               apk update && apk upgrade --no-cache
               apk add --no-cache pkgconf nodejs npm clang lld
+              # Verify Node.js version
+              echo "Node.js version: $(node --version)"
               # Update rust and add target
               rustup update stable && rustup default stable
               rustup target add aarch64-unknown-linux-musl
@@ -106,25 +114,25 @@ jobs:
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
             build: |
               set -e
-              # Remove pre-installed node if exists
-              if [ -f /usr/local/bin/node ]; then rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx; fi
-              # Add arm64 architecture for cross-compilation libraries
-              dpkg --add-architecture arm64
+              # Remove pre-installed Node.js from napi-rs image (we need Node.js 24+)
+              rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx 2>/dev/null || true
+              # Update package lists (no arm64 arch needed - we're cross-compiling)
               apt-get update
-              # Install cross-compiler and arm64 libraries
+              # Install cross-compiler toolchain
               apt-get install -y --no-install-recommends \
                 gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
                 pkg-config curl
               # Install Node.js 24
               curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
               apt-get install -y nodejs
+              # Verify Node.js version
+              echo "Node.js version: $(node --version)"
               # Update rust and add target
               rustup update stable && rustup default stable
               rustup target add aarch64-unknown-linux-gnu
               npm install
               # Configure cross-compilation environment
               export PKG_CONFIG_ALLOW_CROSS=1
-              export PKG_CONFIG_SYSROOT_DIR=/
               export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
               export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++
               export AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar
