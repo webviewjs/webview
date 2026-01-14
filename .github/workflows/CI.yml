@@ -80,15 +80,16 @@ jobs:
               npm run build -- --target x86_64-unknown-linux-musl
           - host: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            docker: alpine:latest
-            docker_platform: linux/arm64
+            setup: |
+              sudo apt-get update
+              sudo apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev
             build: |
-              apk update && apk upgrade --no-cache
-              apk add --no-cache pkgconf webkit2gtk-4.1-dev libsoup3-dev nodejs npm curl bash
-              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
-              source "$HOME/.cargo/env"
-              npm install
-              npm run build -- --target aarch64-unknown-linux-musl
+              export PKG_CONFIG_ALLOW_CROSS=1
+              export CC_aarch64_unknown_linux_musl=zig cc -target aarch64-unknown-linux-musl
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=zig cc -target aarch64-unknown-linux-musl
+              export CXX_aarch64_unknown_linux_musl=zig c++ -target aarch64-unknown-linux-musl
+              export AR_aarch64_unknown_linux_musl=zig ar
+              bun run build -- --target aarch64-unknown-linux-musl
           - host: macos-latest
             target: aarch64-apple-darwin
             build: |
@@ -96,16 +97,15 @@ jobs:
               bun run build --target aarch64-apple-darwin
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            docker: debian:bookworm
-            docker_platform: linux/arm64
+            setup: |
+              sudo apt-get update
+              sudo apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
             build: |
-              apt-get update && apt-get install -y pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev curl
-              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
-              curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-              apt-get install -y nodejs
-              source "$HOME/.cargo/env"
-              npm install
-              npm run build -- --target aarch64-unknown-linux-gnu
+              export PKG_CONFIG_ALLOW_CROSS=1
+              export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+              export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++
+              bun run build -- --target aarch64-unknown-linux-gnu
           # - host: ubuntu-latest
           #   target: armv7-unknown-linux-gnueabihf
           #   setup: |
@@ -156,7 +156,7 @@ jobs:
             target/
           key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
       - uses: goto-bus-stop/setup-zig@v2
-        if: ${{ matrix.settings.target == 'armv7-unknown-linux-gnueabihf' }}
+        if: ${{ matrix.settings.target == 'armv7-unknown-linux-gnueabihf' || matrix.settings.target == 'aarch64-unknown-linux-musl' }}
         with:
           version: 0.13.0
       - name: Setup toolchain
