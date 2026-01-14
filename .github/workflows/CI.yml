@@ -51,7 +51,7 @@ jobs:
             build: |
               sudo dpkg --add-architecture i386
               sudo apt-get update
-              sudo apt-get install -y gcc-multilib g++-multilib pkg-config libwebkit2gtk-4.1-dev:i386 libsoup-3.0-dev:i386 libglib2.0-dev:i386 libcairo2-dev:i386 libpango1.0-dev:i386 libatk1.0-dev:i386 libgdk-pixbuf2.0-dev:i386 libgtk-3-dev:i386
+              sudo apt-get install -y gcc-multilib g++-multilib pkg-config libwebkit2gtk-4.1-dev:i386 libsoup-3.0-dev:i386 libglib2.0-dev:i386 libcairo2-dev:i386 libpango1.0-dev:i386 libatk1.0-dev:i386 libgdk-pixbuf-2.0-dev:i386 libgtk-3-dev:i386
               rustup target add i686-unknown-linux-gnu
               npm install
               export PKG_CONFIG_ALLOW_CROSS=1
@@ -68,21 +68,6 @@ jobs:
             target: aarch64-unknown-linux-gnu
             build: |
               set -e
-              # Add arm64 architecture
-              sudo dpkg --add-architecture arm64
-              sudo apt-get update
-              # Install cross-compiler toolchain and arm64 deps
-              sudo apt-get install -y --no-install-recommends \
-                gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-                pkg-config curl ca-certificates \
-                libwebkit2gtk-4.1-dev:arm64 \
-                libsoup-3.0-dev:arm64 \
-                libglib2.0-dev:arm64 \
-                libcairo2-dev:arm64 \
-                libpango1.0-dev:arm64 \
-                libatk1.0-dev:arm64 \
-                libgdk-pixbuf2.0-dev:arm64 \
-                libgtk-3-dev:arm64
               # Install Node.js 24
               curl -fsSL https://deb.nodesource.com/setup_24.x | sudo bash -
               sudo apt-get install -y nodejs
@@ -98,28 +83,11 @@ jobs:
               export CXX="zig c++ -target aarch64-linux-gnu.2.28"
               export AR="zig ar"
               export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=zig
-              export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
-              export RUSTFLAGS="-L /usr/lib/aarch64-linux-gnu"
               npm run build -- --target aarch64-unknown-linux-gnu
           - host: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             build: |
               set -e
-              # Add armhf architecture
-              sudo dpkg --add-architecture armhf
-              sudo apt-get update
-              # Install cross-compiler toolchain and armhf deps
-              sudo apt-get install -y --no-install-recommends \
-                gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
-                pkg-config curl ca-certificates \
-                libwebkit2gtk-4.1-dev:armhf \
-                libsoup-3.0-dev:armhf \
-                libglib2.0-dev:armhf \
-                libcairo2-dev:armhf \
-                libpango1.0-dev:armhf \
-                libatk1.0-dev:armhf \
-                libgdk-pixbuf2.0-dev:armhf \
-                libgtk-3-dev:armhf
               # Install Node.js 24
               curl -fsSL https://deb.nodesource.com/setup_24.x | sudo bash -
               sudo apt-get install -y nodejs
@@ -135,8 +103,6 @@ jobs:
               export CXX="zig c++ -target arm-linux-gnueabihf -mcpu=generic+v7a"
               export AR="zig ar"
               export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=zig
-              export PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig
-              export RUSTFLAGS="-L /usr/lib/arm-linux-gnueabihf"
               npm run build -- --target armv7-unknown-linux-gnueabihf
           - host: ubuntu-latest
             target: aarch64-linux-android
