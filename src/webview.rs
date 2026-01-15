@@ -9,6 +9,11 @@ use napi_derive::*;
 use tao::dpi::{LogicalPosition, LogicalSize};
 use wry::{http::Request, Rect, WebViewBuilder};
 
+#[cfg(target_os = "linux")]
+use tao::platform::unix::WindowExtUnix;
+#[cfg(target_os = "linux")]
+use wry::WebViewBuilderExtUnix;
+
 use crate::{HeaderData, IpcMessage};
 
 /// Represents the theme of the window.
@@ -215,25 +220,20 @@ impl JsWebview {
       )
     };
 
-    #[cfg(not(target_os = "linux"))]
     let webview = {
-      if options.child.unwrap_or(false) {
-        webview.build_as_child(&window).map_err(handle_build_error)
-      } else {
-        webview.build(&window).map_err(handle_build_error)
+      #[cfg(target_os = "linux")]
+      {
+        webview.build_gtk(window.default_vbox().unwrap()).map_err(handle_build_error)
+      }
+      #[cfg(not(target_os = "linux"))]
+      {
+        if options.child.unwrap_or(false) {
+          webview.build_as_child(window).map_err(handle_build_error)
+        } else {
+          webview.build(window).map_err(handle_build_error)
+        }
       }
     }?;
-
-    #[cfg(target_os = "linux")]
-    let webview = {
-      if options.child.unwrap_or(false) {
-        webview
-          .build_as_child(&window)
-          .map_err(handle_build_error)?
-      } else {
-        webview.build(&window).map_err(handle_build_error)?
-      }
-    };
 
     Ok(Self {
       webview_inner: webview,
