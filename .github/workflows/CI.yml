@@ -187,12 +187,16 @@ jobs:
           sudo dpkg --add-architecture ${{ matrix.settings.cross_arch }}
           # Update existing sources to be amd64-only to avoid 404s on foreign arches
           # Handle traditional .list files
-          sudo find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i 's/^deb /deb [arch=amd64] /g' {} +
+          # We use a more careful sed to avoid doubling up [arch=...] tags and causing URI parse errors
+          sudo find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i -E 's/^(deb(-src)? )([^[])/\1[arch=amd64] \3/' {} +
           if [ -f /etc/apt/sources.list ]; then
-            sudo sed -i 's/^deb /deb [arch=amd64] /g' /etc/apt/sources.list
+            sudo sed -i -E 's/^(deb(-src)? )([^[])/\1[arch=amd64] \3/' /etc/apt/sources.list
           fi
           # Handle Ubuntu 24.04+ .sources files (DEB822 format)
           sudo find /etc/apt/sources.list.d/ /etc/apt/ -type f -name "*.sources" -exec sh -c 'grep -q "Architectures:" "$1" || sed -i "/^Types: deb/a Architectures: amd64" "$1"' _ {} \;
+          
+          # Remove problematic microsoft-prod repo if it exists, as it often breaks multi-arch on Noble images
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           
           # Add ports for the cross-architecture
           echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc) main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/ports.list
