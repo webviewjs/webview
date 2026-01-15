@@ -305,20 +305,6 @@ jobs:
         with:
           path: artifacts
 
-      - name: Create npm package directories
-        run: |
-          mkdir -p npm/darwin-x64
-          mkdir -p npm/darwin-arm64
-          mkdir -p npm/win32-ia32-msvc
-          mkdir -p npm/win32-x64-msvc
-          mkdir -p npm/win32-arm64-msvc
-          mkdir -p npm/linux-x64-gnu
-          mkdir -p npm/linux-arm64-gnu
-          mkdir -p npm/linux-arm-gnueabihf
-          mkdir -p npm/android-arm64
-          mkdir -p npm/android-arm-eabi
-        shell: bash
-
       - name: Move artifacts
         run: bun run artifacts
 
