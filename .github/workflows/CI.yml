@@ -91,7 +91,7 @@ jobs:
           - os: ubuntu-22.04
             target: armv7-unknown-linux-gnueabihf
             cross_arch: armhf
-            cross_sys_deps: libglib2.0-dev:armhf libwebkit2gtk-4.0-dev:armhf libsoup-3.0-dev:armhf libcairo2-dev:armhf libpango1.0-dev:armhf libatk1.0-dev:armhf libgdk-pixbuf2.0-dev:armhf libgtk-3-dev:armhf
+            cross_sys_deps: libglib2.0-dev:armhf libwebkit2gtk-4.1-dev:armhf libsoup-3.0-dev:armhf libcairo2-dev:armhf libpango1.0-dev:armhf libatk1.0-dev:armhf libgdk-pixbuf2.0-dev:armhf libgtk-3-dev:armhf
             cross_gcc: gcc-arm-linux-gnueabihf
             cross_gpp: g++-arm-linux-gnueabihf
             cross_triplet: arm-linux-gnueabihf
