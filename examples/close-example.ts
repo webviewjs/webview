@@ -54,7 +54,7 @@ const webview = browserWindow.createWebview({
 
 // Set up event handler for application events
 // You can use either onEvent() or bind() - they are equivalent
-app.bind((event) => {
+app.bind((_e,event) => {
   console.log('Application event:', event.event);
   
   if (event.event === WebviewApplicationEvent.WindowCloseRequested) {
@@ -89,4 +89,4 @@ app.bind((event) => {
 // }, 4000);
 
 // Run the application
-await app.run();
+app.run();

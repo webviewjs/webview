@@ -1,13 +1,12 @@
 import { Application, Theme } from '../index.js';
 
 const app = new Application();
-const window = app.createBrowserWindow();
-
-window.createWebview({
-  title: 'Hello world',
-  url: 'https://nodejs.org',
+const window = app.createBrowserWindow({
+ title: 'Hello world',
 });
 
-window.setTheme(Theme.Dark);
+window.createWebview({
+  url: 'https://nodejs.org',
+});
 
 app.run();

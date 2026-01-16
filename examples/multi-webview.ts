@@ -29,20 +29,17 @@ const webview2 = window.createWebview({
 });
 
 webview1.onIpcMessage((message) => {
-    const str = message.body.toString('utf8')
 
-    console.log('Received message from webview 1:', str)
+    console.log('Received message from webview 1:', message)
 })
 
+webview2.onIpcMessage((message) => {
+    console.log('Received message from webview 2:', message)
+})
 webview1.evaluateScript(`setTimeout(() => {
     window.ipc.postMessage('Hello from webview1')
 }, 1000)`)
 
-webview2.onIpcMessage((message) => {
-    const str = message.body.toString('utf8')
-
-    console.log('Received message from webview 2:', str)
-})
 
 webview2.evaluateScript(`setTimeout(() => {
     window.ipc.postMessage('Hello from webview2')
