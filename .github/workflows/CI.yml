@@ -68,7 +68,7 @@ jobs:
             sys_deps: pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev
 
           # Linux ARM64
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
             cross_arch: arm64
             # Added X11, Wayland, and XKB dependencies required by tao/wry
@@ -198,9 +198,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target/
-          key: ${{ matrix.settings.target }}-cargo-build-${{ github.sha }}
+          # Added ${{ matrix.settings.os }} to the key
+          key: ${{ matrix.settings.os }}-${{ matrix.settings.target }}-cargo-build-${{ github.sha }}
           restore-keys: |
-            ${{ matrix.settings.target }}-cargo-build-
+            ${{ matrix.settings.os }}-${{ matrix.settings.target }}-cargo-build-
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'

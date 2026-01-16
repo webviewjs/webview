@@ -56,4 +56,7 @@ jobs:
         run: bun run build
 
       - name: Run tests
+        env:
+          NO_AT_BRIDGE: 1
+          GDK_BACKEND: x11
         run: xvfb-run -a bun run test
