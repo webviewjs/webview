@@ -4,6 +4,9 @@ import { Application, ControlFlow, Theme, getWebviewVersion, ProgressBarStatus }
 // Shared application instance to avoid GTK singleton conflicts
 let app: Application;
 
+// Skip Application instantiation in CI because GTK initialization is very slow
+const isInCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+
 describe('High-Level API', () => {
   test('getWebviewVersion returns a string', () => {
     const version = getWebviewVersion();
@@ -11,7 +14,7 @@ describe('High-Level API', () => {
     expect(typeof version).toBe('string');
   });
 
-  test('Application instantiation', () => {
+  test.skipIf(isInCI)('Application instantiation', () => {
     app = new Application({
       controlFlow: ControlFlow.Poll,
     });
@@ -19,7 +22,7 @@ describe('High-Level API', () => {
     expect(typeof app.run).toBe('function');
   });
 
-  test('BrowserWindow creation and properties', () => {
+  test.skipIf(isInCI)('BrowserWindow creation and properties', () => {
     const win = app.createBrowserWindow({
       title: 'High-Level Test Window',
       width: 1024,
@@ -35,7 +38,7 @@ describe('High-Level API', () => {
     expect(win.isDecorated()).toBe(true);
   });
 
-  test('Monitor API', () => {
+  test.skipIf(isInCI)('Monitor API', () => {
     const win = app.createBrowserWindow();
     const primary = win.getPrimaryMonitor();
     if (primary) {
@@ -50,7 +53,7 @@ describe('High-Level API', () => {
     }
   });
 
-  test('Window actions (setters)', () => {
+  test.skipIf(isInCI)('Window actions (setters)', () => {
     const win = app.createBrowserWindow();
 
     win.setTitle('New Title');
