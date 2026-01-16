@@ -52,5 +52,8 @@ jobs:
       - name: Cargo check
         run: bun run check
 
+      - name: Build native binding
+        run: bun run build
+
       - name: Run tests
         run: bun run test

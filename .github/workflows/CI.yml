@@ -185,24 +185,17 @@ jobs:
         if: runner.os == 'Linux' && matrix.settings.cross_arch
         run: |
           sudo dpkg --add-architecture ${{ matrix.settings.cross_arch }}
-          # Update existing sources to be amd64-only to avoid 404s on foreign arches
-          # Handle traditional .list files
-          # We use a more careful sed to avoid doubling up [arch=...] tags and causing URI parse errors
-          sudo find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i -E 's/^(deb(-src)? )([^[])/\1[arch=amd64] \3/' {} +
-          if [ -f /etc/apt/sources.list ]; then
-            sudo sed -i -E 's/^(deb(-src)? )([^[])/\1[arch=amd64] \3/' /etc/apt/sources.list
-          fi
-          # Handle Ubuntu 24.04+ .sources files (DEB822 format) - only for Noble and later
-          if [ "$(lsb_release -sc)" = "noble" ]; then
-            sudo find /etc/apt/sources.list.d/ /etc/apt/ -type f -name "*.sources" -exec sh -c 'grep -q "Architectures:" "$1" || sed -i "/^Types: deb/a Architectures: amd64" "$1"' _ {} \;
-            # Remove problematic microsoft-prod repo if it exists, as it often breaks multi-arch on Noble images
-            sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-          fi
 
-          # Add ports for the cross-architecture
-          echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc) main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/ports.list
-          echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc)-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ports.list
-          echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc)-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ports.list
+          # 1. Narrow existing repos to [arch=amd64] to prevent 404s on ports
+          sudo sed -i 's/^deb http/deb [arch=amd64] http/' /etc/apt/sources.list
+          sudo sed -i 's/^deb-src http/deb-src [arch=amd64] http/' /etc/apt/sources.list
+
+          # 2. Add the Ubuntu Ports for ARM architectures
+          # Note: Use 'jammy' for ubuntu-22.04 or 'noble' for 24.04
+          CODENAME=$(lsb_release -sc)
+          echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $CODENAME main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/ports.list
+          echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports ${CODENAME}-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ports.list
+          echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports ${CODENAME}-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ports.list
 
           sudo apt-get update
           sudo apt-get install -y \
