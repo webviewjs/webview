@@ -10,14 +10,11 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi        = { version = "3.8.2", default-features = true, features = ["napi9"] }
+napi        = { version = "3.8.2", default-features = true, features = ["napi9", "compat-mode"] }
 napi-derive = "3.5.1"
-tao         = { version = "0.34.5", features = ["rwh_06"] }
+tao         = "0.34.5"
 wry         = { version = "0.53.5", features = ["devtools", "fullscreen"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-gtk = "0.18"
-glib = "0.18"
+serde_json  = "1"
 
 [build-dependencies]
 napi-build = "2"

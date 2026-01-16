@@ -1,256 +1,46 @@
 #![deny(clippy::all)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::cell::RefCell;
-use std::rc::Rc;
+//! Webview N-API Bindings
+//!
+//! This library provides N-API bindings for using tao and wry
+//! in Node.js applications. All methods, APIs, enums, and types are exported
+//! directly for Node.js composition.
 
-use browser_window::{BrowserWindow, BrowserWindowOptions};
-use napi::bindgen_prelude::*;
-use napi::Result;
-use napi_derive::napi;
-use tao::{
-  event::{Event, WindowEvent},
-  event_loop::{ControlFlow, EventLoop},
+// Wry bindings
+pub mod wry;
+
+// Tao bindings
+pub mod tao;
+
+// Re-export wry types
+pub use wry::enums::{
+  BackgroundThrottlingPolicy, DragDropEvent, Error, NewWindowResponse, PageLoadEvent, ProxyConfig,
+  WryTheme,
 };
+pub use wry::functions::webview_version;
+pub use wry::structs::{
+  InitializationScript, NewWindowFeatures, NewWindowOpener, ProxyEndpoint, Rect,
+  RequestAsyncResponder, WebContext, WebView, WebViewAttributes, WebViewBuilder,
+};
+pub use wry::types::{Result, WebViewId, RGBA};
 
-pub mod browser_window;
-pub mod webview;
+// Re-export tao types
+pub use tao::enums::{
+  CursorIcon, DeviceEvent, ElementState, Force, Key, KeyCode, KeyLocation, ModifiersState,
+  MouseButton, MouseButtonState, ProgressState, ResizeDirection, StartCause, TaoControlFlow,
+  TaoFullscreenType, TaoTheme, TouchPhase, UserAttentionType, WindowEvent,
+};
+pub use tao::functions::{available_monitors, primary_monitor, tao_version};
+pub use tao::structs::{
+  CursorPosition, EventLoop, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget, GestureEvent,
+  HiDpiScaling, Icon, KeyboardEvent, MonitorInfo, MouseEvent, NotSupportedError, OsError, Position,
+  RawKeyEvent, Rectangle, ResizeDetails, ScaleFactorChangeDetails, Size, TaoProgressBar,
+  ThemeChangeDetails, Touch, VideoMode, Window, WindowAttributes, WindowBuilder, WindowDragOptions,
+  WindowJumpOptions, WindowOptions, WindowSizeConstraints,
+};
+pub use tao::types::{AxisId, ButtonId, DeviceId, Result as TaoResult, WindowId, RGBA as TaoRGBA};
 
-/// Window commands that can be sent from JavaScript
-#[napi]
-pub enum WindowCommand {
-  /// Close the window
-  Close,
-  /// Show the window
-  Show,
-  /// Hide the window
-  Hide,
-}
-
-#[napi]
-/// Represents application events
-pub enum WebviewApplicationEvent {
-  /// Window close event.
-  WindowCloseRequested,
-  /// Application close event.
-  ApplicationCloseRequested,
-}
-
-#[napi(object)]
-pub struct HeaderData {
-  /// The key of the header.
-  pub key: String,
-  /// The value of the header.
-  pub value: Option<String>,
-}
-
-#[napi(object)]
-pub struct IpcMessage {
-  /// The body of the message.
-  pub body: Buffer,
-  /// The HTTP method of the message.
-  pub method: String,
-  /// The http headers of the message.
-  pub headers: Vec<HeaderData>,
-  /// The URI of the message.
-  pub uri: String,
-}
-
-#[napi]
-/// Returns the version of the webview.
-pub fn get_webview_version() -> Result<String> {
-  wry::webview_version().map_err(|e| {
-    napi::Error::new(
-      napi::Status::GenericFailure,
-      format!("Failed to get webview version: {}", e),
-    )
-  })
-}
-
-#[napi(js_name = "ControlFlow")]
-/// Represents the control flow of the application.
-pub enum JsControlFlow {
-  /// The application will continue running.
-  Poll,
-  /// The application will wait until the specified time.
-  WaitUntil,
-  /// The application will exit.
-  Exit,
-  /// The application will exit with the given exit code.
-  ExitWithCode,
-}
-
-#[napi(object)]
-/// Represents the options for creating an application.
-pub struct ApplicationOptions {
-  /// The control flow of the application. Default is `Poll`.
-  pub control_flow: Option<JsControlFlow>,
-  /// The waiting time in ms for the application (only applicable if control flow is set to `WaitUntil`).
-  pub wait_time: Option<i32>,
-  /// The exit code of the application. Only applicable if control flow is set to `ExitWithCode`.
-  pub exit_code: Option<i32>,
-}
-
-#[napi(object)]
-/// Represents an event for the application.
-pub struct ApplicationEvent {
-  /// The event type.
-  pub event: WebviewApplicationEvent,
-}
-
-#[napi]
-/// Represents an application.
-pub struct Application {
-  /// The event loop.
-  event_loop: Option<EventLoop<()>>,
-  /// The options for creating the application.
-  options: ApplicationOptions,
-  /// The event handler for the application.
-  handler: Rc<RefCell<Option<FunctionRef<ApplicationEvent, ()>>>>,
-  /// The env
-  env: Env,
-  /// Whether the application should exit
-  should_exit: Rc<RefCell<bool>>,
-}
-
-#[napi]
-impl Application {
-  #[napi(constructor)]
-  /// Creates a new application.
-  pub fn new(env: Env, options: Option<ApplicationOptions>) -> Result<Self> {
-    let event_loop = EventLoop::new();
-
-    Ok(Self {
-      event_loop: Some(event_loop),
-      options: options.unwrap_or(ApplicationOptions {
-        control_flow: Some(JsControlFlow::Poll),
-        wait_time: None,
-        exit_code: None,
-      }),
-      handler: Rc::new(RefCell::new(None::<FunctionRef<ApplicationEvent, ()>>)),
-      env,
-      should_exit: Rc::new(RefCell::new(false)),
-    })
-  }
-
-  #[napi]
-  /// Sets the event handler callback.
-  pub fn on_event(&mut self, handler: Option<FunctionRef<ApplicationEvent, ()>>) {
-    *self.handler.borrow_mut() = handler;
-  }
-
-  #[napi]
-  /// Alias for on_event() - binds an event handler callback.
-  pub fn bind(&mut self, handler: Option<FunctionRef<ApplicationEvent, ()>>) {
-    *self.handler.borrow_mut() = handler;
-  }
-
-  #[napi]
-  /// Creates a new browser window.
-  pub fn create_browser_window(
-    &'static mut self,
-    options: Option<BrowserWindowOptions>,
-  ) -> Result<BrowserWindow> {
-    let event_loop = self.event_loop.as_ref();
-
-    if event_loop.is_none() {
-      return Err(napi::Error::new(
-        napi::Status::GenericFailure,
-        "Event loop is not initialized",
-      ));
-    }
-
-    let window = BrowserWindow::new(event_loop.unwrap(), options, false)?;
-
-    Ok(window)
-  }
-
-  #[napi]
-  /// Creates a new browser window as a child window.
-  pub fn create_child_browser_window(
-    &'static mut self,
-    options: Option<BrowserWindowOptions>,
-  ) -> Result<BrowserWindow> {
-    let event_loop = self.event_loop.as_ref();
-
-    if event_loop.is_none() {
-      return Err(napi::Error::new(
-        napi::Status::GenericFailure,
-        "Event loop is not initialized",
-      ));
-    }
-
-    let window = BrowserWindow::new(event_loop.unwrap(), options, true)?;
-
-    Ok(window)
-  }
-
-  #[napi]
-  /// Exits the application gracefully. This will trigger the close event and clean up resources.
-  pub fn exit(&self) {
-    *self.should_exit.borrow_mut() = true;
-  }
-
-  #[napi]
-  /// Runs the application. This method will block the current thread.
-  pub fn run(&mut self) -> Result<()> {
-    let ctrl = match self.options.control_flow {
-      None => ControlFlow::Poll,
-      Some(JsControlFlow::Poll) => ControlFlow::Poll,
-      Some(JsControlFlow::WaitUntil) => {
-        let wait_time = self.options.wait_time.unwrap_or(0);
-        ControlFlow::WaitUntil(
-          std::time::Instant::now() + std::time::Duration::from_millis(wait_time as u64),
-        )
-      }
-      Some(JsControlFlow::Exit) => ControlFlow::Exit,
-      Some(JsControlFlow::ExitWithCode) => {
-        let exit_code = self.options.exit_code.unwrap_or(0);
-        ControlFlow::ExitWithCode(exit_code)
-      }
-    };
-
-    if let Some(event_loop) = self.event_loop.take() {
-      let handler = self.handler.clone();
-      let env = self.env;
-      let should_exit = self.should_exit.clone();
-
-      event_loop.run(move |event, _, control_flow| {
-        *control_flow = ctrl;
-
-        // Check if exit was requested
-        if *should_exit.borrow() {
-          let callback = handler.borrow();
-          if let Some(callback) = callback.as_ref() {
-            if let Ok(on_exit) = callback.borrow_back(&env) {
-              let _ = on_exit.call(ApplicationEvent {
-                event: WebviewApplicationEvent::ApplicationCloseRequested,
-              });
-            }
-          }
-          *control_flow = ControlFlow::Exit;
-          return;
-        }
-
-        if let Event::WindowEvent {
-          event: WindowEvent::CloseRequested,
-          ..
-        } = event
-        {
-          let callback = handler.borrow();
-          if let Some(callback) = callback.as_ref() {
-            if let Ok(on_ipc_msg) = callback.borrow_back(&env) {
-              let _ = on_ipc_msg.call(ApplicationEvent {
-                event: WebviewApplicationEvent::WindowCloseRequested,
-              });
-            }
-          }
-
-          *control_flow = ControlFlow::Exit
-        }
-      });
-    }
-
-    Ok(())
-  }
-}
+// High-level API adapter
+pub mod high_level;
+pub use high_level::*;
