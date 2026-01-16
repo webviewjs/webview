@@ -27,6 +27,36 @@ npm install @webviewjs/webview
 | armv7-linux-androideabi | ✅        |
 | aarch64-pc-windows-msvc | ✅        |
 
+# Important Notes
+
+## GTK Singleton Limitation on Linux
+
+On Linux, GTK is implemented as a singleton, which means you can only create **one `Application` instance**. If you try to create multiple `Application` instances, the second one will fail with an error like:
+
+```
+Failed to initialize gtk backend!: Ya existe un objeto exportado para la interfaz org.gtk.Application
+```
+
+**Correct approach for multiple windows:**
+
+```js
+// ✅ Correct: Single Application with multiple BrowserWindows
+const app = new Application();
+const window1 = app.createBrowserWindow();
+const window2 = app.createBrowserWindow();
+app.run();
+```
+
+**Incorrect approach:**
+
+```js
+// ❌ Incorrect: Multiple Application instances (will fail on Linux)
+const app1 = new Application();
+const app2 = new Application(); // This will crash!
+```
+
+This limitation is specific to Linux. On Windows and macOS, you can create multiple Application instances, though it's still recommended to use a single Application instance for consistency.
+
 # Examples
 
 ## Load external url
