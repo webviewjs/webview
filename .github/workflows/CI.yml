@@ -3,8 +3,8 @@ name: CI
 env:
   DEBUG: napi:*
   APP_NAME: webview
-  MACOSX_DEPLOYMENT_TARGET: "10.13"
-  CARGO_INCREMENTAL: "1"
+  MACOSX_DEPLOYMENT_TARGET: '10.13'
+  CARGO_INCREMENTAL: '1'
   CARGO_TERM_COLOR: always
 
 permissions:
@@ -16,20 +16,20 @@ on:
     branches:
       - main
     tags-ignore:
-      - "**"
+      - '**'
     paths-ignore:
-      - "**/*.md"
+      - '**/*.md'
       - LICENSE
-      - "**/*.gitignore"
+      - '**/*.gitignore'
       - .editorconfig
       - docs/**
   pull_request:
     branches:
       - main
     paths-ignore:
-      - "**/*.md"
+      - '**/*.md'
       - LICENSE
-      - "**/*.gitignore"
+      - '**/*.gitignore'
       - .editorconfig
       - docs/**
 
@@ -53,7 +53,7 @@ jobs:
             build_script: |
               export PKG_CONFIG_ALLOW_CROSS=1
               bun run build --target aarch64-apple-darwin
-          
+
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -61,12 +61,12 @@ jobs:
             target: i686-pc-windows-msvc
           - os: windows-latest
             target: aarch64-pc-windows-msvc
-          
+
           # Linux x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             sys_deps: pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev
-          
+
           # Linux ARM64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
@@ -86,12 +86,12 @@ jobs:
               export AR=aarch64-linux-gnu-ar
               export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
               bun run build --target aarch64-unknown-linux-gnu
-          
+
           # Linux ARMv7
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: armv7-unknown-linux-gnueabihf
             cross_arch: armhf
-            cross_sys_deps: libglib2.0-dev:armhf libwebkit2gtk-4.1-dev:armhf libsoup-3.0-dev:armhf libcairo2-dev:armhf libpango1.0-dev:armhf libatk1.0-dev:armhf libgdk-pixbuf2.0-dev:armhf libgtk-3-dev:armhf
+            cross_sys_deps: libglib2.0-dev:armhf libwebkit2gtk-4.0-dev:armhf libsoup-2.4-dev:armhf libcairo2-dev:armhf libpango1.0-dev:armhf libatk1.0-dev:armhf libgdk-pixbuf2.0-dev:armhf libgtk-3-dev:armhf
             cross_gcc: gcc-arm-linux-gnueabihf
             cross_gpp: g++-arm-linux-gnueabihf
             cross_triplet: arm-linux-gnueabihf
@@ -106,7 +106,7 @@ jobs:
               export AR=arm-linux-gnueabihf-ar
               export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc
               bun run build --target armv7-unknown-linux-gnueabihf
-          
+
           # Android
           - os: ubuntu-latest
             target: aarch64-linux-android
@@ -114,7 +114,7 @@ jobs:
             target: armv7-linux-androideabi
 
     runs-on: ${{ matrix.settings.os }}
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -175,7 +175,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config
-          
+
       - name: Install system dependencies (Linux x86_64)
         if: runner.os == 'Linux' && matrix.settings.sys_deps
         run: |
@@ -192,17 +192,18 @@ jobs:
           if [ -f /etc/apt/sources.list ]; then
             sudo sed -i -E 's/^(deb(-src)? )([^[])/\1[arch=amd64] \3/' /etc/apt/sources.list
           fi
-          # Handle Ubuntu 24.04+ .sources files (DEB822 format)
-          sudo find /etc/apt/sources.list.d/ /etc/apt/ -type f -name "*.sources" -exec sh -c 'grep -q "Architectures:" "$1" || sed -i "/^Types: deb/a Architectures: amd64" "$1"' _ {} \;
-          
-          # Remove problematic microsoft-prod repo if it exists, as it often breaks multi-arch on Noble images
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-          
+          # Handle Ubuntu 24.04+ .sources files (DEB822 format) - only for Noble and later
+          if [ "$(lsb_release -sc)" = "noble" ]; then
+            sudo find /etc/apt/sources.list.d/ /etc/apt/ -type f -name "*.sources" -exec sh -c 'grep -q "Architectures:" "$1" || sed -i "/^Types: deb/a Architectures: amd64" "$1"' _ {} \;
+            # Remove problematic microsoft-prod repo if it exists, as it often breaks multi-arch on Noble images
+            sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          fi
+
           # Add ports for the cross-architecture
           echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc) main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/ports.list
           echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc)-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ports.list
           echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc)-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ports.list
-          
+
           sudo apt-get update
           sudo apt-get install -y \
             ${{ matrix.settings.cross_gcc }} \
@@ -281,7 +282,7 @@ jobs:
       - build
       # - build-freebsd
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
