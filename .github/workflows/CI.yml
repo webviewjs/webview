@@ -186,17 +186,23 @@ jobs:
         run: |
           sudo dpkg --add-architecture ${{ matrix.settings.cross_arch }}
 
-          # 1. Narrow existing repos to [arch=amd64] to prevent 404s on ports
-          sudo sed -i 's/^deb http/deb [arch=amd64] http/' /etc/apt/sources.list
-          sudo sed -i 's/^deb-src http/deb-src [arch=amd64] http/' /etc/apt/sources.list
+          # 1. Fix existing sources to be amd64-only
+          # This handles traditional .list files (Jammy 22.04)
+          sudo find /etc/apt/sources.list /etc/apt/sources.list.d/ -name "*.list" -type f -exec \
+            sudo sed -i -E 's/^(deb(-src)? )([^[])/\1[arch=amd64] \3/' {} +
 
-          # 2. Add the Ubuntu Ports for ARM architectures
-          # Note: Use 'jammy' for ubuntu-22.04 or 'noble' for 24.04
+          # This handles the new DEB822 .sources files (Noble 24.04+)
+          # It adds "Architectures: amd64" to blocks that don't have it
+          sudo find /etc/apt/sources.list.d/ /etc/apt/ -name "*.sources" -type f -exec \
+            sudo sh -c 'grep -q "Architectures:" "$1" || sed -i "/^Types: deb/a Architectures: amd64" "$1"' _ {} \;
+
+          # 2. Add the Ports repository for the cross-architecture
           CODENAME=$(lsb_release -sc)
           echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports $CODENAME main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/ports.list
           echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports ${CODENAME}-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ports.list
           echo "deb [arch=${{ matrix.settings.cross_arch }}] http://ports.ubuntu.com/ubuntu-ports ${CODENAME}-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ports.list
 
+          # 3. Update and install
           sudo apt-get update
           sudo apt-get install -y \
             ${{ matrix.settings.cross_gcc }} \
