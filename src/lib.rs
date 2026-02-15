@@ -105,8 +105,10 @@ pub fn get_webview_version() -> Result<String> {
 #[napi(js_name = "ControlFlow")]
 /// Represents the control flow of the application.
 pub enum JsControlFlow {
-  /// The application will continue running.
+  /// The application will continuously poll for events (high CPU usage).
   Poll,
+  /// The application will wait for events (recommended, low CPU usage).
+  Wait,
   /// The application will wait until the specified time.
   WaitUntil,
   /// The application will exit.
@@ -118,7 +120,7 @@ pub enum JsControlFlow {
 #[napi(object)]
 /// Represents the options for creating an application.
 pub struct ApplicationOptions {
-  /// The control flow of the application. Default is `Poll`.
+  /// The control flow of the application. Default is `Wait` (recommended for low CPU usage).
   pub control_flow: Option<JsControlFlow>,
   /// The waiting time in ms for the application (only applicable if control flow is set to `WaitUntil`).
   pub wait_time: Option<i32>,
@@ -166,7 +168,7 @@ impl Application {
     Ok(Self {
       event_loop: Some(event_loop),
       options: options.unwrap_or(ApplicationOptions {
-        control_flow: Some(JsControlFlow::Poll),
+        control_flow: Some(JsControlFlow::Wait),
         wait_time: None,
         exit_code: None,
       }),
@@ -285,8 +287,9 @@ impl Application {
   /// Runs the application. This method will block the current thread.
   pub fn run(&mut self) -> Result<()> {
     let ctrl = match self.options.control_flow {
-      None => ControlFlow::Poll,
+      None => ControlFlow::Wait,
       Some(JsControlFlow::Poll) => ControlFlow::Poll,
+      Some(JsControlFlow::Wait) => ControlFlow::Wait,
       Some(JsControlFlow::WaitUntil) => {
         let wait_time = self.options.wait_time.unwrap_or(0);
         ControlFlow::WaitUntil(
@@ -310,23 +313,30 @@ impl Application {
       event_loop.run(move |event, _, control_flow| {
         *control_flow = ctrl;
 
-        // Check for menu events
-        if let Ok(receiver) = menu_event_receiver.lock() {
-          if let Some(receiver) = receiver.as_ref() {
-            if let Ok(menu_event) = receiver.try_recv() {
-              let callback = handler.borrow();
-              if let Some(callback) = callback.as_ref() {
-                if let Ok(on_event) = callback.borrow_back(&env) {
-                  // Get window ID for the menu event
-                  let window_id = 0; // Menu events are global, window ID not directly available
+        // Only check for menu events when we have actual events or when using Poll control flow
+        let should_check_menu = matches!(event, Event::WindowEvent { .. } | Event::MainEventsCleared | Event::NewEvents(_)) 
+          || matches!(ctrl, ControlFlow::Poll);
 
-                  let _ = on_event.call(ApplicationEvent {
-                    event: WebviewApplicationEvent::CustomMenuClick,
-                    custom_menu_event: Some(CustomMenuEvent {
-                      id: menu_event.id().0.clone(),
-                      window_id,
-                    }),
-                  });
+        if should_check_menu {
+          // Check for menu events - batch process all available events
+          if let Ok(receiver) = menu_event_receiver.lock() {
+            if let Some(receiver) = receiver.as_ref() {
+              // Process all available menu events in one go to reduce overhead
+              while let Ok(menu_event) = receiver.try_recv() {
+                let callback = handler.borrow();
+                if let Some(callback) = callback.as_ref() {
+                  if let Ok(on_event) = callback.borrow_back(&env) {
+                    // Get window ID for the menu event
+                    let window_id = 0; // Menu events are global, window ID not directly available
+
+                    let _ = on_event.call(ApplicationEvent {
+                      event: WebviewApplicationEvent::CustomMenuClick,
+                      custom_menu_event: Some(CustomMenuEvent {
+                        id: menu_event.id().0.clone(),
+                        window_id,
+                      }),
+                    });
+                  }
                 }
               }
             }

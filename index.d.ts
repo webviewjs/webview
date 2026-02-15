@@ -150,7 +150,7 @@ export interface ApplicationEvent {
 
 /** Represents the options for creating an application. */
 export interface ApplicationOptions {
-  /** The control flow of the application. Default is `Poll`. */
+  /** The control flow of the application. Default is `Wait` (recommended for low CPU usage). */
   controlFlow?: ControlFlow
   /** The waiting time in ms for the application (only applicable if control flow is set to `WaitUntil`). */
   waitTime?: number
@@ -203,14 +203,16 @@ export interface BrowserWindowOptions {
 
 /** Represents the control flow of the application. */
 export declare const enum ControlFlow {
-  /** The application will continue running. */
+  /** The application will continuously poll for events (high CPU usage). */
   Poll = 0,
+  /** The application will wait for events (recommended, low CPU usage). */
+  Wait = 1,
   /** The application will wait until the specified time. */
-  WaitUntil = 1,
+  WaitUntil = 2,
   /** The application will exit. */
-  Exit = 2,
+  Exit = 3,
   /** The application will exit with the given exit code. */
-  ExitWithCode = 3
+  ExitWithCode = 4
 }
 
 export interface CustomMenuEvent {
