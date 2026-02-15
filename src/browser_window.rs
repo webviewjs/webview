@@ -1,12 +1,17 @@
 use napi::{Either, Env, Result};
 use napi_derive::*;
+use std::sync::{Arc, Mutex};
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 use tao::{
   dpi::{LogicalPosition, PhysicalSize},
   event_loop::EventLoop,
-  window::{Fullscreen, ProgressBarState, Window, WindowBuilder},
+  window::{Fullscreen, ProgressBarState, Window, WindowBuilder, WindowId},
 };
+use muda::Menu;
 
 use crate::webview::{JsWebview, Theme, WebviewOptions};
+use crate::{MenuOptions, create_menu_from_options};
 
 // #[cfg(target_os = "windows")]
 // use tao::platform::windows::IconExtWindows;
@@ -81,6 +86,10 @@ pub struct JsProgressBar {
 
 #[napi(object)]
 pub struct BrowserWindowOptions {
+  /// The window menu
+  pub menu: Option<MenuOptions>,
+  /// Whether to show the menu bar
+  pub show_menu: Option<bool>,
   /// Whether the window is resizable. Default is `true`.
   pub resizable: Option<bool>,
   /// The window title.
@@ -122,6 +131,8 @@ pub struct BrowserWindowOptions {
 impl Default for BrowserWindowOptions {
   fn default() -> Self {
     Self {
+      menu: None,
+      show_menu: Some(true),
       resizable: Some(true),
       title: Some("WebviewJS".to_owned()),
       width: Some(800.0),
@@ -148,6 +159,8 @@ impl Default for BrowserWindowOptions {
 pub struct BrowserWindow {
   is_child_window: bool,
   window: Window,
+  window_id: u32,
+  window_menu: Option<Menu>,
 }
 
 #[napi]
@@ -156,6 +169,7 @@ impl BrowserWindow {
     event_loop: &EventLoop<()>,
     options: Option<BrowserWindowOptions>,
     child: bool,
+    global_menu: Arc<Mutex<Option<Menu>>>,
   ) -> Result<Self> {
     let options = options.unwrap_or_default();
 
@@ -239,9 +253,72 @@ impl BrowserWindow {
       )
     })?;
 
+    // Generate a window ID by hashing the WindowId
+    let mut hasher = DefaultHasher::new();
+    window.id().hash(&mut hasher);
+    let window_id = hasher.finish() as u32;
+    
+    // Handle menu for this window
+    let window_menu = if let Some(menu_options) = options.menu {
+      // Create window-specific menu
+      let menu = create_menu_from_options(menu_options)?;
+      #[cfg(target_os = "windows")]
+      {
+        use tao::platform::windows::WindowExtWindows;
+        menu.init_for_hwnd(window.hwnd() as isize).map_err(|e| {
+          napi::Error::new(
+            napi::Status::GenericFailure,
+            format!("Failed to set window menu: {}", e),
+          )
+        })?;
+      }
+      #[cfg(target_os = "linux")]
+      {
+        use tao::platform::unix::WindowExtUnix;
+        menu.init_for_gtk_window(window.gtk_window(), window.default_vbox()).map_err(|e| {
+          napi::Error::new(
+            napi::Status::GenericFailure,
+            format!("Failed to set window menu: {}", e),
+          )
+        })?;
+      }
+      Some(menu)
+    } else if options.show_menu.unwrap_or(false) {
+      // Use global menu if available and show_menu is true
+      if let Ok(global_menu) = global_menu.lock() {
+        if let Some(_menu) = global_menu.as_ref() {
+          #[cfg(target_os = "windows")]
+          {
+            use tao::platform::windows::WindowExtWindows;
+            menu.init_for_hwnd(window.hwnd() as isize).map_err(|e| {
+              napi::Error::new(
+                napi::Status::GenericFailure,
+                format!("Failed to set global menu: {}", e),
+              )
+            })?;
+          }
+          #[cfg(target_os = "linux")]
+          {
+            use tao::platform::unix::WindowExtUnix;
+            menu.init_for_gtk_window(window.gtk_window(), window.default_vbox()).map_err(|e| {
+              napi::Error::new(
+                napi::Status::GenericFailure,
+                format!("Failed to set global menu: {}", e),
+              )
+            })?;
+          }
+        }
+      }
+      None
+    } else {
+      None
+    };
+
     Ok(Self {
       window,
       is_child_window: child,
+      window_id,
+      window_menu,
     })
   }
 
@@ -346,6 +423,23 @@ impl BrowserWindow {
   /// Sets resizable.
   pub fn set_resizable(&self, resizable: bool) {
     self.window.set_resizable(resizable);
+  }
+
+  #[napi]
+  /// Gets the window ID.
+  pub fn id(&self) -> u32 {
+    self.window_id
+  }
+
+  #[napi]
+  /// Gets whether the window has a menu.
+  pub fn has_menu(&self) -> bool {
+    self.window_menu.is_some()
+  }
+
+  /// Gets the tao window ID (for internal use).
+  pub fn tao_window_id(&self) -> WindowId {
+    self.window.id()
   }
 
   #[napi(getter)]
