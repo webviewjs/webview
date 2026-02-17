@@ -290,7 +290,7 @@ impl BrowserWindow {
           #[cfg(target_os = "windows")]
           {
             use tao::platform::windows::WindowExtWindows;
-            menu.init_for_hwnd(window.hwnd() as isize).map_err(|e| {
+            _menu.init_for_hwnd(window.hwnd() as isize).map_err(|e| {
               napi::Error::new(
                 napi::Status::GenericFailure,
                 format!("Failed to set global menu: {}", e),
@@ -300,7 +300,7 @@ impl BrowserWindow {
           #[cfg(target_os = "linux")]
           {
             use tao::platform::unix::WindowExtUnix;
-            menu.init_for_gtk_window(window.gtk_window(), window.default_vbox()).map_err(|e| {
+            _menu.init_for_gtk_window(window.gtk_window(), window.default_vbox()).map_err(|e| {
               napi::Error::new(
                 napi::Status::GenericFailure,
                 format!("Failed to set global menu: {}", e),
