@@ -265,12 +265,14 @@ impl BrowserWindow {
       #[cfg(target_os = "windows")]
       {
         use tao::platform::windows::WindowExtWindows;
-        menu.init_for_hwnd(window.hwnd() as isize).map_err(|e| {
-          napi::Error::new(
-            napi::Status::GenericFailure,
-            format!("Failed to set window menu: {}", e),
-          )
-        })?;
+        unsafe {
+          menu.init_for_hwnd(window.hwnd() as isize).map_err(|e| {
+            napi::Error::new(
+              napi::Status::GenericFailure,
+              format!("Failed to set window menu: {}", e),
+            )
+          })?
+        };
       }
       #[cfg(target_os = "linux")]
       {
@@ -290,12 +292,14 @@ impl BrowserWindow {
           #[cfg(target_os = "windows")]
           {
             use tao::platform::windows::WindowExtWindows;
-            _menu.init_for_hwnd(window.hwnd() as isize).map_err(|e| {
-              napi::Error::new(
-                napi::Status::GenericFailure,
-                format!("Failed to set global menu: {}", e),
-              )
-            })?;
+            unsafe {
+              _menu.init_for_hwnd(window.hwnd() as isize).map_err(|e| {
+                napi::Error::new(
+                  napi::Status::GenericFailure,
+                  format!("Failed to set global menu: {}", e),
+                )
+              })?
+            };
           }
           #[cfg(target_os = "linux")]
           {
