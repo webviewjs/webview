@@ -14,6 +14,7 @@ napi        = { version = "3.8.2", default-features = true, features = ["napi9"]
 napi-derive = "3.5.1"
 tao         = { version = "0.34.5", features = ["rwh_06"] }
 wry         = { version = "0.53.5", features = ["devtools", "fullscreen"] }
+muda        = "0.17"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"

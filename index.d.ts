@@ -8,12 +8,14 @@ export declare class Application {
   onEvent(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void
   /** Alias for on_event() - binds an event handler callback. */
   bind(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void
+  /** Exits the application gracefully. This will trigger the close event and clean up resources. */
+  exit(): void
   /** Creates a new browser window. */
   createBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow
   /** Creates a new browser window as a child window. */
   createChildBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow
-  /** Exits the application gracefully. This will trigger the close event and clean up resources. */
-  exit(): void
+  /** Sets the global menu for the application (cross-platform) */
+  setMenu(menuOptions?: MenuOptions | undefined | null): void
   /** Runs the application. This method will block the current thread. */
   run(): void
 }
@@ -53,6 +55,10 @@ export declare class BrowserWindow {
   setMinimizable(minimizable: boolean): void
   /** Sets resizable. */
   setResizable(resizable: boolean): void
+  /** Gets the window ID. */
+  id(): number
+  /** Gets whether the window has a menu. */
+  hasMenu(): boolean
   /** Gets the window theme. */
   get theme(): Theme
   /** Sets the window theme. */
@@ -94,6 +100,12 @@ export declare class BrowserWindow {
   get fullscreen(): FullscreenType | null
   /** Sets the window to fullscreen or back. */
   setFullscreen(fullscreenType?: FullscreenType | undefined | null): void
+  /**
+   * Closes the window by hiding it. Note: This hides the window rather than closing it completely,
+   * as tao requires the event loop to handle window closing. Use this when you want to
+   * close a specific window (like a login window) and potentially reopen it later.
+   */
+  close(): void
   /** Hides the window without destroying it. */
   hide(): void
   /** Shows the window if it was hidden. */
@@ -132,11 +144,13 @@ export type JsWebview = Webview
 export interface ApplicationEvent {
   /** The event type. */
   event: WebviewApplicationEvent
+  /** Custom menu event data */
+  customMenuEvent?: CustomMenuEvent
 }
 
 /** Represents the options for creating an application. */
 export interface ApplicationOptions {
-  /** The control flow of the application. Default is `Poll`. */
+  /** The control flow of the application. Default is `Wait` (recommended for low CPU usage). */
   controlFlow?: ControlFlow
   /** The waiting time in ms for the application (only applicable if control flow is set to `WaitUntil`). */
   waitTime?: number
@@ -145,6 +159,10 @@ export interface ApplicationOptions {
 }
 
 export interface BrowserWindowOptions {
+  /** The window menu */
+  menu?: MenuOptions
+  /** Whether to show the menu bar */
+  showMenu?: boolean
   /** Whether the window is resizable. Default is `true`. */
   resizable?: boolean
   /** The window title. */
@@ -185,14 +203,23 @@ export interface BrowserWindowOptions {
 
 /** Represents the control flow of the application. */
 export declare const enum ControlFlow {
-  /** The application will continue running. */
+  /** The application will continuously poll for events (high CPU usage). */
   Poll = 0,
+  /** The application will wait for events (recommended, low CPU usage). */
+  Wait = 1,
   /** The application will wait until the specified time. */
-  WaitUntil = 1,
+  WaitUntil = 2,
   /** The application will exit. */
-  Exit = 2,
+  Exit = 3,
   /** The application will exit with the given exit code. */
-  ExitWithCode = 3
+  ExitWithCode = 4
+}
+
+export interface CustomMenuEvent {
+  /** The menu item identifier */
+  id: string
+  /** The window identifier */
+  windowId: number
 }
 
 export interface Dimensions {
@@ -219,6 +246,9 @@ export interface HeaderData {
   value?: string
 }
 
+/** Initialize menu system from worker thread (cross-platform) */
+export declare function initMenuSystem(): void
+
 export interface IpcMessage {
   /** The body of the message. */
   body: Buffer
@@ -235,6 +265,21 @@ export interface JsProgressBar {
   state?: ProgressBarState
   /** The progress value. */
   progress?: number
+}
+
+/** Represents menu item options from JavaScript */
+export interface MenuItemOptions {
+  id?: string
+  label?: string
+  enabled?: boolean
+  accelerator?: string
+  submenu?: MenuOptions
+  role?: string
+}
+
+/** Represents menu options from JavaScript */
+export interface MenuOptions {
+  items: Array<MenuItemOptions>
 }
 
 export interface Monitor {
@@ -292,7 +337,9 @@ export declare const enum WebviewApplicationEvent {
   /** Window close event. */
   WindowCloseRequested = 0,
   /** Application close event. */
-  ApplicationCloseRequested = 1
+  ApplicationCloseRequested = 1,
+  /** Custom menu click event. */
+  CustomMenuClick = 2
 }
 
 export interface WebviewOptions {
@@ -330,4 +377,14 @@ export interface WebviewOptions {
   autoplay?: boolean
   /** Indicates whether horizontal swipe gestures trigger backward and forward page navigation. */
   backForwardNavigationGestures?: boolean
+}
+
+/** Window commands that can be sent from JavaScript */
+export declare const enum WindowCommand {
+  /** Close the window */
+  Close = 0,
+  /** Show the window */
+  Show = 1,
+  /** Hide the window */
+  Hide = 2
 }
