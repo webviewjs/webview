@@ -14,6 +14,7 @@ use tao::{
   event_loop::{ControlFlow, EventLoop},
 };
 use std::collections::HashMap;
+#[cfg(not(target_os = "android"))]
 use muda::{
   accelerator::Accelerator,
   Menu, MenuItem, PredefinedMenuItem, Submenu,
@@ -151,8 +152,10 @@ pub struct Application {
   /// Whether the application should exit
   should_exit: Rc<RefCell<bool>>,
   /// The global menu
+  #[cfg(not(target_os = "android"))]
   global_menu: Arc<Mutex<Option<Menu>>>,
   /// Menu event receiver
+  #[cfg(not(target_os = "android"))]
   menu_event_receiver: Arc<Mutex<Option<muda::MenuEventReceiver>>>,
   /// Window ID mapping (using string for simplicity)
   window_ids: Arc<Mutex<HashMap<String, u32>>>,
@@ -175,7 +178,9 @@ impl Application {
       handler: Rc::new(RefCell::new(None::<FunctionRef<ApplicationEvent, ()>>)),
       env,
       should_exit: Rc::new(RefCell::new(false)),
+      #[cfg(not(target_os = "android"))]
       global_menu: Arc::new(Mutex::new(None)),
+      #[cfg(not(target_os = "android"))]
       menu_event_receiver: Arc::new(Mutex::new(None)),
       window_ids: Arc::new(Mutex::new(HashMap::new())),
     })
@@ -216,16 +221,19 @@ impl Application {
 
     // Pass the global menu to the window if no custom menu is provided
     let mut window_options = options.unwrap_or_default();
-    if window_options.menu.is_none() {
-      if let Ok(global_menu) = self.global_menu.lock() {
-        if global_menu.as_ref().is_some() {
-          window_options.show_menu = Some(true);
+      #[cfg(not(target_os = "android"))]
+      if window_options.menu.is_none() {
+        if let Ok(global_menu) = self.global_menu.lock() {
+          if global_menu.as_ref().is_some() {
+            window_options.show_menu = Some(true);
+          }
         }
       }
-    }
 
-    let window = BrowserWindow::new(event_loop.unwrap(), Some(window_options), false, self.global_menu.clone())?;
-
+      #[cfg(not(target_os = "android"))]
+      let window = BrowserWindow::new(event_loop.unwrap(), Some(window_options), false, self.global_menu.clone())?;
+      #[cfg(target_os = "android")]
+      let window = BrowserWindow::new(event_loop.unwrap(), Some(window_options), false, Arc::new(Mutex::new(None)))?;
     // Store window ID for menu events
     if let Ok(mut ids) = self.window_ids.lock() {
       let window_id = window.id();
@@ -251,7 +259,10 @@ impl Application {
       ));
     }
 
+    #[cfg(not(target_os = "android"))]
     let window = BrowserWindow::new(event_loop.unwrap(), options, true, self.global_menu.clone())?;
+    #[cfg(target_os = "android")]
+    let window = BrowserWindow::new(event_loop.unwrap(), options, true, Arc::new(Mutex::new(None)))?;
 
     Ok(window)
   }
@@ -259,27 +270,32 @@ impl Application {
   #[napi]
   /// Sets the global menu for the application (cross-platform)
   pub fn set_menu(&mut self, menu_options: Option<MenuOptions>) -> Result<()> {
-    if let Some(options) = menu_options {
-      let menu = create_menu_from_options(options)?;
-      
-      #[cfg(target_os = "macos")]
-      {
-        // On macOS, set as application menu
-        menu.init_for_nsapp();
+    #[cfg(not(target_os = "android"))]
+    {
+      if let Some(options) = menu_options {
+        let menu = create_menu_from_options(options)?;
+
+        #[cfg(target_os = "macos")]
+        {
+          // On macOS, set as application menu
+          menu.init_for_nsapp();
+        }
+
+        // Set up menu event receiver
+        if let Ok(mut receiver) = self.menu_event_receiver.lock() {
+          *receiver = Some(muda::MenuEvent::receiver().clone());
+        }
+
+        // Store the menu for use with new windows on other platforms
+        *self.global_menu.lock().unwrap() = Some(menu);
+      } else {
+        *self.global_menu.lock().unwrap() = None;
+        *self.menu_event_receiver.lock().unwrap() = None;
       }
-      
-      // Set up menu event receiver
-      if let Ok(mut receiver) = self.menu_event_receiver.lock() {
-        *receiver = Some(muda::MenuEvent::receiver().clone());
-      }
-      
-      // Store the menu for use with new windows on other platforms
-      *self.global_menu.lock().unwrap() = Some(menu);
-    } else {
-      *self.global_menu.lock().unwrap() = None;
-      *self.menu_event_receiver.lock().unwrap() = None;
     }
-    
+    #[cfg(target_os = "android")]
+    let _ = menu_options;
+
     Ok(())
   }
 
@@ -307,6 +323,7 @@ impl Application {
       let handler = self.handler.clone();
       let env = self.env;
       let should_exit = self.should_exit.clone();
+      #[cfg(not(target_os = "android"))]
       let menu_event_receiver = self.menu_event_receiver.clone();
       let _window_ids = self.window_ids.clone();
 
@@ -314,28 +331,31 @@ impl Application {
         *control_flow = ctrl;
 
         // Only check for menu events when we have actual events or when using Poll control flow
-        let should_check_menu = matches!(event, Event::WindowEvent { .. } | Event::MainEventsCleared | Event::NewEvents(_)) 
-          || matches!(ctrl, ControlFlow::Poll);
+        #[cfg(not(target_os = "android"))]
+        {
+          let should_check_menu = matches!(event, Event::WindowEvent { .. } | Event::MainEventsCleared | Event::NewEvents(_))
+            || matches!(ctrl, ControlFlow::Poll);
 
-        if should_check_menu {
-          // Check for menu events - batch process all available events
-          if let Ok(receiver) = menu_event_receiver.lock() {
-            if let Some(receiver) = receiver.as_ref() {
-              // Process all available menu events in one go to reduce overhead
-              while let Ok(menu_event) = receiver.try_recv() {
-                let callback = handler.borrow();
-                if let Some(callback) = callback.as_ref() {
-                  if let Ok(on_event) = callback.borrow_back(&env) {
-                    // Get window ID for the menu event
-                    let window_id = 0; // Menu events are global, window ID not directly available
+          if should_check_menu {
+            // Check for menu events - batch process all available events
+            if let Ok(receiver) = menu_event_receiver.lock() {
+              if let Some(receiver) = receiver.as_ref() {
+                // Process all available menu events in one go to reduce overhead
+                while let Ok(menu_event) = receiver.try_recv() {
+                  let callback = handler.borrow();
+                  if let Some(callback) = callback.as_ref() {
+                    if let Ok(on_event) = callback.borrow_back(&env) {
+                      // Get window ID for the menu event
+                      let window_id = 0; // Menu events are global, window ID not directly available
 
-                    let _ = on_event.call(ApplicationEvent {
-                      event: WebviewApplicationEvent::CustomMenuClick,
-                      custom_menu_event: Some(CustomMenuEvent {
-                        id: menu_event.id().0.clone(),
-                        window_id,
-                      }),
-                    });
+                      let _ = on_event.call(ApplicationEvent {
+                        event: WebviewApplicationEvent::CustomMenuClick,
+                        custom_menu_event: Some(CustomMenuEvent {
+                          id: menu_event.id().0.clone(),
+                          window_id,
+                        }),
+                      });
+                    }
                   }
                 }
               }
@@ -395,6 +415,7 @@ pub fn init_menu_system() -> Result<()> {
 }
 
 /// Creates a menu from JavaScript options
+#[cfg(not(target_os = "android"))]
 pub fn create_menu_from_options(options: MenuOptions) -> Result<Menu> {
   let menu = Menu::new();
 
@@ -419,15 +440,16 @@ pub fn create_menu_from_options(options: MenuOptions) -> Result<Menu> {
     .ok();
 
   menu.append(&app).ok();
-  
+
   for item in options.items {
     add_menu_item_to_menu(&menu, item)?;
   }
-  
+
   Ok(menu)
 }
 
 /// Adds a menu item to a menu or submenu
+#[cfg(not(target_os = "android"))]
 fn add_menu_item_to_menu(menu: &Menu, item: MenuItemOptions) -> Result<()> {
   if let Some(submenu_options) = item.submenu {
     // Create submenu
@@ -481,11 +503,12 @@ fn add_menu_item_to_menu(menu: &Menu, item: MenuItemOptions) -> Result<()> {
       )
     })?;
   }
-  
+
   Ok(())
 }
 
 /// Adds a menu item to a submenu
+#[cfg(not(target_os = "android"))]
 fn add_menu_item_to_submenu(submenu: &Submenu, item: MenuItemOptions) -> Result<()> {
   if let Some(nested_submenu_options) = item.submenu {
     // Create nested submenu
@@ -539,6 +562,6 @@ fn add_menu_item_to_submenu(submenu: &Submenu, item: MenuItemOptions) -> Result<
       )
     })?;
   }
-  
+
   Ok(())
 }

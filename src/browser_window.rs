@@ -8,10 +8,13 @@ use tao::{
   event_loop::EventLoop,
   window::{Fullscreen, ProgressBarState, Window, WindowBuilder, WindowId},
 };
+#[cfg(not(target_os = "android"))]
 use muda::Menu;
 
 use crate::webview::{JsWebview, Theme, WebviewOptions};
-use crate::{MenuOptions, create_menu_from_options};
+use crate::MenuOptions;
+#[cfg(not(target_os = "android"))]
+use crate::create_menu_from_options;
 
 // #[cfg(target_os = "windows")]
 // use tao::platform::windows::IconExtWindows;
@@ -160,6 +163,7 @@ pub struct BrowserWindow {
   is_child_window: bool,
   window: Window,
   window_id: u32,
+  #[cfg(not(target_os = "android"))]
   window_menu: Option<Menu>,
 }
 
@@ -169,7 +173,10 @@ impl BrowserWindow {
     event_loop: &EventLoop<()>,
     options: Option<BrowserWindowOptions>,
     child: bool,
+    #[cfg(not(target_os = "android"))]
     global_menu: Arc<Mutex<Option<Menu>>>,
+    #[cfg(target_os = "android")]
+    _global_menu: Arc<Mutex<Option<()>>>,
   ) -> Result<Self> {
     let options = options.unwrap_or_default();
 
@@ -257,8 +264,9 @@ impl BrowserWindow {
     let mut hasher = DefaultHasher::new();
     window.id().hash(&mut hasher);
     let window_id = hasher.finish() as u32;
-    
+
     // Handle menu for this window
+    #[cfg(not(target_os = "android"))]
     let window_menu = if let Some(menu_options) = options.menu {
       // Create window-specific menu
       let menu = create_menu_from_options(menu_options)?;
@@ -322,6 +330,7 @@ impl BrowserWindow {
       window,
       is_child_window: child,
       window_id,
+      #[cfg(not(target_os = "android"))]
       window_menu,
     })
   }
@@ -438,7 +447,10 @@ impl BrowserWindow {
   #[napi]
   /// Gets whether the window has a menu.
   pub fn has_menu(&self) -> bool {
-    self.window_menu.is_some()
+    #[cfg(not(target_os = "android"))]
+    { self.window_menu.is_some() }
+    #[cfg(target_os = "android")]
+    { false }
   }
 
   /// Gets the tao window ID (for internal use).
