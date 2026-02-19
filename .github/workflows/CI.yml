@@ -65,13 +65,13 @@ jobs:
           # Linux x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            sys_deps: pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev
+            sys_deps: pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev libxdo-dev
           
           # Linux ARM64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             cross_arch: arm64
-            cross_sys_deps: libglib2.0-dev:arm64 libwebkit2gtk-4.1-dev:arm64 libsoup-3.0-dev:arm64 libcairo2-dev:arm64 libpango1.0-dev:arm64 libatk1.0-dev:arm64 libgdk-pixbuf2.0-dev:arm64 libgtk-3-dev:arm64
+            cross_sys_deps: libglib2.0-dev:arm64 libwebkit2gtk-4.1-dev:arm64 libsoup-3.0-dev:arm64 libcairo2-dev:arm64 libpango1.0-dev:arm64 libatk1.0-dev:arm64 libgdk-pixbuf2.0-dev:arm64 libgtk-3-dev:arm64 libxdo-dev:arm64
             cross_gcc: gcc-aarch64-linux-gnu
             cross_gpp: g++-aarch64-linux-gnu
             cross_triplet: aarch64-linux-gnu
@@ -91,7 +91,7 @@ jobs:
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             cross_arch: armhf
-            cross_sys_deps: libglib2.0-dev:armhf libwebkit2gtk-4.1-dev:armhf libsoup-3.0-dev:armhf libcairo2-dev:armhf libpango1.0-dev:armhf libatk1.0-dev:armhf libgdk-pixbuf2.0-dev:armhf libgtk-3-dev:armhf
+            cross_sys_deps: libglib2.0-dev:armhf libwebkit2gtk-4.1-dev:armhf libsoup-3.0-dev:armhf libcairo2-dev:armhf libpango1.0-dev:armhf libatk1.0-dev:armhf libgdk-pixbuf2.0-dev:armhf libgtk-3-dev:armhf libxdo-dev:armhf
             cross_gcc: gcc-arm-linux-gnueabihf
             cross_gpp: g++-arm-linux-gnueabihf
             cross_triplet: arm-linux-gnueabihf
