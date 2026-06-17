@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 use tao::{
-  dpi::{LogicalPosition, PhysicalSize},
+  dpi::{LogicalPosition, LogicalSize, PhysicalSize},
   event_loop::EventLoop,
   window::{Fullscreen, ProgressBarState, Window, WindowBuilder, WindowId},
 };
@@ -436,6 +436,12 @@ impl BrowserWindow {
   /// Sets resizable.
   pub fn set_resizable(&self, resizable: bool) {
     self.window.set_resizable(resizable);
+  }
+
+  #[napi]
+  /// Sets the window inner size (width and height).
+  pub fn set_size(&self, width: u32, height: u32) {
+    self.window.set_inner_size(LogicalSize::new(width, height));
   }
 
   #[napi]
