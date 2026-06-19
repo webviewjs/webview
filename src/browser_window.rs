@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 use tao::{
-  dpi::{LogicalPosition, LogicalSize, PhysicalSize},
+  dpi::{LogicalPosition, PhysicalPosition, LogicalSize, PhysicalSize},
   event_loop::EventLoop,
   window::{Fullscreen, ProgressBarState, Window, WindowBuilder, WindowId},
 };
@@ -99,6 +99,8 @@ pub struct BrowserWindowOptions {
   pub resizable: Option<bool>,
   /// The window title.
   pub title: Option<String>,
+  /// Whether to use logical sizing (DPI-aware) instead of physical sizing for width, height, x, and y.
+  pub logical: Option<bool>,
   /// The width of the window.
   pub width: Option<f64>,
   /// The height of the window.
@@ -161,6 +163,7 @@ impl Default for BrowserWindowOptions {
       show_menu: Some(true),
       resizable: Some(true),
       title: Some("WebviewJS".to_owned()),
+      logical: Some(false),
       width: Some(800.0),
       height: Some(600.0),
       x: Some(0.0),
@@ -204,17 +207,33 @@ impl BrowserWindow {
     let options = options.unwrap_or_default();
 
     let mut window = WindowBuilder::new();
-
+    
     if let Some(resizable) = options.resizable {
       window = window.with_resizable(resizable);
     }
 
     if let Some(width) = options.width {
-      window = window.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+      if let Some(logical) = options.logical {
+        if logical {
+          window = window.with_inner_size(LogicalSize::new(width, options.height.unwrap()));
+        } else {
+          window = window.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+        }
+      } else {
+        window = window.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+      }
     }
 
     if let Some(x) = options.x {
-      window = window.with_position(LogicalPosition::new(x, options.y.unwrap()));
+      if let Some(logical) = options.logical {
+        if logical {
+          window = window.with_position(LogicalPosition::new(x, options.y.unwrap()));
+        } else {
+          window = window.with_position(PhysicalPosition::new(x, options.y.unwrap()));
+        }
+      } else {
+        window = window.with_position(PhysicalPosition::new(x, options.y.unwrap()));
+      }
     }
 
     if let Some(visible) = options.visible {
@@ -463,8 +482,68 @@ impl BrowserWindow {
 
   #[napi]
   /// Sets the window inner size (width and height).
-  pub fn set_size(&self, width: u32, height: u32) {
-    self.window.set_inner_size(LogicalSize::new(width, height));
+  pub fn set_size(&self, width: u32, height: u32, logical: Option<bool>) {
+    if let Some(logical) = logical {
+      if logical {
+        self.window.set_inner_size(LogicalSize::new(width, height));
+      } else {
+        self.window.set_inner_size(PhysicalSize::new(width, height));
+      }
+    } else {
+      self.window.set_inner_size(PhysicalSize::new(width, height));
+    }
+  }
+
+  #[napi]
+  /// Gets the window inner size.
+  pub fn get_size(&self, logical: Option<bool>) -> Dimensions {
+    let size = self.window.inner_size();
+    if let Some(logical) = logical {
+      if logical {
+        let logical_size = size.to_logical::<f64>(self.window.scale_factor());
+        return Dimensions {
+          width: logical_size.width as u32,
+          height: logical_size.height as u32,
+        };
+      }
+    }
+    Dimensions {
+      width: size.width,
+      height: size.height,
+    }
+  }
+
+  #[napi]
+  /// Sets the window position (x and y).
+  pub fn set_position(&self, x: i32, y: i32, logical: Option<bool>) {
+    if let Some(logical) = logical {
+      if logical {
+        self.window.set_outer_position(LogicalPosition::new(x, y));
+      } else {
+        self.window.set_outer_position(PhysicalPosition::new(x, y));
+      }
+    } else {
+      self.window.set_outer_position(PhysicalPosition::new(x, y));
+    }
+  }
+
+  #[napi]
+  /// Gets the window position.
+  pub fn get_position(&self, logical: Option<bool>) -> Position {
+    let position = self.window.outer_position().unwrap_or(PhysicalPosition::new(0, 0));
+    if let Some(logical) = logical {
+      if logical {
+        let logical_position = position.to_logical::<f64>(self.window.scale_factor());
+        return Position {
+          x: logical_position.x as i32,
+          y: logical_position.y as i32,
+        };
+      }
+    }
+    Position {
+      x: position.x,
+      y: position.y,
+    }
   }
 
   #[napi]
