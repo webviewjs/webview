@@ -157,4 +157,3 @@ npm/
 *.swo
 *~
 .DS_Store
-bun.lock
