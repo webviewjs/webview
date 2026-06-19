@@ -15,6 +15,8 @@ app.bind((event) => {
         break;
       case 'open':
         console.log('📂 Opening file...');
+        const result = window.openFileDialog({title: 'Select a file to open'});
+        console.log({result})
         break;
       case 'save':
         console.log('💾 Saving file...');

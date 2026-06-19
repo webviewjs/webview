@@ -19,6 +19,20 @@ export declare class Application {
 }
 
 export declare class BrowserWindow {
+  /**
+   * Register a custom URL scheme handler that will be installed on the next
+   * `createWebview()` call.  Must be called **before** `createWebview()`.
+   *
+   * ```js
+   * win.registerProtocol('app', (request) => {
+   *   const url  = new URL(request.url);
+   *   const body = readFileSync(join(__dirname, url.pathname));
+   *   return { statusCode: 200, body, mimeType: 'text/html' };
+   * });
+   * const webview = win.createWebview({ url: 'app://localhost/index.html' });
+   * ```
+   */
+  registerProtocol(name: string, handler: (arg: CustomProtocolRequest) => CustomProtocolResponse): void
   createWebview(options?: WebviewOptions | undefined | null): JsWebview
   get isChild(): boolean
   isFocused(): boolean
@@ -258,6 +272,26 @@ export declare enum CursorType {
 export interface CustomMenuEvent {
   id: string
   windowId: number
+}
+
+/** Incoming request delivered to a custom-protocol handler. */
+export interface CustomProtocolRequest {
+  url: string
+  method: string
+  headers: Array<HeaderData>
+  body?: Buffer
+}
+
+/** Response returned by a custom-protocol handler. */
+export interface CustomProtocolResponse {
+  /** HTTP status code.  Defaults to 200. */
+  statusCode?: number
+  /** Extra response headers (e.g. `[{ key: "Cache-Control", value: "no-store" }]`). */
+  headers?: Array<HeaderData>
+  /** Response body bytes. */
+  body: Buffer
+  /** MIME type (e.g. `"text/html"`, `"application/javascript"`). */
+  mimeType?: string
 }
 
 export interface Dimensions {
