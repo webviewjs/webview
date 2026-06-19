@@ -14,7 +14,6 @@ napi        = { version = "3.8.2", default-features = true, features = ["napi9"]
 napi-derive = "3.5.1"
 tao         = { version = "0.34.5", features = ["rwh_06"] }
 wry         = { version = "0.53.5", features = ["devtools", "fullscreen"] }
-rfd         = "0.15.4"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 muda = { version = "0.17", features = ["libxdo"] }
