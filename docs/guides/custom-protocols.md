@@ -1,135 +1,97 @@
 # Custom Protocols
 
-Custom protocols let you handle URL schemes like `app://` or `assets://` directly in Node.js — no local HTTP server needed.
-
-## Registering a protocol
-
-Call `win.registerProtocol()` **before** `win.createWebview()`. The handler receives each request and must return a response object synchronously.
+Custom protocols handle URL schemes such as `app://` without starting a local HTTP server. Register each scheme before creating a webview.
 
 ```js
+import { readFile } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 import { Application } from '@webviewjs/webview';
-import { readFileSync } from 'fs';
-import { join, extname } from 'path';
 
 const MIME = {
-  '.html': 'text/html',
-  '.js':   'application/javascript',
-  '.css':  'text/css',
-  '.png':  'image/png',
-  '.svg':  'image/svg+xml',
-  '.json': 'application/json',
-  '.wasm': 'application/wasm',
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css',
 };
 
 const app = new Application();
-const win = app.createBrowserWindow({ title: 'My App' });
+const win = app.createBrowserWindow();
 
-// Register BEFORE createWebview
-win.registerProtocol('app', (request) => {
-  const url      = new URL(request.url);
-  const filePath = join(__dirname, 'dist', url.pathname);
+win.registerProtocol('app', async (request) => {
+  const url = new URL(request.url);
+  const path = join(process.cwd(), 'dist', url.pathname);
 
   try {
-    const body     = readFileSync(filePath);
-    const mimeType = MIME[extname(filePath)] ?? 'application/octet-stream';
-    return { statusCode: 200, body, mimeType };
+    return {
+      statusCode: 200,
+      body: await readFile(path),
+      mimeType: MIME[extname(path)] ?? 'application/octet-stream',
+    };
   } catch {
     return {
       statusCode: 404,
       body: Buffer.from(`Not found: ${url.pathname}`),
-      mimeType: 'text/plain',
+      mimeType: 'text/plain; charset=utf-8',
     };
   }
 });
 
-// Now create the webview pointing at your custom scheme
-const webview = win.createWebview({ url: 'app://localhost/index.html' });
-
+win.createWebview({ url: 'app://localhost/index.html' });
 app.run();
 ```
 
-## Request object
+The handler may return either a response object or a Promise of one. Rejected handlers and thrown errors become a `500 text/plain` response.
+
+## Request and response types
 
 ```ts
 interface CustomProtocolRequest {
-  url: string;           // full URL — e.g. "app://localhost/index.html?q=1"
-  method: string;        // "GET", "POST", etc.
-  headers: HeaderData[]; // [{ key, value }]
-  body?: Buffer;         // request body (POST/PUT), null for GET
+  url: string;
+  method: string;
+  headers: HeaderData[];
+  body?: Buffer;
 }
-```
 
-## Response object
-
-```ts
 interface CustomProtocolResponse {
-  body: Buffer;                  // response bytes (required)
-  mimeType?: string;             // default: "application/octet-stream"
-  statusCode?: number;           // default: 200
-  headers?: HeaderData[];        // extra response headers
+  body: Buffer;
+  statusCode?: number; // default: 200
+  mimeType?: string; // default: application/octet-stream
+  headers?: HeaderData[];
 }
 ```
+
+## Security
+
+Never resolve a request path without checking it remains inside the intended asset directory. Normalize and validate the path before passing it to the file system. The runnable [custom protocol example](../../examples/custom-protocol.mjs) includes this check.
 
 ## Multiple protocols
 
-You can register as many protocols as you need before calling `createWebview`:
+Register multiple schemes before `createWebview()`:
 
 ```js
-win.registerProtocol('assets', assetsHandler);
-win.registerProtocol('api',    apiHandler);
-
-const webview = win.createWebview({ url: 'assets://localhost/index.html' });
-```
-
-## Dynamic / API-style responses
-
-```js
-win.registerProtocol('api', (request) => {
-  const url  = new URL(request.url);
-  const path = url.pathname;
-
-  if (path === '/config') {
-    return {
-      statusCode: 200,
-      mimeType:   'application/json',
-      body:       Buffer.from(JSON.stringify({ theme: 'dark', version: '1.0' })),
-    };
-  }
-
-  return { statusCode: 404, body: Buffer.from('Not found'), mimeType: 'text/plain' };
+win.registerProtocol('app', appHandler);
+win.registerProtocol('api', async (request) => {
+  const response = await fetch(`https://example.test${new URL(request.url).pathname}`);
+  return {
+    statusCode: response.status,
+    body: Buffer.from(await response.arrayBuffer()),
+    mimeType: response.headers.get('content-type') ?? 'application/octet-stream',
+  };
 });
 ```
 
-## CORS and response headers
+Protocol registrations are fixed when the webview is created. Registering a scheme after `createWebview()` does not affect an existing webview.
 
-Add custom headers via the `headers` field:
+## CORS and cache headers
+
+Use response headers when the page needs them:
 
 ```js
 return {
-  statusCode: 200,
   body,
   mimeType: 'application/json',
   headers: [
     { key: 'Access-Control-Allow-Origin', value: '*' },
-    { key: 'Cache-Control',               value: 'no-store' },
+    { key: 'Cache-Control', value: 'no-store' },
   ],
 };
 ```
-
-## Important notes
-
-- **`registerProtocol` must be called before `createWebview`.**  Protocols are registered with the webview engine at build time and cannot be added or removed afterwards.
-- The handler is called **synchronously** on the main thread.  Keep it fast; do not use async I/O or blocking calls that take more than a few milliseconds.
-- For truly async work (network fetches, database queries), cache or pre-fetch data before the page requests it, then serve from the cache synchronously.
-- On **Linux**, custom protocols may require the webview to be running on X11 or Wayland with WebKitGTK ≥ 2.36.
-
-## Comparison with a local server
-
-| | Custom protocol | Local HTTP server |
-|---|---|---|
-| Port conflict risk | None | Possible |
-| Appears in DevTools network tab | Yes | Yes |
-| Supports `fetch()` from the page | Yes | Yes |
-| Async handler | No (sync only) | Yes |
-| Requires extra dependency | No | No |
-| URL shown in address bar | `app://localhost/…` | `http://127.0.0.1:PORT/…` |

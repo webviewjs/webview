@@ -1,23 +1,28 @@
+#[cfg(not(target_os = "android"))]
+use muda::Menu;
 use napi::{bindgen_prelude::FunctionRef, Either, Env, Result};
 use napi_derive::*;
+use rfd::FileDialog;
+use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
-use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use winit::{
   dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
   event_loop::EventLoop,
-  window::{CursorIcon, Fullscreen, Icon, Window, WindowBuilder, WindowButtons, WindowId, WindowLevel},
+  window::{
+    CursorIcon, Fullscreen, Icon, Window, WindowBuilder, WindowButtons, WindowId, WindowLevel,
+  },
 };
-use rfd::FileDialog;
-#[cfg(not(target_os = "android"))]
-use muda::Menu;
 
-use crate::webview::{CustomProtocolRequest, CustomProtocolResponse, JsWebview, ProtocolHandlerRef, Theme, WebviewOptions};
-use crate::MenuOptions;
 #[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
+use crate::webview::{
+  CustomProtocolResponse, JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap,
+  Theme, WebviewOptions,
+};
+use crate::MenuOptions;
 
 #[napi]
 pub enum FullscreenType {
@@ -183,10 +188,19 @@ pub struct BrowserWindow {
   /// Shared with AppState so resize events can trigger WebView2 resize.
   /// wry's own WM_SIZE subclass is bypassed by winit, so we do it manually.
   webviews: Rc<RefCell<Vec<Rc<wry::WebView>>>>,
-  /// Protocol handlers registered before `create_webview()` is called.
-  /// Each entry is `(scheme_name, handler_ref)`.
-  pending_protocols: Vec<(String, ProtocolHandlerRef)>,
+  /// Async protocol handlers: (scheme, js_handler_ref, responders, next_id).
+  /// The closure is NOT required to be Send (wry guarantees main-thread call),
+  /// so we use Rc<RefCell<>> instead of Arc<Mutex<>>.
+  pending_protocols: Vec<PendingProtocol>,
+  protocol_next_id: ProtocolCounterRef,
 }
+
+type PendingProtocol = (
+  String,
+  ProtocolHandlerRef,
+  ProtocolPendingMap,
+  ProtocolCounterRef,
+);
 
 #[napi]
 impl BrowserWindow {
@@ -194,8 +208,8 @@ impl BrowserWindow {
     event_loop: &EventLoop<()>,
     options: Option<BrowserWindowOptions>,
     child: bool,
-    #[cfg(not(target_os = "android"))] global_menu: Arc<Mutex<Option<Menu>>>,
-    #[cfg(target_os = "android")] _global_menu: Arc<Mutex<Option<()>>>,
+    #[cfg(not(target_os = "android"))] global_menu: Rc<RefCell<Option<Menu>>>,
+    #[cfg(target_os = "android")] _global_menu: Rc<RefCell<Option<()>>>,
   ) -> Result<Self> {
     let options = options.unwrap_or_default();
 
@@ -279,7 +293,10 @@ impl BrowserWindow {
     }
 
     let window = builder.build(&**event_loop).map_err(|e| {
-      napi::Error::new(napi::Status::GenericFailure, format!("Failed to create window: {}", e))
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to create window: {}", e),
+      )
     })?;
 
     let mut hasher = DefaultHasher::new();
@@ -293,10 +310,8 @@ impl BrowserWindow {
       init_menu_for_window(&menu, &window)?;
       Some(menu)
     } else if options.show_menu.unwrap_or(false) {
-      if let Ok(global_menu) = global_menu.lock() {
-        if let Some(menu) = global_menu.as_ref() {
-          init_menu_for_window(menu, &window)?;
-        }
+      if let Some(menu) = global_menu.borrow().as_ref() {
+        init_menu_for_window(menu, &window)?;
       }
       None
     } else {
@@ -310,7 +325,8 @@ impl BrowserWindow {
       #[cfg(not(target_os = "android"))]
       window_menu,
       webviews: Rc::new(RefCell::new(Vec::new())),
-      pending_protocols: Vec::new(),
+      pending_protocols: Vec::new(), // populated by _registerProtocol
+      protocol_next_id: Rc::new(RefCell::new(0)),
     })
   }
 
@@ -320,35 +336,51 @@ impl BrowserWindow {
     Rc::clone(&self.webviews)
   }
 
-  /// Register a custom URL scheme handler that will be installed on the next
-  /// `createWebview()` call.  Must be called **before** `createWebview()`.
-  ///
-  /// ```js
-  /// win.registerProtocol('app', (request) => {
-  ///   const url  = new URL(request.url);
-  ///   const body = readFileSync(join(__dirname, url.pathname));
-  ///   return { statusCode: 200, body, mimeType: 'text/html' };
-  /// });
-  /// const webview = win.createWebview({ url: 'app://localhost/index.html' });
-  /// ```
-  #[napi]
-  pub fn register_protocol(
-    &mut self,
-    name: String,
-    handler: FunctionRef<CustomProtocolRequest, CustomProtocolResponse>,
-  ) {
-    self
-      .pending_protocols
-      .push((name, Rc::new(RefCell::new(Some(handler)))));
+  /// Low-level protocol registration used by the JS `registerProtocol` wrapper.
+  /// `handler` is called with a single JSON string argument:
+  /// `{ id, url, method, headers, body }` where `body` is a number[] or null.
+  /// Call `_completeProtocol(id, response)` when the response is ready.
+  #[napi(js_name = "_registerProtocol")]
+  pub fn register_protocol_raw(&mut self, name: String, handler: FunctionRef<String, ()>) {
+    self.pending_protocols.push((
+      name,
+      Rc::new(RefCell::new(Some(handler))),
+      Rc::new(RefCell::new(std::collections::HashMap::new())),
+      Rc::clone(&self.protocol_next_id),
+    ));
+  }
+
+  /// Complete a pending async protocol request previously started by the
+  /// `_registerProtocol` handler.  `id` matches the value in the JSON payload.
+  #[napi(js_name = "_completeProtocol")]
+  pub fn complete_protocol(&self, id: f64, response: CustomProtocolResponse) -> Result<()> {
+    let id = id as u64;
+    // Find the right responder map across all registered protocols
+    for (_, _, responders, _) in &self.pending_protocols {
+      let mut map = responders.borrow_mut();
+      if let Some(responder) = map.remove(&id) {
+        let http = build_wry_response(response)?;
+        responder.respond(http);
+        return Ok(());
+      }
+    }
+    Ok(()) // id already completed or unknown — silently ignore
   }
 
   #[napi]
   pub fn create_webview(&mut self, env: Env, options: Option<WebviewOptions>) -> Result<JsWebview> {
-    let webview =
-      JsWebview::create(&env, &*self.window, options.unwrap_or_default(), &self.pending_protocols)?;
+    let webview = JsWebview::create(
+      &env,
+      &self.window,
+      options.unwrap_or_default(),
+      &self.pending_protocols,
+    )?;
     // Keep an Rc clone so the WebView survives JS GC of the returned handle,
     // and so AppState can resize it on WM_SIZE.
-    self.webviews.borrow_mut().push(Rc::clone(&webview.webview_inner));
+    self
+      .webviews
+      .borrow_mut()
+      .push(Rc::clone(&webview.webview_inner));
     Ok(webview)
   }
 
@@ -379,12 +411,18 @@ impl BrowserWindow {
 
   #[napi]
   pub fn is_maximizable(&self) -> bool {
-    self.window.enabled_buttons().contains(WindowButtons::MAXIMIZE)
+    self
+      .window
+      .enabled_buttons()
+      .contains(WindowButtons::MAXIMIZE)
   }
 
   #[napi]
   pub fn is_minimizable(&self) -> bool {
-    self.window.enabled_buttons().contains(WindowButtons::MINIMIZE)
+    self
+      .window
+      .enabled_buttons()
+      .contains(WindowButtons::MINIMIZE)
   }
 
   #[napi]
@@ -452,7 +490,9 @@ impl BrowserWindow {
 
   #[napi]
   pub fn set_size(&self, width: u32, height: u32) {
-    let _ = self.window.request_inner_size(LogicalSize::new(width, height));
+    let _ = self
+      .window
+      .request_inner_size(LogicalSize::new(width, height));
   }
 
   #[napi]
@@ -498,9 +538,13 @@ impl BrowserWindow {
   #[napi]
   pub fn has_menu(&self) -> bool {
     #[cfg(not(target_os = "android"))]
-    { self.window_menu.is_some() }
+    {
+      self.window_menu.is_some()
+    }
     #[cfg(target_os = "android")]
-    { false }
+    {
+      false
+    }
   }
 
   /// Returns the underlying winit WindowId (for internal tracking).
@@ -546,7 +590,10 @@ impl BrowserWindow {
     };
 
     let ico = Icon::from_rgba(rgba, width, height).map_err(|e| {
-      napi::Error::new(napi::Status::GenericFailure, format!("Failed to create icon: {}", e))
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to create icon: {}", e),
+      )
     })?;
 
     self.window.set_window_icon(Some(ico));
@@ -584,7 +631,11 @@ impl BrowserWindow {
 
   #[napi]
   pub fn get_available_monitors(&self) -> Vec<Monitor> {
-    self.window.available_monitors().map(monitor_to_js).collect()
+    self
+      .window
+      .available_monitors()
+      .map(monitor_to_js)
+      .collect()
   }
 
   #[napi]
@@ -678,7 +729,11 @@ impl BrowserWindow {
   /// `null` if the platform does not expose it.
   #[napi]
   pub fn get_position(&self) -> Option<Position> {
-    self.window.outer_position().ok().map(|p| Position { x: p.x, y: p.y })
+    self
+      .window
+      .outer_position()
+      .ok()
+      .map(|p| Position { x: p.x, y: p.y })
   }
 
   /// Move the window so its outer top-left corner is at (`x`, `y`) in
@@ -708,14 +763,20 @@ impl BrowserWindow {
   #[napi]
   pub fn get_size(&self) -> Dimensions {
     let s = self.window.inner_size();
-    Dimensions { width: s.width, height: s.height }
+    Dimensions {
+      width: s.width,
+      height: s.height,
+    }
   }
 
   /// Outer (including decorations) size in physical pixels.
   #[napi]
   pub fn get_outer_size(&self) -> Dimensions {
     let s = self.window.outer_size();
-    Dimensions { width: s.width, height: s.height }
+    Dimensions {
+      width: s.width,
+      height: s.height,
+    }
   }
 
   /// Set minimum inner size.  Pass `null` / `undefined` for both to remove the
@@ -764,7 +825,8 @@ impl BrowserWindow {
   /// window's inner top-left corner.
   #[napi]
   pub fn set_cursor_position(&self, x: f64, y: f64) -> Result<()> {
-    self.window
+    self
+      .window
       .set_cursor_position(LogicalPosition::new(x, y))
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -773,7 +835,8 @@ impl BrowserWindow {
   /// Windows and macOS; a no-op on other platforms.
   #[napi]
   pub fn set_ignore_cursor_events(&self, ignore: bool) -> Result<()> {
-    self.window
+    self
+      .window
       .set_cursor_hittest(!ignore)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -847,16 +910,63 @@ impl From<CursorType> for CursorIcon {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+pub(crate) fn build_wry_response(
+  resp: CustomProtocolResponse,
+) -> Result<wry::http::Response<std::borrow::Cow<'static, [u8]>>> {
+  use std::borrow::Cow;
+
+  let status = resp.status_code.unwrap_or(200);
+  let mime = resp
+    .mime_type
+    .unwrap_or_else(|| "application/octet-stream".to_string());
+  let body_vec: Vec<u8> = resp.body.to_vec();
+
+  let mut builder = wry::http::Response::builder()
+    .status(status)
+    .header("Content-Type", mime);
+
+  if let Some(extra) = resp.headers {
+    for h in extra {
+      if let Some(v) = h.value {
+        builder = builder.header(&h.key, v);
+      }
+    }
+  }
+
+  builder.body(Cow::Owned(body_vec)).map_err(|e| {
+    napi::Error::new(
+      napi::Status::GenericFailure,
+      format!("Protocol response build error: {}", e),
+    )
+  })
+}
+
+pub(crate) fn next_protocol_id(counter: &ProtocolCounterRef) -> u64 {
+  let mut value = counter.borrow_mut();
+  let id = *value;
+  *value += 1;
+  id
+}
+
 fn monitor_to_js(m: winit::monitor::MonitorHandle) -> Monitor {
   Monitor {
     name: m.name(),
     scale_factor: m.scale_factor(),
-    size: Dimensions { width: m.size().width, height: m.size().height },
-    position: Position { x: m.position().x, y: m.position().y },
+    size: Dimensions {
+      width: m.size().width,
+      height: m.size().height,
+    },
+    position: Position {
+      x: m.position().x,
+      y: m.position().y,
+    },
     video_modes: m
       .video_modes()
       .map(|v| JsVideoMode {
-        size: Dimensions { width: v.size().width, height: v.size().height },
+        size: Dimensions {
+          width: v.size().width,
+          height: v.size().height,
+        },
         bit_depth: v.bit_depth(),
         refresh_rate: (v.refresh_rate_millihertz() / 1000) as u16,
       })
@@ -864,3 +974,17 @@ fn monitor_to_js(m: winit::monitor::MonitorHandle) -> Monitor {
   }
 }
 
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn protocol_ids_are_unique_when_protocols_share_a_counter() {
+    let counter = Rc::new(RefCell::new(0));
+    let first_protocol_counter = Rc::clone(&counter);
+    let second_protocol_counter = Rc::clone(&counter);
+
+    assert_eq!(next_protocol_id(&first_protocol_counter), 0);
+    assert_eq!(next_protocol_id(&second_protocol_counter), 1);
+  }
+}

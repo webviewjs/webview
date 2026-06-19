@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Expose Example</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 3rem;
+        max-width: 44rem;
+      }
+      button {
+        font: inherit;
+        padding: 0.5rem 0.75rem;
+      }
+      pre {
+        max-height: 16rem;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>webview.expose()</h1>
+    <p id="status">Waiting for the Node bridge.</p>
+    <button id="read">Read this document through Node</button>
+    <pre id="output"></pre>
+    <script>
+      const status = document.querySelector('#status');
+      const output = document.querySelector('#output');
+
+      async function refresh() {
+        if (!window.native) {
+          status.textContent = 'Bridge is not ready yet. Try again.';
+          return;
+        }
+        status.textContent = `native.version=${window.native.version}, native.isCool=${window.native.isCool}`;
+        output.textContent = (await window.native.readExample()).slice(0, 400);
+      }
+
+      document.querySelector('#read').addEventListener('click', () => {
+        refresh().catch((error) => {
+          output.textContent = `${error.name}: ${error.message}`;
+        });
+      });
+      window.bindings.postMessage('Expose example is ready');
+    </script>
+  </body>
+</html>

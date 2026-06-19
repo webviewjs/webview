@@ -58,7 +58,9 @@ pub fn init_menu_for_window(menu: &Menu, window: &winit::window::Window) -> Resu
     use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
     if let Ok(handle) = window.window_handle() {
       if let RawWindowHandle::Win32(h) = handle.as_raw() {
-        unsafe { let _ = menu.init_for_hwnd(h.hwnd.get() as _); };
+        unsafe {
+          let _ = menu.init_for_hwnd(h.hwnd.get() as _);
+        };
       }
     }
   }

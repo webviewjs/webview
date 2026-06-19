@@ -33,9 +33,137 @@ nativeBinding.Application.prototype.exit = function exit() {
 
 nativeBinding.Application.prototype[Symbol.dispose] = function dispose() {
   this.exit();
+};
+
+// ── BrowserWindow.registerProtocol ───────────────────────────────────────────
+// Wraps the low-level `_registerProtocol(name, (payloadJson) => void)` native
+// API with a clean async handler: `(request) => Promise<response>`.
+nativeBinding.BrowserWindow.prototype.registerProtocol = function registerProtocol(name, asyncHandler) {
+  const win = this;
+  win._registerProtocol(name, function (payloadJson) {
+    let parsed;
+    try {
+      parsed = JSON.parse(payloadJson);
+    } catch {
+      return;
+    }
+    const { id, url, method, headers, body: bodyArr } = parsed;
+    const request = {
+      url,
+      method,
+      headers: headers ?? [],
+      body: Array.isArray(bodyArr) ? Buffer.from(bodyArr) : undefined,
+    };
+    Promise.resolve(asyncHandler(request))
+      .then((resp) => win._completeProtocol(id, resp))
+      .catch((err) =>
+        win._completeProtocol(id, {
+          statusCode: 500,
+          body: Buffer.from(String(err?.message ?? err)),
+          mimeType: 'text/plain',
+        }),
+      );
+  });
+};
+
+// ── Webview.expose ────────────────────────────────────────────────────────────
+// Injects a proxy object at `window[name]` in the page.
+// Static (non-function) properties are serialised once at call time.
+// Every function call from the page side is async (returns a Promise).
+// Throws SerializationError for non-JSON-serialisable args or return values.
+class SerializationError extends Error {
+  constructor(msg) {
+    super(msg);
+    this.name = 'SerializationError';
+  }
 }
 
+const _exposedNamespaces = new WeakMap();
+
+function jsonValue(value, context) {
+  try {
+    const json = JSON.stringify(value);
+    if (json === undefined) throw new TypeError('JSON.stringify returned undefined');
+    return json;
+  } catch {
+    throw new SerializationError(`${context} is not JSON-serialisable`);
+  }
+}
+
+function sendExposeError(webview, id, message, name = 'Error') {
+  webview.evaluateScript(
+    `window.__webviewjs__&&window.__webviewjs__.reject(${Number(id)},${JSON.stringify(String(message))},${JSON.stringify(name)})`,
+  );
+}
+
+nativeBinding.Webview.prototype.expose = function expose(name, target) {
+  const self = this;
+  if (!/^[A-Za-z_$][\w$]*$/u.test(name)) {
+    throw new TypeError('expose(): name must be a valid JavaScript identifier');
+  }
+  if (target === null || (typeof target !== 'object' && typeof target !== 'function')) {
+    throw new TypeError('expose(): target must be an object');
+  }
+
+  const namespaces = _exposedNamespaces.get(self) ?? new Set();
+  if (namespaces.has(name)) {
+    throw new Error(`expose(): namespace "${name}" is already registered`);
+  }
+
+  const statics = {};
+  const functions = new Map();
+  for (const [k, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(target))) {
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) continue;
+    const { value: v } = descriptor;
+    if (typeof v === 'function') {
+      functions.set(k, v);
+    } else {
+      JSON.parse(jsonValue(v, `expose(): value for property "${k}"`));
+      statics[k] = v;
+    }
+  }
+
+  self._exposeInternal(name, jsonValue(statics, 'expose(): static properties'), [...functions.keys()], function (call) {
+    const { ns: _ns, method, id, argsJson } = call;
+    const fn = functions.get(method);
+    if (fn === undefined) {
+      sendExposeError(self, id, `No such method: ${method}`);
+      return;
+    }
+
+    let args;
+    try {
+      args = JSON.parse(argsJson);
+    } catch {
+      sendExposeError(self, id, 'Argument parse error', 'SerializationError');
+      return;
+    }
+
+    Promise.resolve(fn.apply(target, args))
+      .then((result) => {
+        try {
+          const resultJson = jsonValue(result, 'Return value');
+          self.evaluateScript(`window.__webviewjs__&&window.__webviewjs__.resolve(${Number(id)},${resultJson})`);
+        } catch {
+          sendExposeError(self, id, 'Return value is not JSON-serialisable', 'SerializationError');
+        }
+      })
+      .catch((err) => {
+        sendExposeError(
+          self,
+          id,
+          String(err?.message ?? err),
+          err?.name === 'SerializationError' ? 'SerializationError' : 'Error',
+        );
+      });
+  });
+
+  namespaces.add(name);
+  _exposedNamespaces.set(self, namespaces);
+};
+
 module.exports = nativeBinding;
+module.exports.SerializationError = SerializationError;
 
 // Auto-generated exports by postbuild.js. Do not edit directly.
 module.exports.Application = nativeBinding.Application;

@@ -148,7 +148,7 @@ pub struct Application {
   event_loop: Option<EventLoop<()>>,
   state: AppState,
   #[cfg(not(target_os = "android"))]
-  global_menu: Arc<Mutex<Option<Menu>>>,
+  global_menu: Rc<RefCell<Option<Menu>>>,
   window_ids: Arc<Mutex<HashMap<String, u32>>>,
 }
 
@@ -178,7 +178,7 @@ impl Application {
         menu_event_receiver: None,
       },
       #[cfg(not(target_os = "android"))]
-      global_menu: Arc::new(Mutex::new(None)),
+      global_menu: Rc::new(RefCell::new(None)),
       window_ids: Arc::new(Mutex::new(HashMap::new())),
     })
   }
@@ -217,12 +217,8 @@ impl Application {
 
     let mut window_options = options.unwrap_or_default();
     #[cfg(not(target_os = "android"))]
-    if window_options.menu.is_none() {
-      if let Ok(global_menu) = self.global_menu.lock() {
-        if global_menu.is_some() {
-          window_options.show_menu = Some(true);
-        }
-      }
+    if window_options.menu.is_none() && self.global_menu.borrow().is_some() {
+      window_options.show_menu = Some(true);
     }
 
     #[cfg(not(target_os = "android"))]
@@ -237,7 +233,7 @@ impl Application {
       event_loop,
       Some(window_options),
       false,
-      Arc::new(Mutex::new(None)),
+      Rc::new(RefCell::new(None)),
     )?;
 
     if let Ok(mut ids) = self.window_ids.lock() {
@@ -268,7 +264,7 @@ impl Application {
     #[cfg(not(target_os = "android"))]
     let window = BrowserWindow::new(event_loop, options, true, self.global_menu.clone())?;
     #[cfg(target_os = "android")]
-    let window = BrowserWindow::new(event_loop, options, true, Arc::new(Mutex::new(None)))?;
+    let window = BrowserWindow::new(event_loop, options, true, Rc::new(RefCell::new(None)))?;
 
     let wid = window.winit_window_id();
     self.state.windows.insert(wid, Arc::clone(&window.window));
@@ -286,9 +282,9 @@ impl Application {
         #[cfg(target_os = "macos")]
         m.init_for_nsapp();
         self.state.menu_event_receiver = Some(muda::MenuEvent::receiver().clone());
-        *self.global_menu.lock().unwrap() = Some(m);
+        *self.global_menu.borrow_mut() = Some(m);
       } else {
-        *self.global_menu.lock().unwrap() = None;
+        *self.global_menu.borrow_mut() = None;
         self.state.menu_event_receiver = None;
       }
     }

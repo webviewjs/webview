@@ -1,86 +1,68 @@
 # IPC Messaging
 
-IPC lets web content (HTML/JS) talk to Node.js and vice versa.
+wry injects `window.ipc.postMessage()` into each page. Node receives those messages through `webview.onIpcMessage()`.
 
-## Page → Node
+```js
+const webview = win.createWebview({ html: '<button id="ping">Ping</button>' });
 
-The page uses the injected `window.ipc.postMessage()` global:
+webview.onIpcMessage((message) => {
+  console.log(message.body.toString('utf8'));
+});
 
-```html
-<button id="btn">Send ping</button>
-<script>
-  document.getElementById('btn').addEventListener('click', () => {
+webview.evaluateScript(`
+  document.querySelector('#ping').addEventListener('click', () => {
     window.ipc.postMessage('hello from the page');
   });
-</script>
-```
-
-Node receives the message via the `ipcHandler` option:
-
-```js
-const webview = win.createWebview({
-  html: `…`,
-  ipcHandler: (msg) => {
-    const text = msg.body.toString('utf8');
-    console.log('IPC received:', text);
-    // msg.method, msg.headers, msg.uri are also available
-  },
-});
-```
-
-`postMessage` also accepts binary payloads; the `body` field is always a `Buffer`.
-
-## Node → Page
-
-Call `evaluateScript()` to run arbitrary JS in the page:
-
-```js
-webview.evaluateScript(`
-  document.getElementById('status').textContent = 'Connected';
 `);
 ```
 
-For async operations, use `evaluateScriptWithCallback()`:
+## Custom page global name
 
-```js
-webview.evaluateScriptWithCallback(
-  'document.title',
-  (result) => console.log('Page title:', result),
-);
-```
-
-## Injection at startup
-
-Use `initializationScript` (the `preload` option) to define globals before any page script runs — useful for exposing a Node-backed bridge:
+`window.ipc` always remains available. Set `ipcName` to add an alias before page scripts run:
 
 ```js
 const webview = win.createWebview({
   url: 'app://localhost/index.html',
-  preload: `
-    window.bridge = {
-      version: '1.0.0',
-      openFile() { window.ipc.postMessage(JSON.stringify({ action: 'openFile' })); },
-    };
-  `,
+  ipcName: 'bindings',
 });
 ```
 
-## Structured messages (JSON convention)
+The page can then call either `window.ipc.postMessage(...)` or `window.bindings.postMessage(...)`.
 
-IPC carries raw bytes; wrapping in JSON is a common pattern:
+On Windows, load IPC-enabled pages through a custom protocol such as `app://`, not a `file:` URL. See [Custom Protocols](./custom-protocols.md).
 
-```js
-// Node side
-ipcHandler: (msg) => {
-  const data = JSON.parse(msg.body.toString());
-  switch (data.action) {
-    case 'openFile': handleOpenFile(); break;
-    case 'saveData': handleSave(data.payload); break;
-  }
-}
-```
+## Node to page
+
+Use `evaluateScript()` for one-way messages or DOM updates:
 
 ```js
-// Page side
-window.ipc.postMessage(JSON.stringify({ action: 'saveData', payload: form.getData() }));
+webview.evaluateScript(`
+  document.title = 'Connected';
+`);
 ```
+
+Use `evaluateScriptWithCallback()` to receive a serialized JavaScript result:
+
+```js
+webview.evaluateScriptWithCallback('document.title', (error, title) => {
+  if (error) throw error;
+  console.log(title);
+});
+```
+
+## JSON messages
+
+IPC message bodies are bytes. JSON is a practical convention:
+
+```js
+// Page
+window.ipc.postMessage(JSON.stringify({ action: 'save', payload: { id: 1 } }));
+
+// Node
+webview.onIpcMessage((message) => {
+  const data = JSON.parse(message.body.toString('utf8'));
+  console.log(data.action);
+});
+```
+
+For a structured Promise-based Node bridge, use [`webview.expose()`](../api/webview.md#expose-name-target) instead of building your own IPC request/response protocol.

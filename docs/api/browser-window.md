@@ -6,26 +6,26 @@ Represents an OS window. Created via `app.createBrowserWindow()`.
 
 ```ts
 interface BrowserWindowOptions {
-  title?: string;          // default: "WebviewJS"
-  width?: number;          // default: 800 (physical px)
-  height?: number;         // default: 600 (physical px)
-  x?: number;              // initial left position (logical px)
-  y?: number;              // initial top position (logical px)
-  resizable?: boolean;     // default: true
-  visible?: boolean;       // default: true
-  decorations?: boolean;   // default: true (title bar + border)
-  transparent?: boolean;   // default: false
-  maximized?: boolean;     // default: false
-  maximizable?: boolean;   // default: true
-  minimizable?: boolean;   // default: true
-  focused?: boolean;       // default: true
-  alwaysOnTop?: boolean;   // default: false
+  title?: string; // default: "WebviewJS"
+  width?: number; // default: 800 (physical px)
+  height?: number; // default: 600 (physical px)
+  x?: number; // initial left position (logical px)
+  y?: number; // initial top position (logical px)
+  resizable?: boolean; // default: true
+  visible?: boolean; // default: true
+  decorations?: boolean; // default: true (title bar + border)
+  transparent?: boolean; // default: false
+  maximized?: boolean; // default: false
+  maximizable?: boolean; // default: true
+  minimizable?: boolean; // default: true
+  focused?: boolean; // default: true
+  alwaysOnTop?: boolean; // default: false
   alwaysOnBottom?: boolean;
   contentProtection?: boolean;
   visibleOnAllWorkspaces?: boolean;
-  fullscreen?: FullscreenType;  // 'Exclusive' | 'Borderless'
-  menu?: MenuOptions;      // per-window menu (overrides global)
-  showMenu?: boolean;      // show the global menu on this window
+  fullscreen?: FullscreenType; // 'Exclusive' | 'Borderless'
+  menu?: MenuOptions; // per-window menu (overrides global)
+  showMenu?: boolean; // show the global menu on this window
 }
 ```
 
@@ -114,10 +114,11 @@ win.setProgressBar(progress: JsProgressBar): void
 ```
 
 `JsProgressBar`:
+
 ```ts
 interface JsProgressBar {
-  state?: ProgressBarState;   // 'None' | 'Normal' | 'Indeterminate' | 'Paused' | 'Error'
-  progress?: number;          // 0-100
+  state?: ProgressBarState; // 'None' | 'Normal' | 'Indeterminate' | 'Paused' | 'Error'
+  progress?: number; // 0-100
 }
 ```
 
@@ -137,16 +138,17 @@ See [Menus guide](../guides/menus.md).
 
 ### Custom protocols
 
-Register a URL-scheme handler before creating the webview.  Must be called before `createWebview()`.
+Register a URL-scheme handler before creating the webview. Must be called before `createWebview()`.
 
 ```ts
 win.registerProtocol(
   name: string,
-  handler: (request: CustomProtocolRequest) => CustomProtocolResponse
+  handler: (request: CustomProtocolRequest) =>
+    CustomProtocolResponse | Promise<CustomProtocolResponse>
 ): void
 ```
 
-See [Custom Protocols guide](../guides/custom-protocols.md).
+The handler may perform asynchronous file, database, or network work. See [Custom Protocols guide](../guides/custom-protocols.md).
 
 ### File dialogs
 

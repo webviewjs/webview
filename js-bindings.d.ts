@@ -20,19 +20,17 @@ export declare class Application {
 
 export declare class BrowserWindow {
   /**
-   * Register a custom URL scheme handler that will be installed on the next
-   * `createWebview()` call.  Must be called **before** `createWebview()`.
-   *
-   * ```js
-   * win.registerProtocol('app', (request) => {
-   *   const url  = new URL(request.url);
-   *   const body = readFileSync(join(__dirname, url.pathname));
-   *   return { statusCode: 200, body, mimeType: 'text/html' };
-   * });
-   * const webview = win.createWebview({ url: 'app://localhost/index.html' });
-   * ```
+   * Low-level protocol registration used by the JS `registerProtocol` wrapper.
+   * `handler` is called with a single JSON string argument:
+   * `{ id, url, method, headers, body }` where `body` is a number[] or null.
+   * Call `_completeProtocol(id, response)` when the response is ready.
    */
-  registerProtocol(name: string, handler: (arg: CustomProtocolRequest) => CustomProtocolResponse): void
+  _registerProtocol(name: string, handler: (arg: string) => void): void
+  /**
+   * Complete a pending async protocol request previously started by the
+   * `_registerProtocol` handler.  `id` matches the value in the JSON payload.
+   */
+  _completeProtocol(id: number, response: CustomProtocolResponse): void
   createWebview(options?: WebviewOptions | undefined | null): JsWebview
   get isChild(): boolean
   isFocused(): boolean
@@ -132,6 +130,18 @@ export declare class BrowserWindow {
 export declare class Webview {
   constructor()
   onIpcMessage(handler?: ((arg: IpcMessage) => void) | undefined | null): void
+  /**
+   * Low-level method used by the JS `expose()` wrapper.
+   *
+   * Injects a page script that creates `window[name]` as an object with:
+   * - static values from `statics_json` (a JSON object string)
+   * - async function stubs for each name in `func_names`
+   *
+   * When the page calls one of the stubs the call is routed back here via
+   * the internal IPC channel and dispatched to `handler`.  `handler` is
+   * responsible for calling `evaluateScript` to send the response.
+   */
+  _exposeInternal(name: string, staticsJson: string, funcNames: Array<string>, handler: (arg: ExposeCallData) => void): void
   print(): void
   zoom(scaleFactor: number): void
   setWebviewVisibility(visible: boolean): void
@@ -299,6 +309,14 @@ export interface Dimensions {
   height: number
 }
 
+/** Data sent to the expose handler when the page calls a proxied function. */
+export interface ExposeCallData {
+  ns: string
+  method: string
+  id: number
+  argsJson: string
+}
+
 export interface FileDialogOptions {
   multiple?: boolean
   title?: string
@@ -423,6 +441,13 @@ export interface WebviewOptions {
   clipboard?: boolean
   autoplay?: boolean
   backForwardNavigationGestures?: boolean
+  /**
+   * Custom name for the IPC global injected by wry (default: `"ipc"`).
+   * The page will access it as `window.<ipcName>.postMessage(...)`.
+   * wry always injects `window.ipc`; this option creates an alias via an
+   * initialization script.  The original `window.ipc` remains available.
+   */
+  ipcName?: string
 }
 
 export declare enum WindowCommand {

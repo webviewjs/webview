@@ -60,10 +60,10 @@ interface HeaderData {
 
 ```ts
 interface CustomProtocolRequest {
-  url: string;           // full URL, e.g. "app://localhost/index.html"
-  method: string;        // "GET", "POST", etc.
+  url: string; // full URL, e.g. "app://localhost/index.html"
+  method: string; // "GET", "POST", etc.
   headers: HeaderData[];
-  body?: Buffer;         // present for POST / PUT
+  body?: Buffer; // present for POST / PUT
 }
 ```
 
@@ -71,16 +71,24 @@ interface CustomProtocolRequest {
 
 ```ts
 interface CustomProtocolResponse {
-  body: Buffer;               // response bytes (required)
-  mimeType?: string;          // default: "application/octet-stream"
-  statusCode?: number;        // default: 200
-  headers?: HeaderData[];     // extra response headers
+  body: Buffer; // response bytes (required)
+  mimeType?: string; // default: "application/octet-stream"
+  statusCode?: number; // default: 200
+  headers?: HeaderData[]; // extra response headers
 }
 ```
 
+## `WebviewOptions.ipcName`
+
+`ipcName?: string` adds a page-global alias for wry's built-in `window.ipc`. For example, `{ ipcName: 'bindings' }` makes `window.bindings.postMessage(...)` available before page scripts run. `window.ipc` remains available.
+
+## `SerializationError`
+
+`webview.expose()` uses JSON serialization for static values, arguments, and returned values. Unsupported values reject with an error whose `name` is `SerializationError`.
+
 ## `IpcMessage`
 
-Received by the `ipcHandler` callback.
+Received by the `webview.onIpcMessage()` callback.
 
 ```ts
 interface IpcMessage {
@@ -129,33 +137,39 @@ interface CustomMenuEvent {
 
 ```ts
 enum WebviewApplicationEvent {
-  WindowCloseRequested      = 'WindowCloseRequested',
+  WindowCloseRequested = 'WindowCloseRequested',
   ApplicationCloseRequested = 'ApplicationCloseRequested',
-  CustomMenuClick           = 'CustomMenuClick',
+  CustomMenuClick = 'CustomMenuClick',
 }
 ```
 
 ### `FullscreenType`
 
 ```ts
-enum FullscreenType { Exclusive = 'Exclusive', Borderless = 'Borderless' }
+enum FullscreenType {
+  Exclusive = 'Exclusive',
+  Borderless = 'Borderless',
+}
 ```
 
 ### `Theme`
 
 ```ts
-enum Theme { Light = 'Light', Dark = 'Dark' }
+enum Theme {
+  Light = 'Light',
+  Dark = 'Dark',
+}
 ```
 
 ### `ProgressBarState`
 
 ```ts
 enum ProgressBarState {
-  None          = 'None',
-  Normal        = 'Normal',
+  None = 'None',
+  Normal = 'Normal',
   Indeterminate = 'Indeterminate',
-  Paused        = 'Paused',
-  Error         = 'Error',
+  Paused = 'Paused',
+  Error = 'Error',
 }
 ```
 

@@ -47,20 +47,30 @@ app.onEvent((event) => {
 });
 ```
 
-## IPC — calling JS from Node
+## IPC
 
 ```js
 const webview = win.createWebview({
   html: `
     <button onclick="window.ipc.postMessage('ping')">Ping</button>
   `,
-  ipcHandler: (msg) => {
-    console.log('IPC body:', msg.body.toString());
-    // respond by evaluating JS in the page
-    webview.evaluateScript('document.body.style.background = "lime"');
-  },
+});
+
+webview.onIpcMessage((msg) => {
+  console.log('IPC body:', msg.body.toString());
+  webview.evaluateScript('document.body.style.background = "lime"');
 });
 ```
+
+For asynchronous page-to-Node calls, use `webview.expose()`:
+
+```js
+webview.expose('native', {
+  getGreeting: async (name) => `Hello, ${name}`,
+});
+```
+
+The page calls `await window.native.getGreeting('Ada')`.
 
 ## Using `Symbol.dispose` (auto-cleanup)
 

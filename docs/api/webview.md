@@ -6,19 +6,19 @@ Controls the embedded browser view attached to a `BrowserWindow`. Created via `w
 
 ```ts
 interface WebviewOptions {
-  url?: string;               // URL to load on start
-  html?: string;              // Inline HTML to render (mutually exclusive with url)
-  x?: number;                 // Left offset in logical pixels (child webviews only)
-  y?: number;                 // Top offset in logical pixels (child webviews only)
-  width?: number;             // Width in logical pixels (child webviews only)
-  height?: number;            // Height in logical pixels (child webviews only)
-  child?: boolean;            // If true, position is relative to parent window
-  devtools?: boolean;         // Enable DevTools
-  transparent?: boolean;      // Transparent background
-  incognito?: boolean;        // Private mode (no persistent storage)
-  userAgent?: string;         // Custom user-agent string
-  ipcHandler?: (msg: IpcMessage) => void;  // Receive IPC messages from the page
-  initializationScript?: string;           // JS injected before any page script runs
+  url?: string; // URL to load on start
+  html?: string; // Inline HTML to render (mutually exclusive with url)
+  x?: number; // Left offset in logical pixels (child webviews only)
+  y?: number; // Top offset in logical pixels (child webviews only)
+  width?: number; // Width in logical pixels (child webviews only)
+  height?: number; // Height in logical pixels (child webviews only)
+  child?: boolean; // If true, position is relative to parent window
+  enableDevtools?: boolean; // Enable DevTools
+  transparent?: boolean; // Transparent background
+  incognito?: boolean; // Private mode (no persistent storage)
+  userAgent?: string; // Custom user-agent string
+  preload?: string; // JS injected before any page script runs
+  ipcName?: string; // Alias for window.ipc, for example window.bindings
 }
 ```
 
@@ -35,8 +35,12 @@ webview.url(): string | null          // currently displayed URL
 ```
 
 `HeaderData`:
+
 ```ts
-interface HeaderData { key: string; value?: string }
+interface HeaderData {
+  key: string;
+  value?: string;
+}
 ```
 
 ## Script execution
@@ -56,6 +60,7 @@ webview.clearAllBrowsingData(): void
 ```
 
 `WebviewCookie`:
+
 ```ts
 interface WebviewCookie {
   name: string;
@@ -84,7 +89,12 @@ webview.setBounds(bounds: WebviewBounds): void
 ```
 
 ```ts
-interface WebviewBounds { x: number; y: number; width: number; height: number }
+interface WebviewBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 ```
 
 ## DevTools
@@ -106,16 +116,39 @@ webview.focusParent(): void  // return focus to the parent window
 
 The page calls `window.ipc.postMessage(body)` to send a message to Node.
 
-Node receives it via the `ipcHandler` option or can register a handler later.
+Node registers its handler with `webview.onIpcMessage(handler)`.
+
+Set `ipcName: 'bindings'` to add `window.bindings` as an alias. `window.ipc` always remains available.
 
 See [IPC guide](../guides/ipc-messaging.md) for a complete walkthrough.
+
+## `expose(name, target)`
+
+Expose JSON static values and Node functions under a page global. Page functions always return Promises, even when the Node implementation is synchronous.
+
+```js
+webview.expose('native', {
+  isCool: true,
+  readFile: async (path) => readFile(path, 'utf8'),
+});
+```
+
+```js
+// In the page
+console.log(window.native.isCool);
+const text = await window.native.readFile('/tmp/example.txt');
+```
+
+Only enumerable own data properties are exposed. Getters and setters are ignored. Arguments, static values, and function results must be JSON-serializable. Cyclic structures, `BigInt`, functions as values, and `undefined` results are rejected with `SerializationError`.
+
+The namespace must be a valid JavaScript identifier and can be exposed only once for a webview. See the runnable [expose example](../../examples/expose.mjs).
 
 ## Custom protocols
 
 Custom protocols are registered on the **`BrowserWindow`** before `createWebview()` is called:
 
 ```js
-win.registerProtocol('app', (request) => {
+win.registerProtocol('app', async (request) => {
   // ...
   return { statusCode: 200, body: Buffer.from('…'), mimeType: 'text/html' };
 });

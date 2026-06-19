@@ -11,7 +11,7 @@ Check the installed version at runtime:
 
 ```js
 import { getWebviewVersion } from '@webviewjs/webview';
-console.log(getWebviewVersion());  // e.g. "128.0.2739.42"
+console.log(getWebviewVersion()); // e.g. "128.0.2739.42"
 ```
 
 ## Menu bar
@@ -42,6 +42,7 @@ win.setContentProtection(true);
 
 ## Known limitations
 
+- In wry 0.53, a `file:` page that calls `window.ipc.postMessage()` can abort because WebView2 reports the page source as a `file:` URI and wry attempts to convert it to an HTTP request URI. Use an `app://` custom protocol for pages that use IPC or `webview.expose()`.
 - `setIgnoreCursorEvents(true)` (click-through) is supported on Windows via the `WS_EX_TRANSPARENT` extended window style.
 - Window transparency requires `transparent: true` at creation time; it cannot be toggled at runtime.
 - There is no `blur()` / un-focus API in winit 0.29; keyboard focus can be given to the webview via `webview.focus()`.

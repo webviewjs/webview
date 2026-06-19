@@ -4,6 +4,14 @@
 
 Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [winit](https://github.com/rust-windowing/winit) and [wry](https://github.com/tauri-apps/wry) allowing you to easily manage cross platform windowing and webview.
 
+## Highlights
+
+- Non-blocking application pumping. `app.run()` uses a Node timer, so ordinary Node timers and I/O continue running.
+- Browser windows, menus, dialogs, cookies, DevTools, and window controls.
+- IPC through `window.ipc.postMessage()`, with an optional alias such as `window.bindings`.
+- Asynchronous custom protocols, including `app://` asset loading without a local server.
+- Promise-based `webview.expose()` namespaces for page-to-Node calls.
+
 ![preview](https://github.com/webviewjs/webview/raw/main/assets/preview.png)
 
 > [!CAUTION]
@@ -50,6 +58,67 @@ webview.loadUrl('https://nodejs.org');
 app.run();
 ```
 
+## Event pumping
+
+`app.run()` does not block the Node.js thread. It pumps pending native events on a timer:
+
+```js
+app.run({ interval: 16, ref: true });
+```
+
+`interval` defaults to `16` milliseconds and `ref` defaults to `true`. Use `app.pumpEvents()` for manual pumping.
+
+## IPC and exposed functions
+
+The webview page can send messages to Node through `window.ipc.postMessage()`:
+
+```js
+const webview = window.createWebview({ ipcName: 'bindings' });
+webview.onIpcMessage((message) => console.log(message.body.toString()));
+```
+
+`ipcName` adds an alias, so the page can use `window.bindings.postMessage(...)`; `window.ipc` remains available.
+
+For typed request/response style calls, expose a namespace:
+
+```js
+webview.expose('native', {
+  version: '0.1.4',
+  readConfig: async () => JSON.parse(await readFile('./config.json', 'utf8')),
+});
+```
+
+In the page:
+
+```js
+console.log(window.native.version);
+const config = await window.native.readConfig();
+```
+
+Every exposed function returns a Promise in the page. Values, arguments, and results must be JSON-serializable. Violations use `SerializationError`.
+
+## Asynchronous custom protocols
+
+Register a protocol before creating its webview:
+
+```js
+window.registerProtocol('app', async (request) => {
+  const filePath = join(process.cwd(), 'dist', new URL(request.url).pathname);
+  try {
+    return {
+      body: await readFile(filePath),
+      mimeType: 'text/html; charset=utf-8',
+    };
+  } catch {
+    return { statusCode: 404, body: Buffer.from('Not found'), mimeType: 'text/plain' };
+  }
+});
+
+window.createWebview({ url: 'app://localhost/index.html' });
+```
+
+See [Custom Protocols](docs/guides/custom-protocols.md), [IPC](docs/guides/ipc-messaging.md), and the runnable [custom protocol](examples/custom-protocol.mjs) and [expose](examples/expose.mjs) examples.
+
 ## Menu System
 
 WebviewJS provides a cross-platform menu system that works on macOS, Windows, and Linux.
@@ -57,10 +126,7 @@ WebviewJS provides a cross-platform menu system that works on macOS, Windows, an
 ### Basic Menu Setup
 
 ```js
-import { Application, initMenuSystem } from '@webviewjs/webview';
-
-// Initialize menu system (recommended, especially for macOS)
-initMenuSystem();
+import { Application } from '@webviewjs/webview';
 
 const app = new Application();
 
@@ -68,28 +134,23 @@ const app = new Application();
 app.setMenu({
   items: [
     {
-      label: "File",
+      label: 'File',
       submenu: {
         items: [
-          { id: "new", label: "New", accelerator: "CmdOrCtrl+N" },
-          { id: "open", label: "Open", accelerator: "CmdOrCtrl+O" },
-          { role: "separator" },
-          { id: "quit", label: "Quit", accelerator: "CmdOrCtrl+Q" }
-        ]
-      }
+          { id: 'new', label: 'New', accelerator: 'CmdOrCtrl+N' },
+          { id: 'open', label: 'Open', accelerator: 'CmdOrCtrl+O' },
+          { role: 'separator' },
+          { id: 'quit', label: 'Quit', accelerator: 'CmdOrCtrl+Q' },
+        ],
+      },
     },
     {
-      label: "Edit",
+      label: 'Edit',
       submenu: {
-        items: [
-          { role: "copy" },
-          { role: "paste" },
-          { role: "cut" },
-          { role: "selectall" }
-        ]
-      }
-    }
-  ]
+        items: [{ role: 'copy' }, { role: 'paste' }, { role: 'cut' }, { role: 'selectall' }],
+      },
+    },
+  ],
 });
 
 const window = app.createBrowserWindow();
@@ -128,7 +189,9 @@ app.bind((event) => {
 });
 
 // Set up menu...
-app.setMenu({ /* ... */ });
+app.setMenu({
+  /* ... */
+});
 ```
 
 ### Window-Specific Menus
@@ -138,16 +201,16 @@ const app = new Application();
 
 // Create window with custom menu
 const window = app.createBrowserWindow({
-  title: "Custom Window",
+  title: 'Custom Window',
   menu: {
     items: [
       {
-        id: "window-action",
-        label: "Window Action",
-        accelerator: "Ctrl+W"
-      }
-    ]
-  }
+        id: 'window-action',
+        label: 'Window Action',
+        accelerator: 'Ctrl+W',
+      },
+    ],
+  },
 });
 
 // Or check if window has a menu

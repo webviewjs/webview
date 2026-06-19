@@ -16,6 +16,7 @@ winit       = "0.29"
 wry         = { version = "0.53.5", features = ["devtools", "fullscreen"] }
 dpi         = "0.1"
 rfd         = "0.15.4"
+serde_json  = "1"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 muda = { version = "0.17", features = ["libxdo"] }
