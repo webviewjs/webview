@@ -31,11 +31,11 @@ app.bind((event) => {
         break;
       case 'reload':
         console.log('🔄 Reloading webview...');
-        // In a real app, you would reload the webview here
+        webview.reload();
         break;
       case 'devtools':
         console.log('🔧 Opening developer tools...');
-        // In a real app, you would toggle devtools here
+        webview.openDevtools();
         break;
       default:
         console.log(`Unhandled menu item: ${menuEvent.id}`);

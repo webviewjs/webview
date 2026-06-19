@@ -104,8 +104,22 @@ webview.focusParent(): void  // return focus to the parent window
 
 ## IPC
 
-The page calls `window.__webview__.postMessage(body)` to send a message to Node.
+The page calls `window.ipc.postMessage(body)` to send a message to Node.
 
 Node receives it via the `ipcHandler` option or can register a handler later.
 
 See [IPC guide](../guides/ipc-messaging.md) for a complete walkthrough.
+
+## Custom protocols
+
+Custom protocols are registered on the **`BrowserWindow`** before `createWebview()` is called:
+
+```js
+win.registerProtocol('app', (request) => {
+  // ...
+  return { statusCode: 200, body: Buffer.from('…'), mimeType: 'text/html' };
+});
+const webview = win.createWebview({ url: 'app://localhost/index.html' });
+```
+
+See [Custom Protocols guide](../guides/custom-protocols.md) for full details.

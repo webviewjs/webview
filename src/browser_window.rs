@@ -1,4 +1,4 @@
-use napi::{Either, Env, Result};
+use napi::{bindgen_prelude::FunctionRef, Either, Env, Result};
 use napi_derive::*;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -14,7 +14,7 @@ use rfd::FileDialog;
 #[cfg(not(target_os = "android"))]
 use muda::Menu;
 
-use crate::webview::{JsWebview, Theme, WebviewOptions};
+use crate::webview::{CustomProtocolRequest, CustomProtocolResponse, JsWebview, ProtocolHandlerRef, Theme, WebviewOptions};
 use crate::MenuOptions;
 #[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
@@ -183,6 +183,9 @@ pub struct BrowserWindow {
   /// Shared with AppState so resize events can trigger WebView2 resize.
   /// wry's own WM_SIZE subclass is bypassed by winit, so we do it manually.
   webviews: Rc<RefCell<Vec<Rc<wry::WebView>>>>,
+  /// Protocol handlers registered before `create_webview()` is called.
+  /// Each entry is `(scheme_name, handler_ref)`.
+  pending_protocols: Vec<(String, ProtocolHandlerRef)>,
 }
 
 #[napi]
@@ -307,6 +310,7 @@ impl BrowserWindow {
       #[cfg(not(target_os = "android"))]
       window_menu,
       webviews: Rc::new(RefCell::new(Vec::new())),
+      pending_protocols: Vec::new(),
     })
   }
 
@@ -316,9 +320,32 @@ impl BrowserWindow {
     Rc::clone(&self.webviews)
   }
 
+  /// Register a custom URL scheme handler that will be installed on the next
+  /// `createWebview()` call.  Must be called **before** `createWebview()`.
+  ///
+  /// ```js
+  /// win.registerProtocol('app', (request) => {
+  ///   const url  = new URL(request.url);
+  ///   const body = readFileSync(join(__dirname, url.pathname));
+  ///   return { statusCode: 200, body, mimeType: 'text/html' };
+  /// });
+  /// const webview = win.createWebview({ url: 'app://localhost/index.html' });
+  /// ```
+  #[napi]
+  pub fn register_protocol(
+    &mut self,
+    name: String,
+    handler: FunctionRef<CustomProtocolRequest, CustomProtocolResponse>,
+  ) {
+    self
+      .pending_protocols
+      .push((name, Rc::new(RefCell::new(Some(handler)))));
+  }
+
   #[napi]
   pub fn create_webview(&mut self, env: Env, options: Option<WebviewOptions>) -> Result<JsWebview> {
-    let webview = JsWebview::create(&env, &*self.window, options.unwrap_or_default())?;
+    let webview =
+      JsWebview::create(&env, &*self.window, options.unwrap_or_default(), &self.pending_protocols)?;
     // Keep an Rc clone so the WebView survives JS GC of the returned handle,
     // and so AppState can resize it on WM_SIZE.
     self.webviews.borrow_mut().push(Rc::clone(&webview.webview_inner));

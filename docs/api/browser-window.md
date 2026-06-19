@@ -135,6 +135,19 @@ win.setMenu(options: MenuOptions | null): void
 
 See [Menus guide](../guides/menus.md).
 
+### Custom protocols
+
+Register a URL-scheme handler before creating the webview.  Must be called before `createWebview()`.
+
+```ts
+win.registerProtocol(
+  name: string,
+  handler: (request: CustomProtocolRequest) => CustomProtocolResponse
+): void
+```
+
+See [Custom Protocols guide](../guides/custom-protocols.md).
+
 ### File dialogs
 
 ```ts

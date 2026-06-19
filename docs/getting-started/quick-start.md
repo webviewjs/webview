@@ -52,7 +52,7 @@ app.onEvent((event) => {
 ```js
 const webview = win.createWebview({
   html: `
-    <button onclick="window.__webview__.postMessage('ping')">Ping</button>
+    <button onclick="window.ipc.postMessage('ping')">Ping</button>
   `,
   ipcHandler: (msg) => {
     console.log('IPC body:', msg.body.toString());

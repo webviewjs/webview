@@ -56,6 +56,28 @@ interface HeaderData {
 }
 ```
 
+## `CustomProtocolRequest`
+
+```ts
+interface CustomProtocolRequest {
+  url: string;           // full URL, e.g. "app://localhost/index.html"
+  method: string;        // "GET", "POST", etc.
+  headers: HeaderData[];
+  body?: Buffer;         // present for POST / PUT
+}
+```
+
+## `CustomProtocolResponse`
+
+```ts
+interface CustomProtocolResponse {
+  body: Buffer;               // response bytes (required)
+  mimeType?: string;          // default: "application/octet-stream"
+  statusCode?: number;        // default: 200
+  headers?: HeaderData[];     // extra response headers
+}
+```
+
 ## `IpcMessage`
 
 Received by the `ipcHandler` callback.

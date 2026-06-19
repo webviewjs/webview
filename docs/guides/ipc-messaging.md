@@ -4,13 +4,13 @@ IPC lets web content (HTML/JS) talk to Node.js and vice versa.
 
 ## Page → Node
 
-The page uses the injected `window.__webview__.postMessage()` helper:
+The page uses the injected `window.ipc.postMessage()` global:
 
 ```html
 <button id="btn">Send ping</button>
 <script>
   document.getElementById('btn').addEventListener('click', () => {
-    window.__webview__.postMessage('hello from the page');
+    window.ipc.postMessage('hello from the page');
   });
 </script>
 ```
@@ -51,15 +51,15 @@ webview.evaluateScriptWithCallback(
 
 ## Injection at startup
 
-Use `initializationScript` to define globals before any page script runs — useful for exposing a Node-backed bridge:
+Use `initializationScript` (the `preload` option) to define globals before any page script runs — useful for exposing a Node-backed bridge:
 
 ```js
 const webview = win.createWebview({
-  url: 'https://myapp.local',
-  initializationScript: `
-    window.myBridge = {
+  url: 'app://localhost/index.html',
+  preload: `
+    window.bridge = {
       version: '1.0.0',
-      openFile() { window.__webview__.postMessage(JSON.stringify({ action: 'openFile' })); },
+      openFile() { window.ipc.postMessage(JSON.stringify({ action: 'openFile' })); },
     };
   `,
 });
@@ -82,5 +82,5 @@ ipcHandler: (msg) => {
 
 ```js
 // Page side
-window.__webview__.postMessage(JSON.stringify({ action: 'saveData', payload: form.getData() }));
+window.ipc.postMessage(JSON.stringify({ action: 'saveData', payload: form.getData() }));
 ```

@@ -1,9 +1,9 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, rc::Rc};
 // wry::WebView is not Send, so Rc (not Arc) is correct here — everything
 // runs on the main thread.
 
 use napi::{
-  bindgen_prelude::FunctionRef,
+  bindgen_prelude::{Buffer, FunctionRef},
   threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
   Env, Result,
 };
@@ -12,6 +12,33 @@ use winit::window::Window;
 use wry::{http::Request, Rect, WebViewBuilder};
 
 use crate::{HeaderData, IpcMessage};
+
+// ── Custom protocol types ─────────────────────────────────────────────────────
+
+/// Incoming request delivered to a custom-protocol handler.
+#[napi(object)]
+pub struct CustomProtocolRequest {
+  pub url: String,
+  pub method: String,
+  pub headers: Vec<HeaderData>,
+  pub body: Option<Buffer>,
+}
+
+/// Response returned by a custom-protocol handler.
+#[napi(object)]
+pub struct CustomProtocolResponse {
+  /// HTTP status code.  Defaults to 200.
+  pub status_code: Option<u16>,
+  /// Extra response headers (e.g. `[{ key: "Cache-Control", value: "no-store" }]`).
+  pub headers: Option<Vec<HeaderData>>,
+  /// Response body bytes.
+  pub body: Buffer,
+  /// MIME type (e.g. `"text/html"`, `"application/javascript"`).
+  pub mime_type: Option<String>,
+}
+
+pub(crate) type ProtocolHandlerRef =
+  Rc<RefCell<Option<FunctionRef<CustomProtocolRequest, CustomProtocolResponse>>>>;
 
 // ── Cookie types ─────────────────────────────────────────────────────────────
 
@@ -99,7 +126,12 @@ pub struct JsWebview {
 
 #[napi]
 impl JsWebview {
-  pub fn create(env: &Env, window: &Window, options: WebviewOptions) -> Result<Self> {
+  pub fn create(
+    env: &Env,
+    window: &Window,
+    options: WebviewOptions,
+    protocols: &[(String, ProtocolHandlerRef)],
+  ) -> Result<Self> {
     let mut webview = WebViewBuilder::new();
 
     if let Some(devtools) = options.enable_devtools {
@@ -179,6 +211,83 @@ impl JsWebview {
 
     if let Some(url) = options.url {
       webview = webview.with_url(&url);
+    }
+
+    // ── Custom protocols ──────────────────────────────────────────────────────
+    // The handler is always invoked on the UI thread (WebView2/WKWebView
+    // guarantee this), so we can use Rc + Env safely without locks.
+    let env_copy = *env;
+    for (name, handler_ref) in protocols {
+      let handler_rc = Rc::clone(handler_ref);
+      let env_c = env_copy;
+      webview = webview.with_custom_protocol(name.clone(), move |_id, req| {
+        let err_resp = |msg: &'static [u8]| {
+          wry::http::Response::builder()
+            .status(500)
+            .header("Content-Type", "text/plain")
+            .body(Cow::Borrowed(msg))
+            .unwrap()
+        };
+
+        let borrowed = handler_rc.borrow();
+        let Some(func_ref) = borrowed.as_ref() else {
+          return err_resp(b"Protocol handler not registered");
+        };
+        let Ok(func) = func_ref.borrow_back(&env_c) else {
+          return err_resp(b"Failed to borrow protocol handler");
+        };
+
+        let body_bytes = req.body().clone();
+        let headers = req
+          .headers()
+          .iter()
+          .map(|(k, v)| HeaderData {
+            key: k.as_str().to_string(),
+            value: v.to_str().ok().map(str::to_string),
+          })
+          .collect::<Vec<_>>();
+
+        let request = CustomProtocolRequest {
+          url: req.uri().to_string(),
+          method: req.method().to_string(),
+          headers,
+          body: if body_bytes.is_empty() { None } else { Some(body_bytes.into()) },
+        };
+
+        match func.call(request) {
+          Ok(resp) => {
+            let status = resp.status_code.unwrap_or(200);
+            let mime = resp
+              .mime_type
+              .unwrap_or_else(|| "application/octet-stream".to_string());
+            let body_vec: Vec<u8> = resp.body.to_vec();
+
+            let mut builder = wry::http::Response::builder()
+              .status(status)
+              .header("Content-Type", mime);
+
+            if let Some(extra) = resp.headers {
+              for h in extra {
+                if let Some(v) = h.value {
+                  builder = builder.header(&h.key, v);
+                }
+              }
+            }
+
+            builder
+              .body(Cow::Owned(body_vec))
+              .unwrap_or_else(|_| err_resp(b"Response build error"))
+          }
+          Err(e) => {
+            let msg = e.to_string().into_bytes();
+            wry::http::Response::builder()
+              .status(500)
+              .header("Content-Type", "text/plain")
+              .body(Cow::Owned(msg))
+              .unwrap()
+          }
+        }
+      });
     }
 
     let ipc_state = Rc::new(RefCell::new(None::<FunctionRef<IpcMessage, ()>>));
