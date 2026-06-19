@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 use tao::{
-  dpi::{LogicalPosition, LogicalSize, PhysicalSize},
+  dpi::{LogicalPosition, LogicalSize, PhysicalSize, Size},
   event_loop::EventLoop,
   window::{Fullscreen, ProgressBarState, Window, WindowBuilder, WindowId},
 };
@@ -442,6 +442,44 @@ impl BrowserWindow {
   /// Sets the window inner size (width and height).
   pub fn set_size(&self, width: u32, height: u32) {
     self.window.set_inner_size(LogicalSize::new(width, height));
+  }
+
+  #[napi]
+  /// Sets the minimum inner size (width and height) for the window.
+  /// Pass `0` for both width and height to remove the constraint.
+  pub fn set_min_size(&self, width: u32, height: u32, logical: Option<bool>) {
+    if width == 0 && height == 0 {
+        self.window.set_min_inner_size(None::<Size>);
+    } else {
+      if let Some(logical) = logical {
+        if logical {
+          self.window.set_min_inner_size(Some(LogicalSize::new(width, height)));
+        } else {
+          self.window.set_min_inner_size(Some(PhysicalSize::new(width, height)));
+        }
+      } else {
+        self.window.set_min_inner_size(Some(PhysicalSize::new(width, height)));
+      }
+    }
+  }
+  
+  #[napi]
+  /// Sets the maximum inner size (width and height) for the window.
+  /// Pass `0` for both width and height to remove the constraint.
+  pub fn set_max_size(&self, width: u32, height: u32, logical: Option<bool>) {
+    if width == 0 && height == 0 {
+        self.window.set_max_inner_size(None::<Size>);
+    } else {
+      if let Some(logical) = logical {
+        if logical {
+          self.window.set_max_inner_size(Some(LogicalSize::new(width, height)));
+        } else {
+          self.window.set_max_inner_size(Some(PhysicalSize::new(width, height)));
+        }
+      } else {
+        self.window.set_max_inner_size(Some(PhysicalSize::new(width, height)));
+      }
+    }
   }
 
   #[napi]

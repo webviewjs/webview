@@ -57,6 +57,14 @@ export declare class BrowserWindow {
   setResizable(resizable: boolean): void
   /** Sets the window inner size (width and height). */
   setSize(width: number, height: number): void
+  /** Sets the minimum inner size (width and height) for the window.
+    * Pass `0` for both width and height to remove the constraint.
+    */
+  setMinSize(width: number, height: number, logical?: boolean | undefined | null): void
+  /** Sets the maximum inner size (width and height) for the window.
+    * Pass `0` for both width and height to remove the constraint.
+    */
+  setMaxSize(width: number, height: number, logical?: boolean | undefined | null): void
   /** Gets the window ID. */
   id(): number
   /** Gets whether the window has a menu. */
