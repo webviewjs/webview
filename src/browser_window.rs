@@ -133,16 +133,18 @@ pub struct BrowserWindowOptions {
   pub fullscreen: Option<FullscreenType>,
 }
 
-#[cfg(not(target_os = "android"))]
+// This whole thing isnt supported/needed on android but we can just exclude the parts that arent supported from the build so it compiles.
 #[napi(object)]
 pub struct FileDialogOptions {
   /// Whether to allow selecting multiple files.
   pub multiple: Option<bool>,
   /// The title of the file dialog.
   pub title: Option<String>,
-  /// The initial directory of the file dialog.
+  /// The initial directory of the file dialog. (Not supported on Android)
+  #[cfg(not(target_os = "android"))]
   pub default_path: Option<String>,
-  /// The file types that can be selected in the file dialog.
+  /// The file types that can be selected in the file dialog. (Not supported on Android)
+  #[cfg(not(target_os = "android"))]
   pub filters: Option<Vec<FileFilter>>,
 }
 
