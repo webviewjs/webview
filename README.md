@@ -2,7 +2,15 @@
 
 ![https://github.com/webviewjs/webview/actions](https://github.com/webviewjs/webview/workflows/CI/badge.svg)
 
-Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [tao](https://github.com/tauri-apps/tao) and [wry](https://github.com/tauri-apps/wry) allowing you to easily manage cross platform windowing and webview.
+Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [winit](https://github.com/rust-windowing/winit) and [wry](https://github.com/tauri-apps/wry) allowing you to easily manage cross platform windowing and webview.
+
+## Highlights
+
+- Non-blocking application pumping. `app.run()` uses a Node timer, so ordinary Node timers and I/O continue running.
+- Browser windows, menus, dialogs, cookies, DevTools, and window controls.
+- IPC through `window.ipc.postMessage()`, with an optional alias such as `window.bindings`.
+- Asynchronous custom protocols, including `app://` asset loading without a local server.
+- Promise-based `webview.expose()` namespaces for page-to-Node calls.
 
 ![preview](https://github.com/webviewjs/webview/raw/main/assets/preview.png)
 
@@ -17,20 +25,20 @@ npm install @webviewjs/webview
 
 # Supported platforms
 
-| Platform                     | Supported |
-| ---------------------------- | --------- |
-| x86_64-pc-windows-msvc       | ✅        |
-| i686-pc-windows-msvc         | ✅        |
-| aarch64-pc-windows-msvc      | ✅        |
-| x86_64-apple-darwin          | ✅        |
-| aarch64-apple-darwin         | ✅        |
-| x86_64-unknown-linux-gnu     | ✅        |
-| i686-unknown-linux-gnu       | ✅        |
-| aarch64-unknown-linux-gnu    | ✅        |
-| armv7-unknown-linux-gnueabihf| ✅        |
-| aarch64-linux-android        | ✅        |
-| armv7-linux-androideabi      | ✅        |
-| x86_64-unknown-freebsd       | ✅        |
+| Platform                      | Supported |
+| ----------------------------- | --------- |
+| x86_64-pc-windows-msvc        | ✅        |
+| i686-pc-windows-msvc          | ✅        |
+| aarch64-pc-windows-msvc       | ✅        |
+| x86_64-apple-darwin           | ✅        |
+| aarch64-apple-darwin          | ✅        |
+| x86_64-unknown-linux-gnu      | ✅        |
+| i686-unknown-linux-gnu        | ✅        |
+| aarch64-unknown-linux-gnu     | ✅        |
+| armv7-unknown-linux-gnueabihf | ✅        |
+| aarch64-linux-android         | ✅        |
+| armv7-linux-androideabi       | ✅        |
+| x86_64-unknown-freebsd        | ✅        |
 
 # Examples
 
@@ -50,6 +58,67 @@ webview.loadUrl('https://nodejs.org');
 app.run();
 ```
 
+## Event pumping
+
+`app.run()` does not block the Node.js thread. It pumps pending native events on a timer:
+
+```js
+app.run({ interval: 16, ref: true });
+```
+
+`interval` defaults to `16` milliseconds and `ref` defaults to `true`. Use `app.pumpEvents()` for manual pumping.
+
+## IPC and exposed functions
+
+The webview page can send messages to Node through `window.ipc.postMessage()`:
+
+```js
+const webview = window.createWebview({ ipcName: 'bindings' });
+webview.onIpcMessage((message) => console.log(message.body.toString()));
+```
+
+`ipcName` adds an alias, so the page can use `window.bindings.postMessage(...)`; `window.ipc` remains available.
+
+For typed request/response style calls, expose a namespace:
+
+```js
+webview.expose('native', {
+  version: '0.1.4',
+  readConfig: async () => JSON.parse(await readFile('./config.json', 'utf8')),
+});
+```
+
+In the page:
+
+```js
+console.log(window.native.version);
+const config = await window.native.readConfig();
+```
+
+Every exposed function returns a Promise in the page. Values, arguments, and results must be JSON-serializable. Violations use `SerializationError`.
+
+## Asynchronous custom protocols
+
+Register a protocol before creating its webview:
+
+```js
+window.registerProtocol('app', async (request) => {
+  const filePath = join(process.cwd(), 'dist', new URL(request.url).pathname);
+  try {
+    return {
+      body: await readFile(filePath),
+      mimeType: 'text/html; charset=utf-8',
+    };
+  } catch {
+    return { statusCode: 404, body: Buffer.from('Not found'), mimeType: 'text/plain' };
+  }
+});
+
+window.createWebview({ url: 'app://localhost/index.html' });
+```
+
+See [Custom Protocols](docs/guides/custom-protocols.md), [IPC](docs/guides/ipc-messaging.md), and the runnable [custom protocol](examples/custom-protocol.mjs) and [expose](examples/expose.mjs) examples.
+
 ## Menu System
 
 WebviewJS provides a cross-platform menu system that works on macOS, Windows, and Linux.
@@ -57,10 +126,7 @@ WebviewJS provides a cross-platform menu system that works on macOS, Windows, an
 ### Basic Menu Setup
 
 ```js
-import { Application, initMenuSystem } from '@webviewjs/webview';
-
-// Initialize menu system (recommended, especially for macOS)
-initMenuSystem();
+import { Application } from '@webviewjs/webview';
 
 const app = new Application();
 
@@ -68,28 +134,23 @@ const app = new Application();
 app.setMenu({
   items: [
     {
-      label: "File",
+      label: 'File',
       submenu: {
         items: [
-          { id: "new", label: "New", accelerator: "CmdOrCtrl+N" },
-          { id: "open", label: "Open", accelerator: "CmdOrCtrl+O" },
-          { role: "separator" },
-          { id: "quit", label: "Quit", accelerator: "CmdOrCtrl+Q" }
-        ]
-      }
+          { id: 'new', label: 'New', accelerator: 'CmdOrCtrl+N' },
+          { id: 'open', label: 'Open', accelerator: 'CmdOrCtrl+O' },
+          { role: 'separator' },
+          { id: 'quit', label: 'Quit', accelerator: 'CmdOrCtrl+Q' },
+        ],
+      },
     },
     {
-      label: "Edit",
+      label: 'Edit',
       submenu: {
-        items: [
-          { role: "copy" },
-          { role: "paste" },
-          { role: "cut" },
-          { role: "selectall" }
-        ]
-      }
-    }
-  ]
+        items: [{ role: 'copy' }, { role: 'paste' }, { role: 'cut' }, { role: 'selectall' }],
+      },
+    },
+  ],
 });
 
 const window = app.createBrowserWindow();
@@ -111,7 +172,7 @@ app.bind((event) => {
     const menuEvent = event.customMenuEvent;
     console.log(`Menu item clicked: ${menuEvent.id}`);
     console.log(`From window: ${menuEvent.windowId}`);
-    
+
     // Handle specific menu items
     switch (menuEvent.id) {
       case 'new':
@@ -128,7 +189,9 @@ app.bind((event) => {
 });
 
 // Set up menu...
-app.setMenu({ /* ... */ });
+app.setMenu({
+  /* ... */
+});
 ```
 
 ### Window-Specific Menus
@@ -138,16 +201,16 @@ const app = new Application();
 
 // Create window with custom menu
 const window = app.createBrowserWindow({
-  title: "Custom Window",
+  title: 'Custom Window',
   menu: {
     items: [
       {
-        id: "window-action",
-        label: "Window Action",
-        accelerator: "Ctrl+W"
-      }
-    ]
-  }
+        id: 'window-action',
+        label: 'Window Action',
+        accelerator: 'Ctrl+W',
+      },
+    ],
+  },
 });
 
 // Or check if window has a menu
@@ -168,7 +231,7 @@ if (window.hasMenu()) {
 ### Predefined Menu Roles
 
 - **`"copy"`**: Standard copy action
-- **`"paste"`**: Standard paste action  
+- **`"paste"`**: Standard paste action
 - **`"cut"`**: Standard cut action
 - **`"selectall"`**: Select all text action
 - **`"separator"`**: Visual separator line
@@ -180,7 +243,7 @@ const app = new Application();
 const window = app.createBrowserWindow();
 
 const webview = window.createWebview({
-    html: `<!DOCTYPE html>
+  html: `<!DOCTYPE html>
     <html>
         <head>
             <title>Webview</title>
@@ -196,18 +259,18 @@ const webview = window.createWebview({
         </body>
     </html>
     `,
-    preload: `window.onIpcMessage = function(data) {
+  preload: `window.onIpcMessage = function(data) {
         const output = document.getElementById('output');
         output.innerText = \`Server Sent A Message: \${data}\`;
-    }`
+    }`,
 });
 
 if (!webview.isDevtoolsOpen()) webview.openDevtools();
 
 webview.onIpcMessage((data) => {
-    const reply = `You sent ${data.body.toString('utf-8')}`;
-    window.evaluateScript(`onIpcMessage("${reply}")`)
-})
+  const reply = `You sent ${data.body.toString('utf-8')}`;
+  window.evaluateScript(`onIpcMessage("${reply}")`);
+});
 
 app.run();
 ```
@@ -228,7 +291,7 @@ app.bind((event) => {
     console.log('Application is closing, cleaning up resources...');
     // Perform cleanup here: save data, close connections, etc.
   }
-  
+
   if (event.event === WebviewApplicationEvent.WindowCloseRequested) {
     console.log('Window close requested');
     // Perform window-specific cleanup
@@ -251,7 +314,7 @@ For more details on closing applications and cleaning up resources, see the [Clo
 Check out [examples](./examples) directory for more examples:
 
 - **[menu-system.mjs](./examples/menu-system.mjs)** - Comprehensive menu system demonstration with all features
-- **[window-menus.mjs](./examples/window-menus.mjs)** - Window-specific vs global menu examples  
+- **[window-menus.mjs](./examples/window-menus.mjs)** - Window-specific vs global menu examples
 - **[http/](./examples/http/)** - Serving content from a web server to webview
 - **[transparent.mjs](./examples/transparent.mjs)** - Transparent window example
 - **[close-example.mjs](./examples/close-example.mjs)** - Graceful application closing
