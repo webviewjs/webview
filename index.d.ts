@@ -63,6 +63,8 @@ export declare class BrowserWindow {
   setPosition(x: number, y: number, logical?: boolean | undefined | null): void
   /** Gets the window position. */
   getPosition(logical?: boolean | undefined | null): Position
+  /** Opens a file select dialog */
+  openFileDialog(options?: FileDialogOptions | undefined | null): Array<string>
   /** Gets the window ID. */
   id(): number
   /** Gets whether the window has a menu. */
@@ -237,6 +239,24 @@ export interface Dimensions {
   width: number
   /** The height of the size. */
   height: number
+}
+
+export interface FileDialogOptions {
+  /** Whether to allow selecting multiple files. */
+  multiple?: boolean
+  /** The title of the file dialog. */
+  title?: string
+  /** The initial directory of the file dialog. */
+  defaultPath?: string
+  /** The file types that can be selected in the file dialog. */
+  filters?: Array<FileFilter>
+}
+
+export interface FileFilter {
+  /** The name of the file filter. */
+  name: string
+  /** The extensions of the file filter. */
+  extensions: Array<string>
 }
 
 export declare const enum FullscreenType {

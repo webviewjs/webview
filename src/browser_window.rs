@@ -8,6 +8,7 @@ use tao::{
   event_loop::EventLoop,
   window::{Fullscreen, ProgressBarState, Window, WindowBuilder, WindowId},
 };
+use rfd::FileDialog;
 #[cfg(not(target_os = "android"))]
 use muda::Menu;
 
@@ -131,6 +132,26 @@ pub struct BrowserWindowOptions {
   pub transparent: Option<bool>,
   /// The fullscreen state of the window.
   pub fullscreen: Option<FullscreenType>,
+}
+
+#[napi(object)]
+pub struct FileDialogOptions {
+  /// Whether to allow selecting multiple files.
+  pub multiple: Option<bool>,
+  /// The title of the file dialog.
+  pub title: Option<String>,
+  /// The initial directory of the file dialog.
+  pub default_path: Option<String>,
+  /// The file types that can be selected in the file dialog.
+  pub filters: Option<Vec<FileFilter>>,
+}
+
+#[napi(object)]
+pub struct FileFilter {
+  /// The name of the file filter.
+  pub name: String,
+  /// The extensions of the file filter.
+  pub extensions: Vec<String>,
 }
 
 impl Default for BrowserWindowOptions {
@@ -521,6 +542,51 @@ impl BrowserWindow {
       x: position.x,
       y: position.y,
     }
+  }
+
+  #[napi]
+  /// Opens a file select dialog
+  pub fn open_file_dialog(&self, options: Option<FileDialogOptions>) -> Result<Vec<String>> {
+    let mut dialog = FileDialog::new();
+
+    if let Some(opts) = options.as_ref() {
+      if let Some(title) = &opts.title {
+        dialog = dialog.set_title(title);
+      }
+
+      if let Some(path) = &opts.default_path {
+        dialog = dialog.set_directory(path);
+      }
+
+      if let Some(filters) = &opts.filters {
+        for filter in filters {
+          dialog = dialog.add_filter(
+            &filter.name,
+            &filter.extensions,
+          );
+        }
+      }
+    }
+
+    dialog = dialog.add_filter("All Files", &["*"]);
+
+    let files = if options
+      .as_ref()
+      .and_then(|o| o.multiple)
+      .unwrap_or(false)
+    {
+      dialog.pick_files()
+    } else {
+      dialog.pick_file().map(|f| vec![f])
+    };
+
+    Ok(
+      files
+        .unwrap_or_default()
+        .into_iter()
+        .map(|f| f.as_path().to_string_lossy().to_string())
+        .collect()
+    )
   }
 
   #[napi]
