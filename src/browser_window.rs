@@ -140,15 +140,12 @@ pub struct FileDialogOptions {
   pub multiple: Option<bool>,
   /// The title of the file dialog.
   pub title: Option<String>,
-  /// The initial directory of the file dialog. (Not supported on Android)
-  #[cfg(not(target_os = "android"))]
+  /// The initial directory of the file dialog.
   pub default_path: Option<String>,
-  /// The file types that can be selected in the file dialog. (Not supported on Android)
-  #[cfg(not(target_os = "android"))]
+  /// The file types that can be selected in the file dialog.
   pub filters: Option<Vec<FileFilter>>,
 }
 
-#[cfg(not(target_os = "android"))]
 #[napi(object)]
 pub struct FileFilter {
   /// The name of the file filter.
