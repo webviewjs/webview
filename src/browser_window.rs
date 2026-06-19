@@ -2,11 +2,13 @@ use napi::{Either, Env, Result};
 use napi_derive::*;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 use winit::{
-  dpi::{LogicalPosition, LogicalSize, PhysicalSize},
+  dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
   event_loop::EventLoop,
-  window::{Fullscreen, Icon, Window, WindowBuilder, WindowButtons, WindowId, WindowLevel},
+  window::{CursorIcon, Fullscreen, Icon, Window, WindowBuilder, WindowButtons, WindowId, WindowLevel},
 };
 use rfd::FileDialog;
 #[cfg(not(target_os = "android"))]
@@ -15,7 +17,7 @@ use muda::Menu;
 use crate::webview::{JsWebview, Theme, WebviewOptions};
 use crate::MenuOptions;
 #[cfg(not(target_os = "android"))]
-use crate::create_menu_from_options;
+use crate::menu::{create_menu_from_options, init_menu_for_window};
 
 #[napi]
 pub enum FullscreenType {
@@ -64,6 +66,46 @@ pub enum JsProgressBarState {
 pub struct JsProgressBar {
   pub state: Option<JsProgressBarState>,
   pub progress: Option<u32>,
+}
+
+/// Cursor shape passed to [`BrowserWindow::set_cursor`].
+#[napi]
+pub enum CursorType {
+  Default,
+  Crosshair,
+  Hand,
+  Arrow,
+  Move,
+  Text,
+  Wait,
+  Help,
+  Progress,
+  NotAllowed,
+  ContextMenu,
+  Cell,
+  VerticalText,
+  Alias,
+  Copy,
+  NoDrop,
+  Grab,
+  Grabbing,
+  ZoomIn,
+  ZoomOut,
+  ResizeEast,
+  ResizeNorth,
+  ResizeNorthEast,
+  ResizeNorthWest,
+  ResizeSouth,
+  ResizeSouthEast,
+  ResizeSouthWest,
+  ResizeWest,
+  ResizeEastWest,
+  ResizeNorthSouth,
+  ResizeNorthEastSouthWest,
+  ResizeNorthWestSouthEast,
+  ResizeColumn,
+  ResizeRow,
+  AllScroll,
 }
 
 #[napi(object)]
@@ -138,6 +180,9 @@ pub struct BrowserWindow {
   window_id: u32,
   #[cfg(not(target_os = "android"))]
   window_menu: Option<Menu>,
+  /// Shared with AppState so resize events can trigger WebView2 resize.
+  /// wry's own WM_SIZE subclass is bypassed by winit, so we do it manually.
+  webviews: Rc<RefCell<Vec<Rc<wry::WebView>>>>,
 }
 
 #[napi]
@@ -261,12 +306,23 @@ impl BrowserWindow {
       window_id,
       #[cfg(not(target_os = "android"))]
       window_menu,
+      webviews: Rc::new(RefCell::new(Vec::new())),
     })
+  }
+
+  /// Return a clone of the shared webview list. AppState holds this Rc so it
+  /// can resize all webviews when a Resized event arrives for this window.
+  pub(crate) fn webviews_shared(&self) -> Rc<RefCell<Vec<Rc<wry::WebView>>>> {
+    Rc::clone(&self.webviews)
   }
 
   #[napi]
   pub fn create_webview(&mut self, env: Env, options: Option<WebviewOptions>) -> Result<JsWebview> {
-    JsWebview::create(&env, &*self.window, options.unwrap_or_default())
+    let webview = JsWebview::create(&env, &*self.window, options.unwrap_or_default())?;
+    // Keep an Rc clone so the WebView survives JS GC of the returned handle,
+    // and so AppState can resize it on WM_SIZE.
+    self.webviews.borrow_mut().push(Rc::clone(&webview.webview_inner));
+    Ok(webview)
   }
 
   #[napi(getter)]
@@ -588,6 +644,178 @@ impl BrowserWindow {
   pub fn show(&self) {
     self.window.set_visible(true);
   }
+
+  // ── Position ────────────────────────────────────────────────────────────────
+
+  /// Returns the window's outer top-left position in physical pixels, or
+  /// `null` if the platform does not expose it.
+  #[napi]
+  pub fn get_position(&self) -> Option<Position> {
+    self.window.outer_position().ok().map(|p| Position { x: p.x, y: p.y })
+  }
+
+  /// Move the window so its outer top-left corner is at (`x`, `y`) in
+  /// physical pixels.
+  #[napi]
+  pub fn set_position(&self, x: i32, y: i32) {
+    self.window.set_outer_position(PhysicalPosition::new(x, y));
+  }
+
+  /// Center the window on its current monitor.  Does nothing if the current
+  /// monitor cannot be determined.
+  #[napi]
+  pub fn center(&self) {
+    if let Some(monitor) = self.window.current_monitor() {
+      let mpos = monitor.position();
+      let msize = monitor.size();
+      let wsize = self.window.outer_size();
+      let x = mpos.x + (msize.width as i32 - wsize.width as i32) / 2;
+      let y = mpos.y + (msize.height as i32 - wsize.height as i32) / 2;
+      self.window.set_outer_position(PhysicalPosition::new(x, y));
+    }
+  }
+
+  // ── Size queries & constraints ───────────────────────────────────────────────
+
+  /// Inner (content-area) size in physical pixels.
+  #[napi]
+  pub fn get_size(&self) -> Dimensions {
+    let s = self.window.inner_size();
+    Dimensions { width: s.width, height: s.height }
+  }
+
+  /// Outer (including decorations) size in physical pixels.
+  #[napi]
+  pub fn get_outer_size(&self) -> Dimensions {
+    let s = self.window.outer_size();
+    Dimensions { width: s.width, height: s.height }
+  }
+
+  /// Set minimum inner size.  Pass `null` / `undefined` for both to remove the
+  /// constraint.
+  #[napi]
+  pub fn set_min_size(&self, width: Option<f64>, height: Option<f64>) {
+    let size: Option<winit::dpi::Size> = match (width, height) {
+      (Some(w), Some(h)) => Some(LogicalSize::new(w, h).into()),
+      _ => None,
+    };
+    self.window.set_min_inner_size(size);
+  }
+
+  /// Set maximum inner size.  Pass `null` / `undefined` for both to remove the
+  /// constraint.
+  #[napi]
+  pub fn set_max_size(&self, width: Option<f64>, height: Option<f64>) {
+    let size: Option<winit::dpi::Size> = match (width, height) {
+      (Some(w), Some(h)) => Some(LogicalSize::new(w, h).into()),
+      _ => None,
+    };
+    self.window.set_max_inner_size(size);
+  }
+
+  // ── DPI ─────────────────────────────────────────────────────────────────────
+
+  /// Device-pixel ratio for the monitor the window is currently on.
+  #[napi]
+  pub fn scale_factor(&self) -> f64 {
+    self.window.scale_factor()
+  }
+
+  // ── Cursor ──────────────────────────────────────────────────────────────────
+
+  #[napi]
+  pub fn set_cursor(&self, cursor: CursorType) {
+    self.window.set_cursor_icon(cursor.into());
+  }
+
+  #[napi]
+  pub fn set_cursor_visible(&self, visible: bool) {
+    self.window.set_cursor_visible(visible);
+  }
+
+  /// Move the OS cursor to (`x`, `y`) in logical pixels relative to the
+  /// window's inner top-left corner.
+  #[napi]
+  pub fn set_cursor_position(&self, x: f64, y: f64) -> Result<()> {
+    self.window
+      .set_cursor_position(LogicalPosition::new(x, y))
+      .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
+  }
+
+  /// When `true` the window ignores mouse input (click-through). Supported on
+  /// Windows and macOS; a no-op on other platforms.
+  #[napi]
+  pub fn set_ignore_cursor_events(&self, ignore: bool) -> Result<()> {
+    self.window
+      .set_cursor_hittest(!ignore)
+      .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
+  }
+
+  // ── Taskbar ─────────────────────────────────────────────────────────────────
+
+  /// Hide/show the window in the system taskbar. Supported on Windows only;
+  /// a no-op on other platforms.
+  #[napi]
+  pub fn set_skip_taskbar(&self, skip: bool) {
+    #[cfg(target_os = "windows")]
+    {
+      use winit::platform::windows::WindowExtWindows;
+      self.window.set_skip_taskbar(skip);
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = skip;
+  }
+
+  // ── Misc ─────────────────────────────────────────────────────────────────────
+
+  #[napi]
+  pub fn request_redraw(&self) {
+    self.window.request_redraw();
+  }
+}
+
+// ── CursorType → CursorIcon ──────────────────────────────────────────────────
+
+impl From<CursorType> for CursorIcon {
+  fn from(c: CursorType) -> Self {
+    match c {
+      CursorType::Default => CursorIcon::Default,
+      CursorType::Crosshair => CursorIcon::Crosshair,
+      CursorType::Hand => CursorIcon::Pointer,
+      CursorType::Arrow => CursorIcon::Default,
+      CursorType::Move => CursorIcon::Move,
+      CursorType::Text => CursorIcon::Text,
+      CursorType::Wait => CursorIcon::Wait,
+      CursorType::Help => CursorIcon::Help,
+      CursorType::Progress => CursorIcon::Progress,
+      CursorType::NotAllowed => CursorIcon::NotAllowed,
+      CursorType::ContextMenu => CursorIcon::ContextMenu,
+      CursorType::Cell => CursorIcon::Cell,
+      CursorType::VerticalText => CursorIcon::VerticalText,
+      CursorType::Alias => CursorIcon::Alias,
+      CursorType::Copy => CursorIcon::Copy,
+      CursorType::NoDrop => CursorIcon::NoDrop,
+      CursorType::Grab => CursorIcon::Grab,
+      CursorType::Grabbing => CursorIcon::Grabbing,
+      CursorType::ZoomIn => CursorIcon::ZoomIn,
+      CursorType::ZoomOut => CursorIcon::ZoomOut,
+      CursorType::ResizeEast => CursorIcon::EResize,
+      CursorType::ResizeNorth => CursorIcon::NResize,
+      CursorType::ResizeNorthEast => CursorIcon::NeResize,
+      CursorType::ResizeNorthWest => CursorIcon::NwResize,
+      CursorType::ResizeSouth => CursorIcon::SResize,
+      CursorType::ResizeSouthEast => CursorIcon::SeResize,
+      CursorType::ResizeSouthWest => CursorIcon::SwResize,
+      CursorType::ResizeWest => CursorIcon::WResize,
+      CursorType::ResizeEastWest => CursorIcon::EwResize,
+      CursorType::ResizeNorthSouth => CursorIcon::NsResize,
+      CursorType::ResizeNorthEastSouthWest => CursorIcon::NeswResize,
+      CursorType::ResizeNorthWestSouthEast => CursorIcon::NwseResize,
+      CursorType::ResizeColumn => CursorIcon::ColResize,
+      CursorType::ResizeRow => CursorIcon::RowResize,
+      CursorType::AllScroll => CursorIcon::AllScroll,
+    }
+  }
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -609,29 +837,3 @@ fn monitor_to_js(m: winit::monitor::MonitorHandle) -> Monitor {
   }
 }
 
-/// Attach `menu` to `window` using the appropriate platform API.
-#[cfg(not(target_os = "android"))]
-fn init_menu_for_window(menu: &Menu, window: &Window) -> Result<()> {
-  #[cfg(target_os = "windows")]
-  {
-    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    if let Ok(handle) = window.window_handle() {
-      if let RawWindowHandle::Win32(h) = handle.as_raw() {
-        unsafe {
-          menu.init_for_hwnd(h.hwnd.get() as isize).map_err(|e| {
-            napi::Error::new(
-              napi::Status::GenericFailure,
-              format!("Failed to set window menu: {}", e),
-            )
-          })?;
-        }
-      }
-    }
-  }
-  // macOS menus are app-level (init_for_nsapp); no per-window init needed.
-  // Linux: muda+GTK menu integration requires a GTK window handle which
-  // winit does not expose directly — menus are skipped on Linux for now.
-  #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-  let _ = (menu, window);
-  Ok(())
-}

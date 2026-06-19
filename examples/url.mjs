@@ -11,7 +11,3 @@ window.createWebview({
 window.setTheme(Theme.Dark);
 
 app.run();
-
-setInterval(() => {
-  console.log('Window is still alive...');
-}, 1000);

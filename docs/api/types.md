@@ -1,0 +1,142 @@
+# Types Reference
+
+Common types shared across the API.
+
+## `Dimensions`
+
+```ts
+interface Dimensions {
+  width: number;
+  height: number;
+}
+```
+
+## `Position`
+
+```ts
+interface Position {
+  x: number;
+  y: number;
+}
+```
+
+## `WebviewBounds`
+
+Logical-pixel rectangle used by child webview positioning.
+
+```ts
+interface WebviewBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+```
+
+## `WebviewCookie`
+
+```ts
+interface WebviewCookie {
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: 'strict' | 'lax' | 'none';
+}
+```
+
+## `HeaderData`
+
+```ts
+interface HeaderData {
+  key: string;
+  value?: string;
+}
+```
+
+## `IpcMessage`
+
+Received by the `ipcHandler` callback.
+
+```ts
+interface IpcMessage {
+  body: Buffer;
+  method: string;
+  headers: HeaderData[];
+  uri: string;
+}
+```
+
+## `Monitor`
+
+```ts
+interface Monitor {
+  name?: string;
+  scaleFactor: number;
+  size: Dimensions;
+  position: Position;
+  videoModes: VideoMode[];
+}
+
+interface VideoMode {
+  size: Dimensions;
+  bitDepth: number;
+  refreshRate: number;
+}
+```
+
+## `ApplicationEvent`
+
+```ts
+interface ApplicationEvent {
+  event: WebviewApplicationEvent;
+  customMenuEvent?: CustomMenuEvent;
+}
+
+interface CustomMenuEvent {
+  id: string;
+  windowId: number;
+}
+```
+
+## Enums
+
+### `WebviewApplicationEvent`
+
+```ts
+enum WebviewApplicationEvent {
+  WindowCloseRequested      = 'WindowCloseRequested',
+  ApplicationCloseRequested = 'ApplicationCloseRequested',
+  CustomMenuClick           = 'CustomMenuClick',
+}
+```
+
+### `FullscreenType`
+
+```ts
+enum FullscreenType { Exclusive = 'Exclusive', Borderless = 'Borderless' }
+```
+
+### `Theme`
+
+```ts
+enum Theme { Light = 'Light', Dark = 'Dark' }
+```
+
+### `ProgressBarState`
+
+```ts
+enum ProgressBarState {
+  None          = 'None',
+  Normal        = 'Normal',
+  Indeterminate = 'Indeterminate',
+  Paused        = 'Paused',
+  Error         = 'Error',
+}
+```
+
+### `CursorType`
+
+See [BrowserWindow cursor section](./browser-window.md#cursor) for the full list.

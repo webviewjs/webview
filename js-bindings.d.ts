@@ -64,6 +64,55 @@ export declare class BrowserWindow {
   close(): void
   hide(): void
   show(): void
+  /**
+   * Returns the window's outer top-left position in physical pixels, or
+   * `null` if the platform does not expose it.
+   */
+  getPosition(): Position | null
+  /**
+   * Move the window so its outer top-left corner is at (`x`, `y`) in
+   * physical pixels.
+   */
+  setPosition(x: number, y: number): void
+  /**
+   * Center the window on its current monitor.  Does nothing if the current
+   * monitor cannot be determined.
+   */
+  center(): void
+  /** Inner (content-area) size in physical pixels. */
+  getSize(): Dimensions
+  /** Outer (including decorations) size in physical pixels. */
+  getOuterSize(): Dimensions
+  /**
+   * Set minimum inner size.  Pass `null` / `undefined` for both to remove the
+   * constraint.
+   */
+  setMinSize(width?: number | undefined | null, height?: number | undefined | null): void
+  /**
+   * Set maximum inner size.  Pass `null` / `undefined` for both to remove the
+   * constraint.
+   */
+  setMaxSize(width?: number | undefined | null, height?: number | undefined | null): void
+  /** Device-pixel ratio for the monitor the window is currently on. */
+  scaleFactor(): number
+  setCursor(cursor: CursorType): void
+  setCursorVisible(visible: boolean): void
+  /**
+   * Move the OS cursor to (`x`, `y`) in logical pixels relative to the
+   * window's inner top-left corner.
+   */
+  setCursorPosition(x: number, y: number): void
+  /**
+   * When `true` the window ignores mouse input (click-through). Supported on
+   * Windows and macOS; a no-op on other platforms.
+   */
+  setIgnoreCursorEvents(ignore: boolean): void
+  /**
+   * Hide/show the window in the system taskbar. Supported on Windows only;
+   * a no-op on other platforms.
+   */
+  setSkipTaskbar(skip: boolean): void
+  requestRedraw(): void
 }
 
 export declare class Webview {
@@ -80,6 +129,40 @@ export declare class Webview {
   evaluateScript(js: string): void
   evaluateScriptWithCallback(js: string, callback: ((err: Error | null, arg: string) => any)): void
   reload(): void
+  /** Get the URL the webview is currently showing. */
+  url(): string | null
+  /** Load `url` with additional HTTP request headers. */
+  loadUrlWithHeaders(url: string, headers: Array<HeaderData>): void
+  /**
+   * Return all cookies currently stored for `url`, or every cookie if `url`
+   * is `null` / `undefined`.
+   */
+  getCookies(url?: string | undefined | null): Array<WebviewCookie>
+  /** Store a cookie in the webview's session. */
+  setCookie(cookie: WebviewCookie): void
+  /**
+   * Delete a cookie by name.  `domain` and `path` narrow the match;
+   * omit them to delete across all domains/paths.
+   */
+  deleteCookie(name: string, domain?: string | undefined | null, path?: string | undefined | null): void
+  /** Erase all cookies, cache, local storage, and IndexedDB data. */
+  clearAllBrowsingData(): void
+  /**
+   * Set the background colour shown before (or behind) page content.
+   * Values are 0-255.
+   */
+  setBackgroundColor(r: number, g: number, b: number, a: number): void
+  /**
+   * Return the webview's current bounds relative to the window, in logical
+   * pixels.
+   */
+  getBounds(): WebviewBounds | null
+  /** Reposition and resize the webview within its window. */
+  setBounds(bounds: WebviewBounds): void
+  /** Give keyboard focus to the webview content area. */
+  focus(): void
+  /** Return focus to the parent/host window. */
+  focusParent(): void
 }
 export type JsWebview = Webview
 
@@ -133,6 +216,45 @@ export declare enum ControlFlow {
   ExitWithCode = 4
 }
 
+/** Cursor shape passed to [`BrowserWindow::set_cursor`]. */
+export declare enum CursorType {
+  Default = 0,
+  Crosshair = 1,
+  Hand = 2,
+  Arrow = 3,
+  Move = 4,
+  Text = 5,
+  Wait = 6,
+  Help = 7,
+  Progress = 8,
+  NotAllowed = 9,
+  ContextMenu = 10,
+  Cell = 11,
+  VerticalText = 12,
+  Alias = 13,
+  Copy = 14,
+  NoDrop = 15,
+  Grab = 16,
+  Grabbing = 17,
+  ZoomIn = 18,
+  ZoomOut = 19,
+  ResizeEast = 20,
+  ResizeNorth = 21,
+  ResizeNorthEast = 22,
+  ResizeNorthWest = 23,
+  ResizeSouth = 24,
+  ResizeSouthEast = 25,
+  ResizeSouthWest = 26,
+  ResizeWest = 27,
+  ResizeEastWest = 28,
+  ResizeNorthSouth = 29,
+  ResizeNorthEastSouthWest = 30,
+  ResizeNorthWestSouthEast = 31,
+  ResizeColumn = 32,
+  ResizeRow = 33,
+  AllScroll = 34
+}
+
 export interface CustomMenuEvent {
   id: string
   windowId: number
@@ -166,8 +288,6 @@ export interface HeaderData {
   key: string
   value?: string
 }
-
-export declare function initMenuSystem(): void
 
 export interface IpcMessage {
   body: Buffer
@@ -231,6 +351,24 @@ export declare enum WebviewApplicationEvent {
   WindowCloseRequested = 0,
   ApplicationCloseRequested = 1,
   CustomMenuClick = 2
+}
+
+export interface WebviewBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface WebviewCookie {
+  name: string
+  value: string
+  domain?: string
+  path?: string
+  httpOnly?: boolean
+  secure?: boolean
+  /** `"strict"`, `"lax"`, or `"none"`. */
+  sameSite?: string
 }
 
 export interface WebviewOptions {

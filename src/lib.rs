@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use browser_window::{BrowserWindow, BrowserWindowOptions};
 #[cfg(not(target_os = "android"))]
-use muda::{accelerator::Accelerator, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use muda::Menu;
 use napi::bindgen_prelude::*;
 use napi::Result;
 use napi_derive::napi;
@@ -19,6 +19,7 @@ use winit::{
 };
 
 pub mod browser_window;
+pub mod menu;
 pub mod webview;
 
 #[napi]
@@ -121,6 +122,10 @@ struct AppState {
   should_exit: bool,
   /// Tracks open windows so we can hide them on close without dropping BrowserWindow.
   windows: HashMap<WindowId, Arc<Window>>,
+  /// Shared handle into each BrowserWindow's webview list.  Winit swallows
+  /// WM_SIZE without forwarding to wry's subclass proc, so we resize manually
+  /// when WindowEvent::Resized arrives.
+  webviews: HashMap<WindowId, Rc<RefCell<Vec<Rc<wry::WebView>>>>>,
   #[cfg(not(target_os = "android"))]
   menu_event_receiver: Option<muda::MenuEventReceiver>,
 }
@@ -158,6 +163,9 @@ impl Application {
       )
     })?;
 
+    // Auto-initialise the platform menu system (no-op outside macOS).
+    menu::auto_init_platform();
+
     Ok(Self {
       event_loop: Some(event_loop),
       state: AppState {
@@ -165,6 +173,7 @@ impl Application {
         env,
         should_exit: false,
         windows: HashMap::new(),
+        webviews: HashMap::new(),
         #[cfg(not(target_os = "android"))]
         menu_event_receiver: None,
       },
@@ -235,8 +244,11 @@ impl Application {
       ids.insert(format!("{:?}", window.winit_window_id()), window.id());
     }
 
-    // Track the window so pump_events can hide it on CloseRequested.
-    self.state.windows.insert(window.winit_window_id(), Arc::clone(&window.window));
+    // Track the window so pump_events can hide it on CloseRequested and resize
+    // its webviews on Resized (winit bypasses wry's WM_SIZE subclass proc).
+    let wid = window.winit_window_id();
+    self.state.windows.insert(wid, Arc::clone(&window.window));
+    self.state.webviews.insert(wid, window.webviews_shared());
 
     Ok(window)
   }
@@ -258,7 +270,9 @@ impl Application {
     #[cfg(target_os = "android")]
     let window = BrowserWindow::new(event_loop, options, true, Arc::new(Mutex::new(None)))?;
 
-    self.state.windows.insert(window.winit_window_id(), Arc::clone(&window.window));
+    let wid = window.winit_window_id();
+    self.state.windows.insert(wid, Arc::clone(&window.window));
+    self.state.webviews.insert(wid, window.webviews_shared());
 
     Ok(window)
   }
@@ -268,13 +282,11 @@ impl Application {
     #[cfg(not(target_os = "android"))]
     {
       if let Some(options) = menu_options {
-        let menu = create_menu_from_options(options)?;
+        let m = menu::create_menu_from_options(options)?;
         #[cfg(target_os = "macos")]
-        {
-          menu.init_for_nsapp();
-        }
+        m.init_for_nsapp();
         self.state.menu_event_receiver = Some(muda::MenuEvent::receiver().clone());
-        *self.global_menu.lock().unwrap() = Some(menu);
+        *self.global_menu.lock().unwrap() = Some(m);
       } else {
         *self.global_menu.lock().unwrap() = None;
         self.state.menu_event_receiver = None;
@@ -328,6 +340,27 @@ impl Application {
         return;
       }
 
+      // Winit's WM_SIZE handler returns ProcResult::Value(0) without calling
+      // DefSubclassProc, so wry's own resize subclass proc is never reached.
+      // We resize all webviews for this window manually here instead.
+      if let Event::WindowEvent {
+        window_id,
+        event: WindowEvent::Resized(new_size),
+      } = &event
+      {
+        if let Some(views) = state.webviews.get(window_id) {
+          // wry uses the standalone `dpi` crate; winit has its own dpi module.
+          // Convert manually to avoid type-mismatch errors.
+          let rect = wry::Rect {
+            position: ::dpi::PhysicalPosition::new(0_i32, 0_i32).into(),
+            size: ::dpi::PhysicalSize::new(new_size.width, new_size.height).into(),
+          };
+          for wv in views.borrow().iter() {
+            let _ = wv.set_bounds(rect);
+          }
+        }
+      }
+
       if let Event::WindowEvent {
         window_id,
         event: WindowEvent::CloseRequested,
@@ -364,139 +397,4 @@ impl Application {
     // Note: this is intentionally no-op in rust. The binding loader file patches this to call `pump_events()` in a `setInterval` loop.
     Ok(())
   }
-}
-
-#[napi]
-pub fn init_menu_system() -> Result<()> {
-  #[cfg(target_os = "macos")]
-  {
-    muda::Menu::new().init_for_nsapp();
-  }
-  Ok(())
-}
-
-#[cfg(not(target_os = "android"))]
-pub fn create_menu_from_options(options: MenuOptions) -> Result<Menu> {
-  let menu = Menu::new();
-
-  let app = Submenu::new("App", true);
-  app
-    .append_items(&[
-      &PredefinedMenuItem::about(None, None),
-      &PredefinedMenuItem::separator(),
-      &PredefinedMenuItem::hide(None),
-      &PredefinedMenuItem::hide_others(None),
-      &PredefinedMenuItem::show_all(None),
-      &PredefinedMenuItem::separator(),
-      &PredefinedMenuItem::quit(None),
-    ])
-    .ok();
-  menu.append(&app).ok();
-
-  for item in options.items {
-    add_menu_item_to_menu(&menu, item)?;
-  }
-
-  Ok(menu)
-}
-
-#[cfg(not(target_os = "android"))]
-fn add_menu_item_to_menu(menu: &Menu, item: MenuItemOptions) -> Result<()> {
-  if let Some(submenu_options) = item.submenu {
-    let submenu = Submenu::new(&item.label.unwrap_or_default(), true);
-    for sub_item in submenu_options.items {
-      add_menu_item_to_submenu(&submenu, sub_item)?;
-    }
-    menu.append(&submenu).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append submenu: {}", e),
-      )
-    })?;
-  } else if let Some(role) = &item.role {
-    let predefined = role_to_predefined(role)?;
-    menu.append(&predefined).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append predefined item: {}", e),
-      )
-    })?;
-  } else if item.id.is_some() || item.label.is_some() {
-    let menu_item = make_menu_item(&item)?;
-    menu.append(&menu_item).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append menu item: {}", e),
-      )
-    })?;
-  }
-  Ok(())
-}
-
-#[cfg(not(target_os = "android"))]
-fn add_menu_item_to_submenu(submenu: &Submenu, item: MenuItemOptions) -> Result<()> {
-  if let Some(nested_options) = item.submenu {
-    let nested = Submenu::new(&item.label.unwrap_or_default(), true);
-    for sub_item in nested_options.items {
-      add_menu_item_to_submenu(&nested, sub_item)?;
-    }
-    submenu.append(&nested).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append nested submenu: {}", e),
-      )
-    })?;
-  } else if let Some(role) = &item.role {
-    let predefined = role_to_predefined(role)?;
-    submenu.append(&predefined).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append predefined item to submenu: {}", e),
-      )
-    })?;
-  } else if item.id.is_some() || item.label.is_some() {
-    let menu_item = make_menu_item(&item)?;
-    submenu.append(&menu_item).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append menu item to submenu: {}", e),
-      )
-    })?;
-  }
-  Ok(())
-}
-
-#[cfg(not(target_os = "android"))]
-fn role_to_predefined(role: &str) -> Result<PredefinedMenuItem> {
-  Ok(match role {
-    "copy" => PredefinedMenuItem::copy(None),
-    "paste" => PredefinedMenuItem::paste(None),
-    "cut" => PredefinedMenuItem::cut(None),
-    "selectall" => PredefinedMenuItem::select_all(None),
-    "separator" => PredefinedMenuItem::separator(),
-    _ => {
-      return Err(napi::Error::new(
-        napi::Status::InvalidArg,
-        format!("Unknown menu role: {}", role),
-      ))
-    }
-  })
-}
-
-#[cfg(not(target_os = "android"))]
-fn make_menu_item(item: &MenuItemOptions) -> Result<MenuItem> {
-  Ok(MenuItem::with_id(
-    muda::MenuId(
-      item
-        .id
-        .clone()
-        .unwrap_or_else(|| item.label.clone().unwrap_or_else(|| "item".to_string())),
-    ),
-    &item.label.clone().unwrap_or_default(),
-    item.enabled.unwrap_or(true),
-    item
-      .accelerator
-      .as_ref()
-      .and_then(|acc| acc.parse::<Accelerator>().ok()),
-  ))
 }
