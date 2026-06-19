@@ -468,50 +468,60 @@ impl BrowserWindow {
     self.window.set_inner_size(LogicalSize::new(width, height));
   }
 
-  #[cfg(not(target_os = "android"))]
   #[napi]
   /// Opens a file select dialog
   pub fn open_file_dialog(&self, options: Option<FileDialogOptions>) -> Result<Vec<String>> {
-    let mut dialog = FileDialog::new();
+    #[cfg(target_os = "android")]
+    {
+      return Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "File dialogs are not supported on Android",
+      ));
+    }
+    
+    #[cfg(not(target_os = "android"))]
+    {
+      let mut dialog = FileDialog::new();
 
-    if let Some(opts) = options.as_ref() {
-      if let Some(title) = &opts.title {
-        dialog = dialog.set_title(title);
-      }
+      if let Some(opts) = options.as_ref() {
+        if let Some(title) = &opts.title {
+          dialog = dialog.set_title(title);
+        }
 
-      if let Some(path) = &opts.default_path {
-        dialog = dialog.set_directory(path);
-      }
+        if let Some(path) = &opts.default_path {
+          dialog = dialog.set_directory(path);
+        }
 
-      if let Some(filters) = &opts.filters {
-        for filter in filters {
-          dialog = dialog.add_filter(
-            &filter.name,
-            &filter.extensions,
-          );
+        if let Some(filters) = &opts.filters {
+          for filter in filters {
+            dialog = dialog.add_filter(
+              &filter.name,
+              &filter.extensions,
+            );
+          }
         }
       }
+
+      dialog = dialog.add_filter("All Files", &["*"]);
+
+      let files = if options
+        .as_ref()
+        .and_then(|o| o.multiple)
+        .unwrap_or(false)
+      {
+        dialog.pick_files()
+      } else {
+        dialog.pick_file().map(|f| vec![f])
+      };
+
+      Ok(
+        files
+          .unwrap_or_default()
+          .into_iter()
+          .map(|f| f.as_path().to_string_lossy().to_string())
+          .collect()
+      )
     }
-
-    dialog = dialog.add_filter("All Files", &["*"]);
-
-    let files = if options
-      .as_ref()
-      .and_then(|o| o.multiple)
-      .unwrap_or(false)
-    {
-      dialog.pick_files()
-    } else {
-      dialog.pick_file().map(|f| vec![f])
-    };
-
-    Ok(
-      files
-        .unwrap_or_default()
-        .into_iter()
-        .map(|f| f.as_path().to_string_lossy().to_string())
-        .collect()
-    )
   }
 
   #[napi]
