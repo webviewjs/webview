@@ -25,20 +25,20 @@ npm install @webviewjs/webview
 
 # Supported platforms
 
-| Platform                      | Supported |
-| ----------------------------- | --------- |
-| x86_64-pc-windows-msvc        | ✅        |
-| i686-pc-windows-msvc          | ✅        |
-| aarch64-pc-windows-msvc       | ✅        |
-| x86_64-apple-darwin           | ✅        |
-| aarch64-apple-darwin          | ✅        |
-| x86_64-unknown-linux-gnu      | ✅        |
-| i686-unknown-linux-gnu        | ✅        |
-| aarch64-unknown-linux-gnu     | ✅        |
-| armv7-unknown-linux-gnueabihf | ✅        |
-| aarch64-linux-android         | ✅        |
-| armv7-linux-androideabi       | ✅        |
-| x86_64-unknown-freebsd        | ✅        |
+| Platform                      | OS      | Arch  | Supported         |
+| ----------------------------- | ------- | ----- | ----------------- |
+| x86_64-pc-windows-msvc        | Windows | x64   | ✅                |
+| i686-pc-windows-msvc          | Windows | x86   | ✅                |
+| aarch64-pc-windows-msvc       | Windows | arm64 | ✅                |
+| x86_64-apple-darwin           | macOS   | x64   | ✅                |
+| aarch64-apple-darwin          | macOS   | arm64 | ✅                |
+| x86_64-unknown-linux-gnu      | Linux   | x64   | ✅                |
+| aarch64-unknown-linux-gnu     | Linux   | arm64 | ✅                |
+| armv7-unknown-linux-gnueabihf | Linux   | armv7 | ✅                |
+| i686-unknown-linux-gnu        | Linux   | x86   | ⚠️ (no CI)        |
+| aarch64-linux-android         | Android | arm64 | ⚠️ (experimental) |
+| armv7-linux-androideabi       | Android | armv7 | ⚠️ (experimental) |
+| x86_64-unknown-freebsd        | FreeBSD | x64   | ⚠️ (no CI)        |
 
 # Examples
 
@@ -105,10 +105,7 @@ Register a protocol before creating its webview:
 window.registerProtocol('app', async (request) => {
   const filePath = join(process.cwd(), 'dist', new URL(request.url).pathname);
   try {
-    return {
-      body: await readFile(filePath),
-      mimeType: 'text/html; charset=utf-8',
-    };
+    return { body: await readFile(filePath), mimeType: 'text/html; charset=utf-8' };
   } catch {
     return { statusCode: 404, body: Buffer.from('Not found'), mimeType: 'text/plain' };
   }
