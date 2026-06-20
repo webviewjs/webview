@@ -235,10 +235,13 @@ impl Application {
     // functional from the start.  Store it in global_menu so the ObjC delegate
     // is kept alive (it would be freed if the Menu were dropped here).
     // set_menu() will replace this with the user-supplied menu.
-    #[cfg(target_os = "macos")]
-    let initial_global_menu = Some(menu::make_default_macos_menu());
-    #[cfg(not(target_os = "macos"))]
-    let initial_global_menu: Option<Menu> = None;
+    #[cfg(not(target_os = "android"))]
+    let initial_global_menu: Option<Menu> = {
+      #[cfg(target_os = "macos")]
+      { Some(menu::make_default_macos_menu()) }
+      #[cfg(not(target_os = "macos"))]
+      { None }
+    };
 
     Ok(Self {
       event_loop: Some(event_loop),
