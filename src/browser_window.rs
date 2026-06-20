@@ -1,71 +1,65 @@
-use napi::{Either, Env, Result};
+#[cfg(not(target_os = "android"))]
+use muda::Menu;
+use napi::{bindgen_prelude::FunctionRef, Either, Env, Result};
 use napi_derive::*;
-use std::sync::{Arc, Mutex};
-use std::hash::{Hash, Hasher};
+use rfd::FileDialog;
+use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
-use tao::{
-  dpi::{LogicalPosition, PhysicalPosition, LogicalSize, PhysicalSize},
+use std::hash::{Hash, Hasher};
+use std::rc::Rc;
+use std::sync::Arc;
+use winit::{
+  dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
   event_loop::EventLoop,
-  window::{Fullscreen, ProgressBarState, Window, WindowBuilder, WindowId},
+  window::{
+    CursorIcon, Fullscreen, Icon, Window, WindowBuilder, WindowButtons, WindowId, WindowLevel,
+  },
 };
+
 #[cfg(not(target_os = "android"))]
 use rfd::FileDialog;
 #[cfg(not(target_os = "android"))]
 use muda::Menu;
 
-use crate::webview::{JsWebview, Theme, WebviewOptions};
-use crate::MenuOptions;
 #[cfg(not(target_os = "android"))]
-use crate::create_menu_from_options;
-
-// #[cfg(target_os = "windows")]
-// use tao::platform::windows::IconExtWindows;
+use crate::menu::{create_menu_from_options, init_menu_for_window};
+use crate::webview::{
+  CustomProtocolResponse, JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap,
+  Theme, WebviewOptions,
+};
+use crate::MenuOptions;
 
 #[napi]
 pub enum FullscreenType {
-  /// Exclusive fullscreen.
   Exclusive,
-  /// Borderless fullscreen.
   Borderless,
 }
 
 #[napi(object)]
 pub struct Dimensions {
-  /// The width of the size.
   pub width: u32,
-  /// The height of the size.
   pub height: u32,
 }
 
 #[napi(object)]
 pub struct Position {
-  /// The x position.
   pub x: i32,
-  /// The y position.
   pub y: i32,
 }
 
 #[napi(object, js_name = "VideoMode")]
 pub struct JsVideoMode {
-  /// The size of the video mode.
   pub size: Dimensions,
-  /// The bit depth of the video mode.
   pub bit_depth: u16,
-  /// The refresh rate of the video mode.
   pub refresh_rate: u16,
 }
 
 #[napi(object)]
 pub struct Monitor {
-  /// The name of the monitor.
   pub name: Option<String>,
-  /// The scale factor of the monitor.
   pub scale_factor: f64,
-  /// The size of the monitor.
   pub size: Dimensions,
-  /// The position of the monitor.
   pub position: Position,
-  /// The video modes of the monitor.
   pub video_modes: Vec<JsVideoMode>,
 }
 
@@ -73,86 +67,94 @@ pub struct Monitor {
 pub enum JsProgressBarState {
   None,
   Normal,
-  /// Treated as normal in linux and macos
   Indeterminate,
-  /// Treated as normal in linux
   Paused,
-  /// Treated as normal in linux
   Error,
 }
 
 #[napi(object)]
 pub struct JsProgressBar {
-  /// The progress state.
   pub state: Option<JsProgressBarState>,
-  /// The progress value.
   pub progress: Option<u32>,
+}
+
+/// Cursor shape passed to [`BrowserWindow::set_cursor`].
+#[napi]
+pub enum CursorType {
+  Default,
+  Crosshair,
+  Hand,
+  Arrow,
+  Move,
+  Text,
+  Wait,
+  Help,
+  Progress,
+  NotAllowed,
+  ContextMenu,
+  Cell,
+  VerticalText,
+  Alias,
+  Copy,
+  NoDrop,
+  Grab,
+  Grabbing,
+  ZoomIn,
+  ZoomOut,
+  ResizeEast,
+  ResizeNorth,
+  ResizeNorthEast,
+  ResizeNorthWest,
+  ResizeSouth,
+  ResizeSouthEast,
+  ResizeSouthWest,
+  ResizeWest,
+  ResizeEastWest,
+  ResizeNorthSouth,
+  ResizeNorthEastSouthWest,
+  ResizeNorthWestSouthEast,
+  ResizeColumn,
+  ResizeRow,
+  AllScroll,
 }
 
 #[napi(object)]
 pub struct BrowserWindowOptions {
-  /// The window menu
   pub menu: Option<MenuOptions>,
-  /// Whether to show the menu bar
   pub show_menu: Option<bool>,
-  /// Whether the window is resizable. Default is `true`.
   pub resizable: Option<bool>,
-  /// The window title.
   pub title: Option<String>,
-  /// Whether to use logical sizing (DPI-aware) instead of physical sizing for width, height, x, and y.
   pub logical: Option<bool>,
-  /// The width of the window.
   pub width: Option<f64>,
-  /// The height of the window.
   pub height: Option<f64>,
-  /// The x position of the window.
   pub x: Option<f64>,
-  /// The y position of the window.
   pub y: Option<f64>,
-  /// Whether or not the window should be created with content protection mode.
   pub content_protection: Option<bool>,
-  /// Whether or not the window is always on top.
   pub always_on_top: Option<bool>,
-  /// Whether or not the window is always on bottom.
   pub always_on_bottom: Option<bool>,
-  /// Whether or not the window is visible.
   pub visible: Option<bool>,
-  /// Whether or not the window decorations are enabled.
   pub decorations: Option<bool>,
-  /// Whether or not the window is visible on all workspaces
   pub visible_on_all_workspaces: Option<bool>,
-  /// Whether or not the window is maximized.
   pub maximized: Option<bool>,
-  /// Whether or not the window is maximizable
   pub maximizable: Option<bool>,
-  /// Whether or not the window is minimizable
   pub minimizable: Option<bool>,
-  /// Whether or not the window is focused
   pub focused: Option<bool>,
-  /// Whether or not the window is transparent
   pub transparent: Option<bool>,
-  /// The fullscreen state of the window.
   pub fullscreen: Option<FullscreenType>,
 }
 
 // This whole thing isnt supported/needed on android but we can just exclude the parts that arent supported from the build so it compiles.
 #[napi(object)]
 pub struct FileDialogOptions {
-  /// Whether to allow selecting multiple files.
   pub multiple: Option<bool>,
-  /// The title of the file dialog.
   pub title: Option<String>,
-  /// The initial directory of the file dialog.
   pub default_path: Option<String>,
-  /// The file types that can be selected in the file dialog.
   pub filters: Option<Vec<FileFilter>>,
 }
 
 #[napi(object)]
 pub struct FileFilter {
-  /// The name of the file filter.
   pub name: String,
-  /// The extensions of the file filter.
   pub extensions: Vec<String>,
 }
 
@@ -187,11 +189,26 @@ impl Default for BrowserWindowOptions {
 #[napi]
 pub struct BrowserWindow {
   is_child_window: bool,
-  window: Window,
+  pub(crate) window: Arc<Window>,
   window_id: u32,
   #[cfg(not(target_os = "android"))]
   window_menu: Option<Menu>,
+  /// Shared with AppState so resize events can trigger WebView2 resize.
+  /// wry's own WM_SIZE subclass is bypassed by winit, so we do it manually.
+  webviews: Rc<RefCell<Vec<Rc<wry::WebView>>>>,
+  /// Async protocol handlers: (scheme, js_handler_ref, responders, next_id).
+  /// The closure is NOT required to be Send (wry guarantees main-thread call),
+  /// so we use Rc<RefCell<>> instead of Arc<Mutex<>>.
+  pending_protocols: Vec<PendingProtocol>,
+  protocol_next_id: ProtocolCounterRef,
 }
+
+type PendingProtocol = (
+  String,
+  ProtocolHandlerRef,
+  ProtocolPendingMap,
+  ProtocolCounterRef,
+);
 
 #[napi]
 impl BrowserWindow {
@@ -199,169 +216,126 @@ impl BrowserWindow {
     event_loop: &EventLoop<()>,
     options: Option<BrowserWindowOptions>,
     child: bool,
-    #[cfg(not(target_os = "android"))]
-    global_menu: Arc<Mutex<Option<Menu>>>,
-    #[cfg(target_os = "android")]
-    _global_menu: Arc<Mutex<Option<()>>>,
+    #[cfg(not(target_os = "android"))] global_menu: Rc<RefCell<Option<Menu>>>,
+    #[cfg(target_os = "android")] _global_menu: Rc<RefCell<Option<()>>>,
   ) -> Result<Self> {
     let options = options.unwrap_or_default();
 
-    let mut window = WindowBuilder::new();
-    
+    let mut builder = WindowBuilder::new();
+
     if let Some(resizable) = options.resizable {
-      window = window.with_resizable(resizable);
+      builder = builder.with_resizable(resizable);
     }
 
     if let Some(width) = options.width {
       if let Some(logical) = options.logical {
         if logical {
-          window = window.with_inner_size(LogicalSize::new(width, options.height.unwrap()));
+          builder = builder.with_inner_size(LogicalSize::new(width, options.height.unwrap()));
         } else {
-          window = window.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+          builder = builder.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
         }
       } else {
-        window = window.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+        builder = builder.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
       }
     }
 
     if let Some(x) = options.x {
       if let Some(logical) = options.logical {
         if logical {
-          window = window.with_position(LogicalPosition::new(x, options.y.unwrap()));
+          builder = builder.with_position(LogicalPosition::new(x, options.y.unwrap()));
         } else {
-          window = window.with_position(PhysicalPosition::new(x, options.y.unwrap()));
+          builder = builder.with_position(PhysicalPosition::new(x, options.y.unwrap()));
         }
       } else {
-        window = window.with_position(PhysicalPosition::new(x, options.y.unwrap()));
+        builder = builder.with_position(PhysicalPosition::new(x, options.y.unwrap()));
       }
     }
 
     if let Some(visible) = options.visible {
-      window = window.with_visible(visible);
+      builder = builder.with_visible(visible);
     }
 
     if let Some(decorations) = options.decorations {
-      window = window.with_decorations(decorations);
-    }
-
-    if let Some(always_on_top) = options.always_on_top {
-      window = window.with_always_on_top(always_on_top);
-    }
-
-    if let Some(always_on_bottom) = options.always_on_bottom {
-      window = window.with_always_on_bottom(always_on_bottom);
-    }
-
-    if let Some(visible_on_all_workspaces) = options.visible_on_all_workspaces {
-      window = window.with_visible_on_all_workspaces(visible_on_all_workspaces);
-    }
-
-    if let Some(maximized) = options.maximized {
-      window = window.with_maximized(maximized);
-    }
-
-    if let Some(maximizable) = options.maximizable {
-      window = window.with_maximizable(maximizable);
-    }
-
-    if let Some(minimizable) = options.minimizable {
-      window = window.with_minimizable(minimizable);
-    }
-
-    if let Some(focused) = options.focused {
-      window = window.with_focused(focused);
+      builder = builder.with_decorations(decorations);
     }
 
     if let Some(transparent) = options.transparent {
-      window = window.with_transparent(transparent);
-      #[cfg(target_os = "windows")]
-      {
-        use tao::platform::windows::WindowBuilderExtWindows;
-        window = window.with_undecorated_shadow(false);
+      builder = builder.with_transparent(transparent);
+    }
+
+    if let Some(maximized) = options.maximized {
+      builder = builder.with_maximized(maximized);
+    }
+
+    if let Some(focused) = options.focused {
+      builder = builder.with_active(focused);
+    }
+
+    if let Some(content_protection) = options.content_protection {
+      builder = builder.with_content_protected(content_protection);
+    }
+
+    // Window level: always_on_top takes priority over always_on_bottom
+    let level = match (options.always_on_top, options.always_on_bottom) {
+      (Some(true), _) => Some(WindowLevel::AlwaysOnTop),
+      (_, Some(true)) => Some(WindowLevel::AlwaysOnBottom),
+      _ => None,
+    };
+    if let Some(level) = level {
+      builder = builder.with_window_level(level);
+    }
+
+    // Minimizable / maximizable via enabled buttons
+    {
+      let mut buttons = WindowButtons::all();
+      if options.maximizable == Some(false) {
+        buttons.remove(WindowButtons::MAXIMIZE);
       }
+      if options.minimizable == Some(false) {
+        buttons.remove(WindowButtons::MINIMIZE);
+      }
+      builder = builder.with_enabled_buttons(buttons);
+    }
+
+    // visible_on_all_workspaces – macOS only
+    #[cfg(target_os = "macos")]
+    if options.visible_on_all_workspaces == Some(true) {
+      use winit::platform::macos::WindowBuilderExtMacOS;
+      builder = builder.with_visible_on_all_spaces(true);
     }
 
     if let Some(fullscreen) = options.fullscreen {
       let fs = match fullscreen {
-        // Some(FullscreenType::Exclusive) => Some(Fullscreen::Exclusive()),
         FullscreenType::Borderless => Some(Fullscreen::Borderless(None)),
-        _ => None,
+        FullscreenType::Exclusive => Some(Fullscreen::Borderless(None)), // best-effort
       };
-
-      window = window.with_fullscreen(fs);
+      builder = builder.with_fullscreen(fs);
     }
 
     if let Some(title) = options.title {
-      window = window.with_title(&title);
+      builder = builder.with_title(&title);
     }
 
-    let window = window.build(event_loop).map_err(|e| {
+    let window = builder.build(&**event_loop).map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to create window: {}", e),
       )
     })?;
 
-    // Generate a window ID by hashing the WindowId
     let mut hasher = DefaultHasher::new();
     window.id().hash(&mut hasher);
     let window_id = hasher.finish() as u32;
 
-    // Handle menu for this window
+    // Menu init
     #[cfg(not(target_os = "android"))]
     let window_menu = if let Some(menu_options) = options.menu {
-      // Create window-specific menu
       let menu = create_menu_from_options(menu_options)?;
-      #[cfg(target_os = "windows")]
-      {
-        use tao::platform::windows::WindowExtWindows;
-        unsafe {
-          menu.init_for_hwnd(window.hwnd() as isize).map_err(|e| {
-            napi::Error::new(
-              napi::Status::GenericFailure,
-              format!("Failed to set window menu: {}", e),
-            )
-          })?
-        };
-      }
-      #[cfg(target_os = "linux")]
-      {
-        use tao::platform::unix::WindowExtUnix;
-        menu.init_for_gtk_window(window.gtk_window(), window.default_vbox()).map_err(|e| {
-          napi::Error::new(
-            napi::Status::GenericFailure,
-            format!("Failed to set window menu: {}", e),
-          )
-        })?;
-      }
+      init_menu_for_window(&menu, &window)?;
       Some(menu)
     } else if options.show_menu.unwrap_or(false) {
-      // Use global menu if available and show_menu is true
-      if let Ok(global_menu) = global_menu.lock() {
-        if let Some(_menu) = global_menu.as_ref() {
-          #[cfg(target_os = "windows")]
-          {
-            use tao::platform::windows::WindowExtWindows;
-            unsafe {
-              _menu.init_for_hwnd(window.hwnd() as isize).map_err(|e| {
-                napi::Error::new(
-                  napi::Status::GenericFailure,
-                  format!("Failed to set global menu: {}", e),
-                )
-              })?
-            };
-          }
-          #[cfg(target_os = "linux")]
-          {
-            use tao::platform::unix::WindowExtUnix;
-            _menu.init_for_gtk_window(window.gtk_window(), window.default_vbox()).map_err(|e| {
-              napi::Error::new(
-                napi::Status::GenericFailure,
-                format!("Failed to set global menu: {}", e),
-              )
-            })?;
-          }
-        }
+      if let Some(menu) = global_menu.borrow().as_ref() {
+        init_menu_for_window(menu, &window)?;
       }
       None
     } else {
@@ -369,113 +343,171 @@ impl BrowserWindow {
     };
 
     Ok(Self {
-      window,
+      window: Arc::new(window),
       is_child_window: child,
       window_id,
       #[cfg(not(target_os = "android"))]
       window_menu,
+      webviews: Rc::new(RefCell::new(Vec::new())),
+      pending_protocols: Vec::new(), // populated by _registerProtocol
+      protocol_next_id: Rc::new(RefCell::new(0)),
     })
   }
 
+  /// Return a clone of the shared webview list. AppState holds this Rc so it
+  /// can resize all webviews when a Resized event arrives for this window.
+  pub(crate) fn webviews_shared(&self) -> Rc<RefCell<Vec<Rc<wry::WebView>>>> {
+    Rc::clone(&self.webviews)
+  }
+
+  /// Low-level protocol registration used by the JS `registerProtocol` wrapper.
+  /// `handler` is called with a single JSON string argument:
+  /// `{ id, url, method, headers, body }` where `body` is a number[] or null.
+  /// Call `_completeProtocol(id, response)` when the response is ready.
+  #[napi(js_name = "_registerProtocol")]
+  pub fn register_protocol_raw(&mut self, name: String, handler: FunctionRef<String, ()>) {
+    self.pending_protocols.push((
+      name,
+      Rc::new(RefCell::new(Some(handler))),
+      Rc::new(RefCell::new(std::collections::HashMap::new())),
+      Rc::clone(&self.protocol_next_id),
+    ));
+  }
+
+  /// Complete a pending async protocol request previously started by the
+  /// `_registerProtocol` handler.  `id` matches the value in the JSON payload.
+  #[napi(js_name = "_completeProtocol")]
+  pub fn complete_protocol(&self, id: f64, response: CustomProtocolResponse) -> Result<()> {
+    let id = id as u64;
+    // Find the right responder map across all registered protocols
+    for (_, _, responders, _) in &self.pending_protocols {
+      let mut map = responders.borrow_mut();
+      if let Some(responder) = map.remove(&id) {
+        let http = build_wry_response(response)?;
+        responder.respond(http);
+        return Ok(());
+      }
+    }
+    Ok(()) // id already completed or unknown — silently ignore
+  }
+
   #[napi]
-  /// Creates a webview on this window.
   pub fn create_webview(&mut self, env: Env, options: Option<WebviewOptions>) -> Result<JsWebview> {
-    let webview = JsWebview::create(&env, &self.window, options.unwrap_or_default())?;
+    let webview = JsWebview::create(
+      &env,
+      &self.window,
+      options.unwrap_or_default(),
+      &self.pending_protocols,
+    )?;
+    // Keep an Rc clone so the WebView survives JS GC of the returned handle,
+    // and so AppState can resize it on WM_SIZE.
+    self
+      .webviews
+      .borrow_mut()
+      .push(Rc::clone(&webview.webview_inner));
     Ok(webview)
   }
 
   #[napi(getter)]
-  /// Whether or not the window is a child window.
   pub fn is_child(&self) -> bool {
     self.is_child_window
   }
 
   #[napi]
-  /// Whether the window is focused.
   pub fn is_focused(&self) -> bool {
-    self.window.is_focused()
+    self.window.has_focus()
   }
 
   #[napi]
-  /// Whether the window is visible.
   pub fn is_visible(&self) -> bool {
-    self.window.is_visible()
+    self.window.is_visible().unwrap_or(false)
   }
 
   #[napi]
-  /// Whether the window is decorated.
   pub fn is_decorated(&self) -> bool {
     self.window.is_decorated()
   }
 
   #[napi]
-  /// Whether the window is closable.
   pub fn is_closable(&self) -> bool {
-    self.window.is_closable()
+    self.window.enabled_buttons().contains(WindowButtons::CLOSE)
   }
 
   #[napi]
-  /// Whether the window is maximizable.
   pub fn is_maximizable(&self) -> bool {
-    self.window.is_maximizable()
+    self
+      .window
+      .enabled_buttons()
+      .contains(WindowButtons::MAXIMIZE)
   }
 
   #[napi]
-  /// Whether the window is minimizable.
   pub fn is_minimizable(&self) -> bool {
-    self.window.is_minimizable()
+    self
+      .window
+      .enabled_buttons()
+      .contains(WindowButtons::MINIMIZE)
   }
 
   #[napi]
-  /// Whether the window is maximized.
   pub fn is_maximized(&self) -> bool {
     self.window.is_maximized()
   }
 
   #[napi]
-  /// Whether the window is minimized.
   pub fn is_minimized(&self) -> bool {
-    self.window.is_minimized()
+    self.window.is_minimized().unwrap_or(false)
   }
 
   #[napi]
-  /// Whether the window is resizable.
   pub fn is_resizable(&self) -> bool {
     self.window.is_resizable()
   }
 
   #[napi]
-  /// Sets the window title.
   pub fn set_title(&self, title: String) {
     self.window.set_title(&title);
   }
 
   #[napi(getter)]
-  /// Sets the window title.
   pub fn get_title(&self) -> String {
     self.window.title()
   }
 
   #[napi]
-  /// Sets closable.
   pub fn set_closable(&self, closable: bool) {
-    self.window.set_closable(closable);
+    let mut buttons = self.window.enabled_buttons();
+    if closable {
+      buttons.insert(WindowButtons::CLOSE);
+    } else {
+      buttons.remove(WindowButtons::CLOSE);
+    }
+    self.window.set_enabled_buttons(buttons);
   }
 
   #[napi]
-  /// Sets maximizable.
   pub fn set_maximizable(&self, maximizable: bool) {
-    self.window.set_maximizable(maximizable);
+    let mut buttons = self.window.enabled_buttons();
+    if maximizable {
+      buttons.insert(WindowButtons::MAXIMIZE);
+    } else {
+      buttons.remove(WindowButtons::MAXIMIZE);
+    }
+    self.window.set_enabled_buttons(buttons);
   }
 
   #[napi]
-  /// Sets minimizable.
   pub fn set_minimizable(&self, minimizable: bool) {
-    self.window.set_minimizable(minimizable);
+    let mut buttons = self.window.enabled_buttons();
+    if minimizable {
+      buttons.insert(WindowButtons::MINIMIZE);
+    } else {
+      buttons.remove(WindowButtons::MINIMIZE);
+    }
+    self.window.set_enabled_buttons(buttons);
   }
 
   #[napi]
-  /// Sets resizable.
   pub fn set_resizable(&self, resizable: bool) {
     self.window.set_resizable(resizable);
   }
@@ -582,10 +614,7 @@ impl BrowserWindow {
 
       dialog = dialog.add_filter("All Files", &["*"]);
 
-      let files = if options
-        .as_ref()
-        .and_then(|o| o.multiple)
-        .unwrap_or(false)
+      let files = if options.as_ref().and_then(|o| o.multiple).unwrap_or(false)
       {
         dialog.pick_files()
       } else {
@@ -603,49 +632,47 @@ impl BrowserWindow {
   }
 
   #[napi]
-  /// Gets the window ID.
   pub fn id(&self) -> u32 {
     self.window_id
   }
 
   #[napi]
-  /// Gets whether the window has a menu.
   pub fn has_menu(&self) -> bool {
     #[cfg(not(target_os = "android"))]
-    { self.window_menu.is_some() }
+    {
+      self.window_menu.is_some()
+    }
     #[cfg(target_os = "android")]
-    { false }
+    {
+      false
+    }
   }
 
-  /// Gets the tao window ID (for internal use).
-  pub fn tao_window_id(&self) -> WindowId {
+  /// Returns the underlying winit WindowId (for internal tracking).
+  pub fn winit_window_id(&self) -> WindowId {
     self.window.id()
   }
 
   #[napi(getter)]
-  /// Gets the window theme.
   pub fn get_theme(&self) -> Theme {
     match self.window.theme() {
-      tao::window::Theme::Light => Theme::Light,
-      tao::window::Theme::Dark => Theme::Dark,
+      Some(winit::window::Theme::Light) => Theme::Light,
+      Some(winit::window::Theme::Dark) => Theme::Dark,
       _ => Theme::System,
     }
   }
 
   #[napi]
-  /// Sets the window theme.
   pub fn set_theme(&self, theme: Theme) {
-    let theme = match theme {
-      Theme::Light => Some(tao::window::Theme::Light),
-      Theme::Dark => Some(tao::window::Theme::Dark),
+    let t = match theme {
+      Theme::Light => Some(winit::window::Theme::Light),
+      Theme::Dark => Some(winit::window::Theme::Dark),
       _ => None,
     };
-
-    self.window.set_theme(theme);
+    self.window.set_theme(t);
   }
 
   #[napi]
-  /// Sets the window icon.
   #[allow(unused_variables)]
   pub fn set_window_icon(
     &self,
@@ -653,273 +680,412 @@ impl BrowserWindow {
     width: u32,
     height: u32,
   ) -> Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-      use tao::platform::windows::IconExtWindows;
-      use tao::window::Icon;
+    let rgba = match icon {
+      Either::A(bytes) => bytes,
+      Either::B(_path) => {
+        return Err(napi::Error::new(
+          napi::Status::InvalidArg,
+          "Path-based icons are not supported; provide RGBA bytes instead",
+        ));
+      }
+    };
 
-      let ico = match icon {
-        Either::A(bytes) => Icon::from_rgba(bytes, width, height),
-        Either::B(path) => Icon::from_path(&path, PhysicalSize::new(width, height).into()),
-      };
+    let ico = Icon::from_rgba(rgba, width, height).map_err(|e| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to create icon: {}", e),
+      )
+    })?;
 
-      let parsed = ico.map_err(|e| {
-        napi::Error::new(
-          napi::Status::GenericFailure,
-          format!("Failed to set window icon: {}", e),
-        )
-      })?;
-
-      self.window.set_window_icon(Some(parsed));
-    }
-
+    self.window.set_window_icon(Some(ico));
     Ok(())
   }
 
   #[napi]
-  /// Removes the window icon.
   pub fn remove_window_icon(&self) {
     self.window.set_window_icon(None);
   }
 
   #[napi]
-  /// Modifies the window's visibility.
-  /// If `false`, this will hide all the window. If `true`, this will show the window.
   pub fn set_visible(&self, visible: bool) {
     self.window.set_visible(visible);
   }
 
+  /// No-op: winit does not expose a progress bar API.
   #[napi]
-  /// Modifies the window's progress bar.
-  pub fn set_progress_bar(&self, state: JsProgressBar) {
-    let progress_state = match state.state {
-      Some(JsProgressBarState::Normal) => Some(tao::window::ProgressState::Normal),
-      Some(JsProgressBarState::Indeterminate) => Some(tao::window::ProgressState::Indeterminate),
-      Some(JsProgressBarState::Paused) => Some(tao::window::ProgressState::Paused),
-      Some(JsProgressBarState::Error) => Some(tao::window::ProgressState::Error),
-      _ => None,
-    };
-
-    let progress_value = state.progress.map(|value| value as u64);
-
-    let progress = ProgressBarState {
-      progress: progress_value,
-      state: progress_state,
-      desktop_filename: None,
-    };
-
-    self.window.set_progress_bar(progress);
-  }
+  pub fn set_progress_bar(&self, _state: JsProgressBar) {}
 
   #[napi]
-  /// Maximizes the window.
   pub fn set_maximized(&self, value: bool) {
     self.window.set_maximized(value);
   }
 
   #[napi]
-  /// Minimizes the window.
   pub fn set_minimized(&self, value: bool) {
     self.window.set_minimized(value);
   }
 
   #[napi]
-  /// Bring the window to front and focus.
   pub fn focus(&self) {
-    self.window.set_focus();
+    self.window.focus_window();
   }
 
   #[napi]
-  /// Get available monitors.
   pub fn get_available_monitors(&self) -> Vec<Monitor> {
     self
       .window
       .available_monitors()
-      .map(|m| Monitor {
-        name: m.name(),
-        scale_factor: m.scale_factor(),
-        size: Dimensions {
-          width: m.size().width,
-          height: m.size().height,
-        },
-        position: Position {
-          x: m.position().x,
-          y: m.position().y,
-        },
-        video_modes: m
-          .video_modes()
-          .map(|v| JsVideoMode {
-            size: Dimensions {
-              width: v.size().width,
-              height: v.size().height,
-            },
-            bit_depth: v.bit_depth(),
-            refresh_rate: v.refresh_rate(),
-          })
-          .collect(),
-      })
+      .map(monitor_to_js)
       .collect()
   }
 
   #[napi]
-  /// Get the current monitor.
   pub fn get_current_monitor(&self) -> Option<Monitor> {
-    self.window.current_monitor().map(|monitor| Monitor {
-      name: monitor.name(),
-      scale_factor: monitor.scale_factor(),
-      size: Dimensions {
-        width: monitor.size().width,
-        height: monitor.size().height,
-      },
-      position: Position {
-        x: monitor.position().x,
-        y: monitor.position().y,
-      },
-      video_modes: monitor
-        .video_modes()
-        .map(|v| JsVideoMode {
-          size: Dimensions {
-            width: v.size().width,
-            height: v.size().height,
-          },
-          bit_depth: v.bit_depth(),
-          refresh_rate: v.refresh_rate(),
-        })
-        .collect(),
-    })
+    self.window.current_monitor().map(monitor_to_js)
   }
 
   #[napi]
-  /// Get the primary monitor.
   pub fn get_primary_monitor(&self) -> Option<Monitor> {
-    self.window.primary_monitor().map(|monitor| Monitor {
-      name: monitor.name(),
-      scale_factor: monitor.scale_factor(),
-      size: Dimensions {
-        width: monitor.size().width,
-        height: monitor.size().height,
-      },
-      position: Position {
-        x: monitor.position().x,
-        y: monitor.position().y,
-      },
-      video_modes: monitor
-        .video_modes()
-        .map(|v| JsVideoMode {
-          size: Dimensions {
-            width: v.size().width,
-            height: v.size().height,
-          },
-          bit_depth: v.bit_depth(),
-          refresh_rate: v.refresh_rate(),
-        })
-        .collect(),
-    })
+    self.window.primary_monitor().map(monitor_to_js)
+  }
+
+  /// Not available in winit; always returns `None`.
+  #[napi]
+  pub fn get_monitor_from_point(&self, _x: f64, _y: f64) -> Option<Monitor> {
+    None
   }
 
   #[napi]
-  /// Get the monitor from the given point.
-  pub fn get_monitor_from_point(&self, x: f64, y: f64) -> Option<Monitor> {
-    self.window.monitor_from_point(x, y).map(|monitor| Monitor {
-      name: monitor.name(),
-      scale_factor: monitor.scale_factor(),
-      size: Dimensions {
-        width: monitor.size().width,
-        height: monitor.size().height,
-      },
-      position: Position {
-        x: monitor.position().x,
-        y: monitor.position().y,
-      },
-      video_modes: monitor
-        .video_modes()
-        .map(|v| JsVideoMode {
-          size: Dimensions {
-            width: v.size().width,
-            height: v.size().height,
-          },
-          bit_depth: v.bit_depth(),
-          refresh_rate: v.refresh_rate(),
-        })
-        .collect(),
-    })
-  }
-
-  #[napi]
-  /// Prevents the window contents from being captured by other apps.
   pub fn set_content_protection(&self, enabled: bool) {
-    self.window.set_content_protection(enabled);
+    self.window.set_content_protected(enabled);
   }
 
   #[napi]
-  /// Sets the window always on top.
   pub fn set_always_on_top(&self, enabled: bool) {
-    self.window.set_always_on_top(enabled);
+    self.window.set_window_level(if enabled {
+      WindowLevel::AlwaysOnTop
+    } else {
+      WindowLevel::Normal
+    });
   }
 
   #[napi]
-  /// Sets always on bottom.
   pub fn set_always_on_bottom(&self, enabled: bool) {
-    self.window.set_always_on_bottom(enabled);
+    self.window.set_window_level(if enabled {
+      WindowLevel::AlwaysOnBottom
+    } else {
+      WindowLevel::Normal
+    });
   }
 
   #[napi]
-  /// Turn window decorations on or off.
   pub fn set_decorations(&self, enabled: bool) {
     self.window.set_decorations(enabled);
   }
 
   #[napi(getter)]
-  /// Gets the window's current fullscreen state.
   pub fn get_fullscreen(&self) -> Option<FullscreenType> {
     match self.window.fullscreen() {
       None => None,
-      Some(Fullscreen::Borderless(None)) => Some(FullscreenType::Borderless),
-      _ => Some(FullscreenType::Exclusive),
+      Some(Fullscreen::Borderless(_)) => Some(FullscreenType::Borderless),
+      Some(Fullscreen::Exclusive(_)) => Some(FullscreenType::Exclusive),
     }
   }
 
   #[napi]
-  /// Sets the window to fullscreen or back.
   pub fn set_fullscreen(&self, fullscreen_type: Option<FullscreenType>) {
-    let monitor = self.window.current_monitor();
-
-    if monitor.is_none() {
-      return;
-    };
-
-    let video_mode = monitor.unwrap().video_modes().next();
-
-    if video_mode.is_none() {
-      return;
-    };
-
     let fs = match fullscreen_type {
-      Some(FullscreenType::Exclusive) => Some(Fullscreen::Exclusive(video_mode.unwrap())),
+      Some(FullscreenType::Exclusive) => {
+        // grab first available video mode for the current monitor
+        self
+          .window
+          .current_monitor()
+          .and_then(|m| m.video_modes().next())
+          .map(Fullscreen::Exclusive)
+      }
       Some(FullscreenType::Borderless) => Some(Fullscreen::Borderless(None)),
-      _ => None,
+      None => None,
     };
-
     self.window.set_fullscreen(fs);
   }
 
   #[napi]
-  /// Closes the window by hiding it. Note: This hides the window rather than closing it completely,
-  /// as tao requires the event loop to handle window closing. Use this when you want to
-  /// close a specific window (like a login window) and potentially reopen it later.
   pub fn close(&self) {
     self.window.set_visible(false);
   }
 
   #[napi]
-  /// Hides the window without destroying it.
   pub fn hide(&self) {
     self.window.set_visible(false);
   }
 
   #[napi]
-  /// Shows the window if it was hidden.
   pub fn show(&self) {
     self.window.set_visible(true);
+  }
+
+  // ── Position ────────────────────────────────────────────────────────────────
+
+  /// Returns the window's outer top-left position in physical pixels, or
+  /// `null` if the platform does not expose it.
+  #[napi]
+  pub fn get_position(&self) -> Option<Position> {
+    self
+      .window
+      .outer_position()
+      .ok()
+      .map(|p| Position { x: p.x, y: p.y })
+  }
+
+  /// Move the window so its outer top-left corner is at (`x`, `y`) in
+  /// physical pixels.
+  #[napi]
+  pub fn set_position(&self, x: i32, y: i32) {
+    self.window.set_outer_position(PhysicalPosition::new(x, y));
+  }
+
+  /// Center the window on its current monitor.  Does nothing if the current
+  /// monitor cannot be determined.
+  #[napi]
+  pub fn center(&self) {
+    if let Some(monitor) = self.window.current_monitor() {
+      let mpos = monitor.position();
+      let msize = monitor.size();
+      let wsize = self.window.outer_size();
+      let x = mpos.x + (msize.width as i32 - wsize.width as i32) / 2;
+      let y = mpos.y + (msize.height as i32 - wsize.height as i32) / 2;
+      self.window.set_outer_position(PhysicalPosition::new(x, y));
+    }
+  }
+
+  // ── Size queries & constraints ───────────────────────────────────────────────
+
+  /// Inner (content-area) size in physical pixels.
+  #[napi]
+  pub fn get_size(&self) -> Dimensions {
+    let s = self.window.inner_size();
+    Dimensions {
+      width: s.width,
+      height: s.height,
+    }
+  }
+
+  /// Outer (including decorations) size in physical pixels.
+  #[napi]
+  pub fn get_outer_size(&self) -> Dimensions {
+    let s = self.window.outer_size();
+    Dimensions {
+      width: s.width,
+      height: s.height,
+    }
+  }
+
+  /// Set minimum inner size.  Pass `null` / `undefined` for both to remove the
+  /// constraint.
+  #[napi]
+  pub fn set_min_size(&self, width: Option<f64>, height: Option<f64>) {
+    let size: Option<winit::dpi::Size> = match (width, height) {
+      (Some(w), Some(h)) => Some(LogicalSize::new(w, h).into()),
+      _ => None,
+    };
+    self.window.set_min_inner_size(size);
+  }
+
+  /// Set maximum inner size.  Pass `null` / `undefined` for both to remove the
+  /// constraint.
+  #[napi]
+  pub fn set_max_size(&self, width: Option<f64>, height: Option<f64>) {
+    let size: Option<winit::dpi::Size> = match (width, height) {
+      (Some(w), Some(h)) => Some(LogicalSize::new(w, h).into()),
+      _ => None,
+    };
+    self.window.set_max_inner_size(size);
+  }
+
+  // ── DPI ─────────────────────────────────────────────────────────────────────
+
+  /// Device-pixel ratio for the monitor the window is currently on.
+  #[napi]
+  pub fn scale_factor(&self) -> f64 {
+    self.window.scale_factor()
+  }
+
+  // ── Cursor ──────────────────────────────────────────────────────────────────
+
+  #[napi]
+  pub fn set_cursor(&self, cursor: CursorType) {
+    self.window.set_cursor_icon(cursor.into());
+  }
+
+  #[napi]
+  pub fn set_cursor_visible(&self, visible: bool) {
+    self.window.set_cursor_visible(visible);
+  }
+
+  /// Move the OS cursor to (`x`, `y`) in logical pixels relative to the
+  /// window's inner top-left corner.
+  #[napi]
+  pub fn set_cursor_position(&self, x: f64, y: f64) -> Result<()> {
+    self
+      .window
+      .set_cursor_position(LogicalPosition::new(x, y))
+      .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
+  }
+
+  /// When `true` the window ignores mouse input (click-through). Supported on
+  /// Windows and macOS; a no-op on other platforms.
+  #[napi]
+  pub fn set_ignore_cursor_events(&self, ignore: bool) -> Result<()> {
+    self
+      .window
+      .set_cursor_hittest(!ignore)
+      .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
+  }
+
+  // ── Taskbar ─────────────────────────────────────────────────────────────────
+
+  /// Hide/show the window in the system taskbar. Supported on Windows only;
+  /// a no-op on other platforms.
+  #[napi]
+  pub fn set_skip_taskbar(&self, skip: bool) {
+    #[cfg(target_os = "windows")]
+    {
+      use winit::platform::windows::WindowExtWindows;
+      self.window.set_skip_taskbar(skip);
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = skip;
+  }
+
+  // ── Misc ─────────────────────────────────────────────────────────────────────
+
+  #[napi]
+  pub fn request_redraw(&self) {
+    self.window.request_redraw();
+  }
+}
+
+// ── CursorType → CursorIcon ──────────────────────────────────────────────────
+
+impl From<CursorType> for CursorIcon {
+  fn from(c: CursorType) -> Self {
+    match c {
+      CursorType::Default => CursorIcon::Default,
+      CursorType::Crosshair => CursorIcon::Crosshair,
+      CursorType::Hand => CursorIcon::Pointer,
+      CursorType::Arrow => CursorIcon::Default,
+      CursorType::Move => CursorIcon::Move,
+      CursorType::Text => CursorIcon::Text,
+      CursorType::Wait => CursorIcon::Wait,
+      CursorType::Help => CursorIcon::Help,
+      CursorType::Progress => CursorIcon::Progress,
+      CursorType::NotAllowed => CursorIcon::NotAllowed,
+      CursorType::ContextMenu => CursorIcon::ContextMenu,
+      CursorType::Cell => CursorIcon::Cell,
+      CursorType::VerticalText => CursorIcon::VerticalText,
+      CursorType::Alias => CursorIcon::Alias,
+      CursorType::Copy => CursorIcon::Copy,
+      CursorType::NoDrop => CursorIcon::NoDrop,
+      CursorType::Grab => CursorIcon::Grab,
+      CursorType::Grabbing => CursorIcon::Grabbing,
+      CursorType::ZoomIn => CursorIcon::ZoomIn,
+      CursorType::ZoomOut => CursorIcon::ZoomOut,
+      CursorType::ResizeEast => CursorIcon::EResize,
+      CursorType::ResizeNorth => CursorIcon::NResize,
+      CursorType::ResizeNorthEast => CursorIcon::NeResize,
+      CursorType::ResizeNorthWest => CursorIcon::NwResize,
+      CursorType::ResizeSouth => CursorIcon::SResize,
+      CursorType::ResizeSouthEast => CursorIcon::SeResize,
+      CursorType::ResizeSouthWest => CursorIcon::SwResize,
+      CursorType::ResizeWest => CursorIcon::WResize,
+      CursorType::ResizeEastWest => CursorIcon::EwResize,
+      CursorType::ResizeNorthSouth => CursorIcon::NsResize,
+      CursorType::ResizeNorthEastSouthWest => CursorIcon::NeswResize,
+      CursorType::ResizeNorthWestSouthEast => CursorIcon::NwseResize,
+      CursorType::ResizeColumn => CursorIcon::ColResize,
+      CursorType::ResizeRow => CursorIcon::RowResize,
+      CursorType::AllScroll => CursorIcon::AllScroll,
+    }
+  }
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+pub(crate) fn build_wry_response(
+  resp: CustomProtocolResponse,
+) -> Result<wry::http::Response<std::borrow::Cow<'static, [u8]>>> {
+  use std::borrow::Cow;
+
+  let status = resp.status_code.unwrap_or(200);
+  let mime = resp
+    .mime_type
+    .unwrap_or_else(|| "application/octet-stream".to_string());
+  let body_vec: Vec<u8> = resp.body.to_vec();
+
+  let mut builder = wry::http::Response::builder()
+    .status(status)
+    .header("Content-Type", mime);
+
+  if let Some(extra) = resp.headers {
+    for h in extra {
+      if let Some(v) = h.value {
+        builder = builder.header(&h.key, v);
+      }
+    }
+  }
+
+  builder.body(Cow::Owned(body_vec)).map_err(|e| {
+    napi::Error::new(
+      napi::Status::GenericFailure,
+      format!("Protocol response build error: {}", e),
+    )
+  })
+}
+
+pub(crate) fn next_protocol_id(counter: &ProtocolCounterRef) -> u64 {
+  let mut value = counter.borrow_mut();
+  let id = *value;
+  *value += 1;
+  id
+}
+
+fn monitor_to_js(m: winit::monitor::MonitorHandle) -> Monitor {
+  Monitor {
+    name: m.name(),
+    scale_factor: m.scale_factor(),
+    size: Dimensions {
+      width: m.size().width,
+      height: m.size().height,
+    },
+    position: Position {
+      x: m.position().x,
+      y: m.position().y,
+    },
+    video_modes: m
+      .video_modes()
+      .map(|v| JsVideoMode {
+        size: Dimensions {
+          width: v.size().width,
+          height: v.size().height,
+        },
+        bit_depth: v.bit_depth(),
+        refresh_rate: (v.refresh_rate_millihertz() / 1000) as u16,
+      })
+      .collect(),
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn protocol_ids_are_unique_when_protocols_share_a_counter() {
+    let counter = Rc::new(RefCell::new(0));
+    let first_protocol_counter = Rc::clone(&counter);
+    let second_protocol_counter = Rc::clone(&counter);
+
+    assert_eq!(next_protocol_id(&first_protocol_counter), 0);
+    assert_eq!(next_protocol_id(&second_protocol_counter), 1);
   }
 }

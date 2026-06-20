@@ -1,19 +1,11 @@
-import { join } from 'node:path';
 import { Application, getWebviewVersion } from '../../index.js';
-import { Worker } from 'node:worker_threads';
+import { createServer } from './server.mjs';
 
-console.log('Initializing http server worker...');
 
-const worker = new Worker(join(import.meta.dirname, 'server.mjs'), {
-  stdout: true,
-  stderr: true,
-});
-
-worker.on('message', (message) => {
-  if (message === 'ready') createWindow();
-});
-
-function createWindow() {
+async function createWindow() {
+  console.log('Initializing http server...');
+  await createServer();
+  
   console.log(`Initializing webview (version: ${getWebviewVersion()})`);
 
   const app = new Application();
@@ -25,3 +17,5 @@ function createWindow() {
 
   app.run();
 }
+
+await createWindow();

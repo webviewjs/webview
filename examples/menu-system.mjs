@@ -1,7 +1,4 @@
-import { Application, initMenuSystem, WebviewApplicationEvent } from '../index.js';
-
-// Initialize menu system (recommended, especially for macOS)
-initMenuSystem();
+import { Application, WebviewApplicationEvent } from '../index.js';
 
 const app = new Application();
 
@@ -18,6 +15,8 @@ app.bind((event) => {
         break;
       case 'open':
         console.log('📂 Opening file...');
+        const result = window.openFileDialog({title: 'Select a file to open'});
+        console.log({result})
         break;
       case 'save':
         console.log('💾 Saving file...');
@@ -34,11 +33,11 @@ app.bind((event) => {
         break;
       case 'reload':
         console.log('🔄 Reloading webview...');
-        // In a real app, you would reload the webview here
+        webview.reload();
         break;
       case 'devtools':
         console.log('🔧 Opening developer tools...');
-        // In a real app, you would toggle devtools here
+        webview.openDevtools();
         break;
       default:
         console.log(`Unhandled menu item: ${menuEvent.id}`);

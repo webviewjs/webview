@@ -2,59 +2,47 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use browser_window::{BrowserWindow, BrowserWindowOptions};
+#[cfg(not(target_os = "android"))]
+use muda::Menu;
 use napi::bindgen_prelude::*;
 use napi::Result;
 use napi_derive::napi;
-use tao::{
+use winit::{
   event::{Event, WindowEvent},
-  event_loop::{ControlFlow, EventLoop},
-};
-use std::collections::HashMap;
-#[cfg(not(target_os = "android"))]
-use muda::{
-  accelerator::Accelerator,
-  Menu, MenuItem, PredefinedMenuItem, Submenu,
+  event_loop::EventLoop,
+  window::{Window, WindowId},
 };
 
 pub mod browser_window;
+pub mod menu;
 pub mod webview;
 
-/// Window commands that can be sent from JavaScript
 #[napi]
 pub enum WindowCommand {
-  /// Close the window
   Close,
-  /// Show the window
   Show,
-  /// Hide the window
   Hide,
 }
 
 #[napi]
-/// Represents application events
 pub enum WebviewApplicationEvent {
-  /// Window close event.
   WindowCloseRequested,
-  /// Application close event.
   ApplicationCloseRequested,
-  /// Custom menu click event.
   CustomMenuClick,
 }
 
 #[napi(object)]
 pub struct CustomMenuEvent {
-  /// The menu item identifier
   pub id: String,
-  /// The window identifier
   pub window_id: u32,
 }
 
 #[napi(object)]
-/// Represents menu item options from JavaScript
 #[derive(Clone)]
 pub struct MenuItemOptions {
   pub id: Option<String>,
@@ -62,11 +50,10 @@ pub struct MenuItemOptions {
   pub enabled: Option<bool>,
   pub accelerator: Option<String>,
   pub submenu: Option<MenuOptions>,
-  pub role: Option<String>, // For predefined roles like copy, paste, etc
+  pub role: Option<String>,
 }
 
 #[napi(object)]
-/// Represents menu options from JavaScript
 #[derive(Clone)]
 pub struct MenuOptions {
   pub items: Vec<MenuItemOptions>,
@@ -74,26 +61,19 @@ pub struct MenuOptions {
 
 #[napi(object)]
 pub struct HeaderData {
-  /// The key of the header.
   pub key: String,
-  /// The value of the header.
   pub value: Option<String>,
 }
 
 #[napi(object)]
 pub struct IpcMessage {
-  /// The body of the message.
   pub body: Buffer,
-  /// The HTTP method of the message.
   pub method: String,
-  /// The http headers of the message.
   pub headers: Vec<HeaderData>,
-  /// The URI of the message.
   pub uri: String,
 }
 
 #[napi]
-/// Returns the version of the webview.
 pub fn get_webview_version() -> Result<String> {
   wry::webview_version().map_err(|e| {
     napi::Error::new(
@@ -103,465 +83,314 @@ pub fn get_webview_version() -> Result<String> {
   })
 }
 
+/// Kept for backward compat; no longer used internally.
 #[napi(js_name = "ControlFlow")]
-/// Represents the control flow of the application.
 pub enum JsControlFlow {
-  /// The application will continuously poll for events (high CPU usage).
   Poll,
-  /// The application will wait for events (recommended, low CPU usage).
   Wait,
-  /// The application will wait until the specified time.
   WaitUntil,
-  /// The application will exit.
   Exit,
-  /// The application will exit with the given exit code.
   ExitWithCode,
 }
 
 #[napi(object)]
-/// Represents the options for creating an application.
 pub struct ApplicationOptions {
-  /// The control flow of the application. Default is `Wait` (recommended for low CPU usage).
   pub control_flow: Option<JsControlFlow>,
-  /// The waiting time in ms for the application (only applicable if control flow is set to `WaitUntil`).
   pub wait_time: Option<i32>,
-  /// The exit code of the application. Only applicable if control flow is set to `ExitWithCode`.
   pub exit_code: Option<i32>,
 }
 
 #[napi(object)]
-/// Represents an event for the application.
 pub struct ApplicationEvent {
-  /// The event type.
   pub event: WebviewApplicationEvent,
-  /// Custom menu event data
   pub custom_menu_event: Option<CustomMenuEvent>,
 }
 
-#[napi]
-/// Represents an application.
-pub struct Application {
-  /// The event loop.
-  event_loop: Option<EventLoop<()>>,
-  /// The options for creating the application.
-  options: ApplicationOptions,
-  /// The event handler for the application.
+#[napi(object)]
+pub struct ApplicationRunOptions {
+  /** The interval in milliseconds to pump events. Defaults to 16 (60 FPS). */
+  pub interval: Option<u32>,
+  /** Whether to keep the event loop alive. Defaults to true. */
+  pub ref_: Option<bool>,
+}
+
+// ── Internal state ────────────────────────────────────────────────────────────
+
+struct AppState {
   handler: Rc<RefCell<Option<FunctionRef<ApplicationEvent, ()>>>>,
-  /// The env
   env: Env,
-  /// Whether the application should exit
-  should_exit: Rc<RefCell<bool>>,
-  /// The global menu
+  should_exit: bool,
+  /// Tracks open windows so we can hide them on close without dropping BrowserWindow.
+  windows: HashMap<WindowId, Arc<Window>>,
+  /// Shared handle into each BrowserWindow's webview list.  Winit swallows
+  /// WM_SIZE without forwarding to wry's subclass proc, so we resize manually
+  /// when WindowEvent::Resized arrives.
+  webviews: HashMap<WindowId, Rc<RefCell<Vec<Rc<wry::WebView>>>>>,
   #[cfg(not(target_os = "android"))]
-  global_menu: Arc<Mutex<Option<Menu>>>,
-  /// Menu event receiver
+  menu_event_receiver: Option<muda::MenuEventReceiver>,
+}
+
+impl AppState {
+  fn fire(&self, event: ApplicationEvent) {
+    let cb = self.handler.borrow();
+    if let Some(f) = cb.as_ref() {
+      if let Ok(func) = f.borrow_back(&self.env) {
+        let _ = func.call(event);
+      }
+    }
+  }
+}
+
+// ── NAPI Application ──────────────────────────────────────────────────────────
+
+#[napi]
+pub struct Application {
+  event_loop: Option<EventLoop<()>>,
+  state: AppState,
   #[cfg(not(target_os = "android"))]
-  menu_event_receiver: Arc<Mutex<Option<muda::MenuEventReceiver>>>,
-  /// Window ID mapping (using string for simplicity)
+  global_menu: Rc<RefCell<Option<Menu>>>,
   window_ids: Arc<Mutex<HashMap<String, u32>>>,
 }
 
 #[napi]
 impl Application {
   #[napi(constructor)]
-  /// Creates a new application.
-  pub fn new(env: Env, options: Option<ApplicationOptions>) -> Result<Self> {
-    let event_loop = EventLoop::new();
+  pub fn new(env: Env, _options: Option<ApplicationOptions>) -> Result<Self> {
+    let event_loop = EventLoop::new().map_err(|e| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to create event loop: {}", e),
+      )
+    })?;
+
+    // Auto-initialise the platform menu system (no-op outside macOS).
+    menu::auto_init_platform();
 
     Ok(Self {
       event_loop: Some(event_loop),
-      options: options.unwrap_or(ApplicationOptions {
-        control_flow: Some(JsControlFlow::Wait),
-        wait_time: None,
-        exit_code: None,
-      }),
-      handler: Rc::new(RefCell::new(None::<FunctionRef<ApplicationEvent, ()>>)),
-      env,
-      should_exit: Rc::new(RefCell::new(false)),
+      state: AppState {
+        handler: Rc::new(RefCell::new(None)),
+        env,
+        should_exit: false,
+        windows: HashMap::new(),
+        webviews: HashMap::new(),
+        #[cfg(not(target_os = "android"))]
+        menu_event_receiver: None,
+      },
       #[cfg(not(target_os = "android"))]
-      global_menu: Arc::new(Mutex::new(None)),
-      #[cfg(not(target_os = "android"))]
-      menu_event_receiver: Arc::new(Mutex::new(None)),
+      global_menu: Rc::new(RefCell::new(None)),
       window_ids: Arc::new(Mutex::new(HashMap::new())),
     })
   }
 
   #[napi]
-  /// Sets the event handler callback.
   pub fn on_event(&mut self, handler: Option<FunctionRef<ApplicationEvent, ()>>) {
-    *self.handler.borrow_mut() = handler;
+    *self.state.handler.borrow_mut() = handler;
   }
 
   #[napi]
-  /// Alias for on_event() - binds an event handler callback.
   pub fn bind(&mut self, handler: Option<FunctionRef<ApplicationEvent, ()>>) {
-    *self.handler.borrow_mut() = handler;
+    *self.state.handler.borrow_mut() = handler;
   }
 
   #[napi]
-  /// Exits the application gracefully. This will trigger the close event and clean up resources.
-  pub fn exit(&self) {
-    *self.should_exit.borrow_mut() = true;
+  pub fn exit(&mut self) {
+    // Hide all managed windows so they don't become zombie frames.
+    for win in self.state.windows.values() {
+      win.set_visible(false);
+    }
+    self.state.windows.clear();
+    self.state.should_exit = true;
   }
 
   #[napi]
-  /// Creates a new browser window.
   pub fn create_browser_window(
-    &'static mut self,
+    &mut self,
     options: Option<BrowserWindowOptions>,
   ) -> Result<BrowserWindow> {
-    let event_loop = self.event_loop.as_ref();
-
-    if event_loop.is_none() {
-      return Err(napi::Error::new(
+    let event_loop = self.event_loop.as_ref().ok_or_else(|| {
+      napi::Error::new(
         napi::Status::GenericFailure,
         "Event loop is not initialized",
-      ));
-    }
+      )
+    })?;
 
-    // Pass the global menu to the window if no custom menu is provided
     let mut window_options = options.unwrap_or_default();
-      #[cfg(not(target_os = "android"))]
-      if window_options.menu.is_none() {
-        if let Ok(global_menu) = self.global_menu.lock() {
-          if global_menu.as_ref().is_some() {
-            window_options.show_menu = Some(true);
-          }
-        }
-      }
-
-      #[cfg(not(target_os = "android"))]
-      let window = BrowserWindow::new(event_loop.unwrap(), Some(window_options), false, self.global_menu.clone())?;
-      #[cfg(target_os = "android")]
-      let window = BrowserWindow::new(event_loop.unwrap(), Some(window_options), false, Arc::new(Mutex::new(None)))?;
-    // Store window ID for menu events
-    if let Ok(mut ids) = self.window_ids.lock() {
-      let window_id = window.id();
-      let tao_id = window.tao_window_id();
-      ids.insert(format!("{:?}", tao_id), window_id);
-    }
-
-    Ok(window)
-  }
-
-  #[napi]
-  /// Creates a new browser window as a child window.
-  pub fn create_child_browser_window(
-    &'static mut self,
-    options: Option<BrowserWindowOptions>,
-  ) -> Result<BrowserWindow> {
-    let event_loop = self.event_loop.as_ref();
-
-    if event_loop.is_none() {
-      return Err(napi::Error::new(
-        napi::Status::GenericFailure,
-        "Event loop is not initialized",
-      ));
+    #[cfg(not(target_os = "android"))]
+    if window_options.menu.is_none() && self.global_menu.borrow().is_some() {
+      window_options.show_menu = Some(true);
     }
 
     #[cfg(not(target_os = "android"))]
-    let window = BrowserWindow::new(event_loop.unwrap(), options, true, self.global_menu.clone())?;
+    let window = BrowserWindow::new(
+      event_loop,
+      Some(window_options),
+      false,
+      self.global_menu.clone(),
+    )?;
     #[cfg(target_os = "android")]
-    let window = BrowserWindow::new(event_loop.unwrap(), options, true, Arc::new(Mutex::new(None)))?;
+    let window = BrowserWindow::new(
+      event_loop,
+      Some(window_options),
+      false,
+      Rc::new(RefCell::new(None)),
+    )?;
+
+    if let Ok(mut ids) = self.window_ids.lock() {
+      ids.insert(format!("{:?}", window.winit_window_id()), window.id());
+    }
+
+    // Track the window so pump_events can hide it on CloseRequested and resize
+    // its webviews on Resized (winit bypasses wry's WM_SIZE subclass proc).
+    let wid = window.winit_window_id();
+    self.state.windows.insert(wid, Arc::clone(&window.window));
+    self.state.webviews.insert(wid, window.webviews_shared());
 
     Ok(window)
   }
 
   #[napi]
-  /// Sets the global menu for the application (cross-platform)
+  pub fn create_child_browser_window(
+    &mut self,
+    options: Option<BrowserWindowOptions>,
+  ) -> Result<BrowserWindow> {
+    let event_loop = self.event_loop.as_ref().ok_or_else(|| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        "Event loop is not initialized",
+      )
+    })?;
+
+    #[cfg(not(target_os = "android"))]
+    let window = BrowserWindow::new(event_loop, options, true, self.global_menu.clone())?;
+    #[cfg(target_os = "android")]
+    let window = BrowserWindow::new(event_loop, options, true, Rc::new(RefCell::new(None)))?;
+
+    let wid = window.winit_window_id();
+    self.state.windows.insert(wid, Arc::clone(&window.window));
+    self.state.webviews.insert(wid, window.webviews_shared());
+
+    Ok(window)
+  }
+
+  #[napi]
   pub fn set_menu(&mut self, menu_options: Option<MenuOptions>) -> Result<()> {
     #[cfg(not(target_os = "android"))]
     {
       if let Some(options) = menu_options {
-        let menu = create_menu_from_options(options)?;
-
+        let m = menu::create_menu_from_options(options)?;
         #[cfg(target_os = "macos")]
-        {
-          // On macOS, set as application menu
-          menu.init_for_nsapp();
-        }
-
-        // Set up menu event receiver
-        if let Ok(mut receiver) = self.menu_event_receiver.lock() {
-          *receiver = Some(muda::MenuEvent::receiver().clone());
-        }
-
-        // Store the menu for use with new windows on other platforms
-        *self.global_menu.lock().unwrap() = Some(menu);
+        m.init_for_nsapp();
+        self.state.menu_event_receiver = Some(muda::MenuEvent::receiver().clone());
+        *self.global_menu.borrow_mut() = Some(m);
       } else {
-        *self.global_menu.lock().unwrap() = None;
-        *self.menu_event_receiver.lock().unwrap() = None;
+        *self.global_menu.borrow_mut() = None;
+        self.state.menu_event_receiver = None;
       }
     }
     #[cfg(target_os = "android")]
     let _ = menu_options;
-
     Ok(())
   }
 
+  /// Pump the winit event loop once without blocking. Returns `true` while
+  /// the app is alive, `false` when it should stop. Drive this from a JS
+  /// `setInterval` via the `run()` wrapper in `index.js`.
   #[napi]
-  /// Runs the application. This method will block the current thread.
-  pub fn run(&mut self) -> Result<()> {
-    let ctrl = match self.options.control_flow {
-      None => ControlFlow::Wait,
-      Some(JsControlFlow::Poll) => ControlFlow::Poll,
-      Some(JsControlFlow::Wait) => ControlFlow::Wait,
-      Some(JsControlFlow::WaitUntil) => {
-        let wait_time = self.options.wait_time.unwrap_or(0);
-        ControlFlow::WaitUntil(
-          std::time::Instant::now() + std::time::Duration::from_millis(wait_time as u64),
-        )
-      }
-      Some(JsControlFlow::Exit) => ControlFlow::Exit,
-      Some(JsControlFlow::ExitWithCode) => {
-        let exit_code = self.options.exit_code.unwrap_or(0);
-        ControlFlow::ExitWithCode(exit_code)
-      }
-    };
+  pub fn pump_events(&mut self) -> bool {
+    use winit::platform::pump_events::EventLoopExtPumpEvents;
 
-    if let Some(event_loop) = self.event_loop.take() {
-      let handler = self.handler.clone();
-      let env = self.env;
-      let should_exit = self.should_exit.clone();
-      #[cfg(not(target_os = "android"))]
-      let menu_event_receiver = self.menu_event_receiver.clone();
-      let _window_ids = self.window_ids.clone();
-
-      event_loop.run(move |event, _, control_flow| {
-        *control_flow = ctrl;
-
-        // Only check for menu events when we have actual events or when using Poll control flow
-        #[cfg(not(target_os = "android"))]
-        {
-          let should_check_menu = matches!(event, Event::WindowEvent { .. } | Event::MainEventsCleared | Event::NewEvents(_))
-            || matches!(ctrl, ControlFlow::Poll);
-
-          if should_check_menu {
-            // Check for menu events - batch process all available events
-            if let Ok(receiver) = menu_event_receiver.lock() {
-              if let Some(receiver) = receiver.as_ref() {
-                // Process all available menu events in one go to reduce overhead
-                while let Ok(menu_event) = receiver.try_recv() {
-                  let callback = handler.borrow();
-                  if let Some(callback) = callback.as_ref() {
-                    if let Ok(on_event) = callback.borrow_back(&env) {
-                      // Get window ID for the menu event
-                      let window_id = 0; // Menu events are global, window ID not directly available
-
-                      let _ = on_event.call(ApplicationEvent {
-                        event: WebviewApplicationEvent::CustomMenuClick,
-                        custom_menu_event: Some(CustomMenuEvent {
-                          id: menu_event.id().0.clone(),
-                          window_id,
-                        }),
-                      });
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // Check if exit was requested
-        if *should_exit.borrow() {
-          let callback = handler.borrow();
-          if let Some(callback) = callback.as_ref() {
-            if let Ok(on_exit) = callback.borrow_back(&env) {
-              let _ = on_exit.call(ApplicationEvent {
-                event: WebviewApplicationEvent::ApplicationCloseRequested,
-                custom_menu_event: None,
-              });
-            }
-          }
-          *control_flow = ControlFlow::Exit;
-          return;
-        }
-
-        if let Event::WindowEvent {
-          event: WindowEvent::CloseRequested,
-          ..
-        } = event
-        {
-          let callback = handler.borrow();
-          if let Some(callback) = callback.as_ref() {
-            if let Ok(on_ipc_msg) = callback.borrow_back(&env) {
-              let _ = on_ipc_msg.call(ApplicationEvent {
-                event: WebviewApplicationEvent::WindowCloseRequested,
-                custom_menu_event: None,
-              });
-            }
-          }
-
-          *control_flow = ControlFlow::Exit
-        }
-      });
+    if self.state.should_exit {
+      return false;
     }
 
+    // Drain menu events before pumping the window event loop.
+    #[cfg(not(target_os = "android"))]
+    {
+      if let Some(rx) = &self.state.menu_event_receiver {
+        while let Ok(ev) = rx.try_recv() {
+          self.state.fire(ApplicationEvent {
+            event: WebviewApplicationEvent::CustomMenuClick,
+            custom_menu_event: Some(CustomMenuEvent {
+              id: ev.id().0.clone(),
+              window_id: 0,
+            }),
+          });
+        }
+      }
+    }
+
+    // Split borrows so the closure can capture &mut state independently.
+    let event_loop = match &mut self.event_loop {
+      Some(el) => el,
+      None => return false,
+    };
+    let state = &mut self.state;
+
+    // Never call target.exit() — doing so permanently marks the runner as
+    // exited until reset_runner() fires, which can cause the next pump to
+    // re-emit Init/Resumed and confuse the state machine.  Instead we
+    // hide windows and let the JS side stop the interval when we return false.
+    event_loop.pump_events(Some(std::time::Duration::ZERO), |event, _target| {
+      if state.should_exit {
+        return;
+      }
+
+      // Winit's WM_SIZE handler returns ProcResult::Value(0) without calling
+      // DefSubclassProc, so wry's own resize subclass proc is never reached.
+      // We resize all webviews for this window manually here instead.
+      if let Event::WindowEvent {
+        window_id,
+        event: WindowEvent::Resized(new_size),
+      } = &event
+      {
+        if let Some(views) = state.webviews.get(window_id) {
+          // wry uses the standalone `dpi` crate; winit has its own dpi module.
+          // Convert manually to avoid type-mismatch errors.
+          let rect = wry::Rect {
+            position: ::dpi::PhysicalPosition::new(0_i32, 0_i32).into(),
+            size: ::dpi::PhysicalSize::new(new_size.width, new_size.height).into(),
+          };
+          for wv in views.borrow().iter() {
+            let _ = wv.set_bounds(rect);
+          }
+        }
+      }
+
+      if let Event::WindowEvent {
+        window_id,
+        event: WindowEvent::CloseRequested,
+      } = event
+      {
+        // Hide and untrack the closing window so it doesn't linger as a
+        // zombie frame after the pump stops.
+        if let Some(win) = state.windows.remove(&window_id) {
+          win.set_visible(false);
+        }
+
+        state.fire(ApplicationEvent {
+          event: WebviewApplicationEvent::WindowCloseRequested,
+          custom_menu_event: None,
+        });
+
+        // Exit the app when all windows have been closed.
+        if state.windows.is_empty() {
+          state.fire(ApplicationEvent {
+            event: WebviewApplicationEvent::ApplicationCloseRequested,
+            custom_menu_event: None,
+          });
+          state.should_exit = true;
+        }
+      }
+    });
+
+    !state.should_exit
+  }
+
+  /// Run the application event loop.
+  #[napi]
+  pub fn run(&mut self, _options: Option<ApplicationRunOptions>) -> Result<()> {
+    // Note: this is intentionally no-op in rust. The binding loader file patches this to call `pump_events()` in a `setInterval` loop.
     Ok(())
   }
-}
-
-#[napi]
-/// Initialize menu system from worker thread (cross-platform)
-pub fn init_menu_system() -> Result<()> {
-  #[cfg(target_os = "macos")]
-  {
-    // Initialize the menu system for macOS
-    // This can be called from a worker thread
-    muda::Menu::new().init_for_nsapp();
-  }
-  Ok(())
-}
-
-/// Creates a menu from JavaScript options
-#[cfg(not(target_os = "android"))]
-pub fn create_menu_from_options(options: MenuOptions) -> Result<Menu> {
-  let menu = Menu::new();
-
-  // -------- App Menu --------
-    let app = Submenu::new("App", true);
-
-    let about = PredefinedMenuItem::about(None, None);
-    let hide = PredefinedMenuItem::hide(None);
-    let hide_others = PredefinedMenuItem::hide_others(None);
-    let show_all = PredefinedMenuItem::show_all(None);
-    let quit = PredefinedMenuItem::quit(None);
-
-    app.append_items(&[
-        &about,
-        &PredefinedMenuItem::separator(),
-        &hide,
-        &hide_others,
-        &show_all,
-        &PredefinedMenuItem::separator(),
-        &quit,
-    ])
-    .ok();
-
-  menu.append(&app).ok();
-
-  for item in options.items {
-    add_menu_item_to_menu(&menu, item)?;
-  }
-
-  Ok(menu)
-}
-
-/// Adds a menu item to a menu or submenu
-#[cfg(not(target_os = "android"))]
-fn add_menu_item_to_menu(menu: &Menu, item: MenuItemOptions) -> Result<()> {
-  if let Some(submenu_options) = item.submenu {
-    // Create submenu
-    let submenu = Submenu::new(&item.label.unwrap_or_default(), true);
-    for sub_item in submenu_options.items {
-      add_menu_item_to_submenu(&submenu, sub_item)?;
-    }
-    menu.append(&submenu).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append submenu: {}", e),
-      )
-    })?;
-  } else if let Some(role) = &item.role {
-    // Handle predefined menu items
-    let predefined_item = match role.as_str() {
-      "copy" => PredefinedMenuItem::copy(None),
-      "paste" => PredefinedMenuItem::paste(None),
-      "cut" => PredefinedMenuItem::cut(None),
-      "selectall" => PredefinedMenuItem::select_all(None),
-      "separator" => PredefinedMenuItem::separator(),
-      _ => {
-        return Err(napi::Error::new(
-          napi::Status::InvalidArg,
-          format!("Unknown menu role: {}", role),
-        ))
-      }
-    };
-    menu.append(&predefined_item).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append predefined item: {}", e),
-      )
-    })?;
-  } else if item.id.is_some() || item.label.is_some() {
-    // Create custom menu item
-    let menu_item = MenuItem::with_id(
-      muda::MenuId(item.id.clone().unwrap_or_else(|| {
-        item.label.clone().unwrap_or("item".to_string())
-      })),
-      &item.label.unwrap_or_default(),
-      item.enabled.unwrap_or(true),
-      item.accelerator
-        .as_ref()
-        .and_then(|acc| acc.parse::<Accelerator>().ok()),
-    );
-    menu.append(&menu_item).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append menu item: {}", e),
-      )
-    })?;
-  }
-
-  Ok(())
-}
-
-/// Adds a menu item to a submenu
-#[cfg(not(target_os = "android"))]
-fn add_menu_item_to_submenu(submenu: &Submenu, item: MenuItemOptions) -> Result<()> {
-  if let Some(nested_submenu_options) = item.submenu {
-    // Create nested submenu
-    let nested_submenu = Submenu::new(&item.label.unwrap_or_default(), true);
-    for sub_item in nested_submenu_options.items {
-      add_menu_item_to_submenu(&nested_submenu, sub_item)?;
-    }
-    submenu.append(&nested_submenu).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append nested submenu: {}", e),
-      )
-    })?;
-  } else if let Some(role) = &item.role {
-    // Handle predefined menu items in submenu
-    let predefined_item = match role.as_str() {
-      "copy" => PredefinedMenuItem::copy(None),
-      "paste" => PredefinedMenuItem::paste(None),
-      "cut" => PredefinedMenuItem::cut(None),
-      "selectall" => PredefinedMenuItem::select_all(None),
-      "separator" => PredefinedMenuItem::separator(),
-      _ => {
-        return Err(napi::Error::new(
-          napi::Status::InvalidArg,
-          format!("Unknown menu role: {}", role),
-        ))
-      }
-    };
-    submenu.append(&predefined_item).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append predefined item to submenu: {}", e),
-      )
-    })?;
-  } else if item.id.is_some() || item.label.is_some() {
-    // Create custom menu item in submenu
-    let menu_item = MenuItem::with_id(
-      muda::MenuId(item.id.clone().unwrap_or_else(|| {
-        item.label.clone().unwrap_or("item".to_string())
-      })),
-      &item.label.unwrap_or_default(),
-      item.enabled.unwrap_or(true),
-      item.accelerator
-        .as_ref()
-        .and_then(|acc| acc.parse::<Accelerator>().ok()),
-    );
-    submenu.append(&menu_item).map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to append menu item to submenu: {}", e),
-      )
-    })?;
-  }
-
-  Ok(())
 }
