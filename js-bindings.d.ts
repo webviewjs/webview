@@ -49,6 +49,9 @@ export declare class BrowserWindow {
   setMinimizable(minimizable: boolean): void
   setResizable(resizable: boolean): void
   setSize(width: number, height: number): void
+  getSize(width: number, height: number): Dimensions
+  setPosition(x: number, y: number): void
+  getPosition(x: number, y: number): Position
   openFileDialog(options?: FileDialogOptions | undefined | null): Array<string>
   id(): number
   hasMenu(): boolean

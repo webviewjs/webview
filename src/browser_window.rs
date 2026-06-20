@@ -18,6 +18,11 @@ use winit::{
 };
 
 #[cfg(not(target_os = "android"))]
+use rfd::FileDialog;
+#[cfg(not(target_os = "android"))]
+use muda::Menu;
+
+#[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
 use crate::webview::{
   CustomProtocolResponse, JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap,
@@ -120,6 +125,7 @@ pub struct BrowserWindowOptions {
   pub show_menu: Option<bool>,
   pub resizable: Option<bool>,
   pub title: Option<String>,
+  pub logical: Option<bool>,
   pub width: Option<f64>,
   pub height: Option<f64>,
   pub x: Option<f64>,
@@ -138,6 +144,7 @@ pub struct BrowserWindowOptions {
   pub fullscreen: Option<FullscreenType>,
 }
 
+// This whole thing isnt supported/needed on android but we can just exclude the parts that arent supported from the build so it compiles.
 #[napi(object)]
 pub struct FileDialogOptions {
   pub multiple: Option<bool>,
@@ -159,6 +166,7 @@ impl Default for BrowserWindowOptions {
       show_menu: Some(true),
       resizable: Some(true),
       title: Some("WebviewJS".to_owned()),
+      logical: Some(false),
       width: Some(800.0),
       height: Some(600.0),
       x: Some(0.0),
@@ -221,11 +229,27 @@ impl BrowserWindow {
     }
 
     if let Some(width) = options.width {
-      attrs = attrs.with_inner_size(PhysicalSize::new(width, options.height.unwrap_or(600.0)));
+      if let Some(logical) = options.logical {
+        if logical {
+          attrs = attrs.with_inner_size(LogicalSize::new(width, options.height.unwrap()));
+        } else {
+          attrs = attrs.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+        }
+      } else {
+        attrs = attrs.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+      }
     }
 
     if let Some(x) = options.x {
-      attrs = attrs.with_position(LogicalPosition::new(x, options.y.unwrap_or(0.0)));
+      if let Some(logical) = options.logical {
+        if logical {
+          attrs = attrs.with_position(LogicalPosition::new(x, options.y.unwrap()));
+        } else {
+          attrs = attrs.with_position(PhysicalPosition::new(x, options.y.unwrap()));
+        }
+      } else {
+        attrs = attrs.with_position(PhysicalPosition::new(x, options.y.unwrap()));
+      }
     }
 
     if let Some(visible) = options.visible {
@@ -489,13 +513,73 @@ impl BrowserWindow {
   }
 
   #[napi]
-  pub fn set_size(&self, width: u32, height: u32) {
-    let _ = self
-      .window
-      .request_inner_size(LogicalSize::new(width, height));
+  /// Sets the window inner size (width and height).
+  pub fn set_size(&self, width: u32, height: u32, logical: Option<bool>) {
+    if let Some(logical) = logical {
+      if logical {
+        self.window.set_inner_size(LogicalSize::new(width, height));
+      } else {
+        self.window.set_inner_size(PhysicalSize::new(width, height));
+      }
+    } else {
+      self.window.set_inner_size(PhysicalSize::new(width, height));
+    }
   }
 
   #[napi]
+  /// Gets the window inner size.
+  pub fn get_size(&self, logical: Option<bool>) -> Dimensions {
+    let size = self.window.inner_size();
+    if let Some(logical) = logical {
+      if logical {
+        let logical_size = size.to_logical::<f64>(self.window.scale_factor());
+        return Dimensions {
+          width: logical_size.width as u32,
+          height: logical_size.height as u32,
+        };
+      }
+    }
+    Dimensions {
+      width: size.width,
+      height: size.height,
+    }
+  }
+
+  #[napi]
+  /// Sets the window position (x and y).
+  pub fn set_position(&self, x: i32, y: i32, logical: Option<bool>) {
+    if let Some(logical) = logical {
+      if logical {
+        self.window.set_outer_position(LogicalPosition::new(x, y));
+      } else {
+        self.window.set_outer_position(PhysicalPosition::new(x, y));
+      }
+    } else {
+      self.window.set_outer_position(PhysicalPosition::new(x, y));
+    }
+  }
+
+  #[napi]
+  /// Gets the window position.
+  pub fn get_position(&self, logical: Option<bool>) -> Position {
+    let position = self.window.outer_position().unwrap_or(PhysicalPosition::new(0, 0));
+    if let Some(logical) = logical {
+      if logical {
+        let logical_position = position.to_logical::<f64>(self.window.scale_factor());
+        return Position {
+          x: logical_position.x as i32,
+          y: logical_position.y as i32,
+        };
+      }
+    }
+    Position {
+      x: position.x,
+      y: position.y,
+    }
+  }
+
+  #[napi]
+  /// Opens a file select dialog
   pub fn open_file_dialog(&self, options: Option<FileDialogOptions>) -> Result<Vec<String>> {
     #[cfg(not(target_os = "android"))]
     {
