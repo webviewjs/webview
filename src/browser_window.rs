@@ -1,3 +1,4 @@
+use dpi::Size;
 #[cfg(not(target_os = "android"))]
 use muda::Menu;
 use napi::{bindgen_prelude::FunctionRef, Either, Env, Result};
@@ -510,6 +511,11 @@ impl BrowserWindow {
   #[napi]
   /// Sets the window inner size (width and height).
   pub fn set_min_size(&self, width: u32, height: u32, logical: Option<bool>) {
+    if width == 0 && height == 0 {
+      self.window.set_min_inner_size(None::<Size>);
+      return;
+    }
+
     if let Some(logical) = logical {
       if logical {
         self
@@ -549,6 +555,11 @@ impl BrowserWindow {
   #[napi]
   /// Sets the max window inner size (width and height).
   pub fn set_max_size(&self, width: u32, height: u32, logical: Option<bool>) {
+    if width == 0 && height == 0 {
+      self.window.set_max_inner_size(None::<Size>);
+      return;
+    }
+
     if let Some(logical) = logical {
       if logical {
         self
