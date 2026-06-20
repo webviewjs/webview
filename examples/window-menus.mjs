@@ -1,7 +1,4 @@
-import { Application, initMenuSystem, WebviewApplicationEvent } from '../index.js';
-
-// Initialize menu system
-initMenuSystem();
+import { Application, WebviewApplicationEvent } from '../index.js';
 
 const app = new Application();
 

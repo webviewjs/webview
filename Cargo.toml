@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 napi        = { version = "3.8.2", default-features = true, features = ["napi9"] }
 napi-derive = "3.5.1"
-winit       = "0.29"
+winit       = ">=0.30,<0.31"
 wry         = { version = "0.53.5", features = ["devtools", "fullscreen"] }
 dpi         = "0.1"
 rfd         = "0.15.4"
