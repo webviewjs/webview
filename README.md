@@ -266,7 +266,7 @@ if (!webview.isDevtoolsOpen()) webview.openDevtools();
 
 webview.onIpcMessage((data) => {
   const reply = `You sent ${data.body.toString('utf-8')}`;
-  window.evaluateScript(`onIpcMessage("${reply}")`);
+  webview.evaluateScript(`onIpcMessage("${reply}")`);
 });
 
 app.run();
