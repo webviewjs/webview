@@ -174,19 +174,39 @@ impl JsWebview {
     // when the window is maximised or resized.
     // Child webviews always need explicit bounds to position correctly inside
     // their parent.
+    //
+    // On macOS we always use build_as_child (adding as an NSView subview instead
+    // of replacing the NSWindow's contentView).  wry's non-child path calls
+    // setContentView which breaks winit's invariant that the content view is
+    // always its own WinitView subclass, crashing on window focus change.
+    // So on macOS a full-window webview also needs explicit bounds.
     let is_child = options.child.unwrap_or(false);
-    let has_bounds = is_child
+    let _ = is_child; // used on non-macOS paths below
+    #[cfg(target_os = "macos")]
+    let needs_bounds = true; // always set bounds on macOS (child path requires it)
+    #[cfg(not(target_os = "macos"))]
+    let needs_bounds = is_child
       || options.x.is_some()
       || options.y.is_some()
       || options.width.is_some()
       || options.height.is_some();
-    if has_bounds {
+
+    if needs_bounds {
+      // For full-window webviews on macOS derive the initial size from the window.
+      #[cfg(target_os = "macos")]
+      let (default_w, default_h) = {
+        let s = window.inner_size();
+        (s.width as f64, s.height as f64)
+      };
+      #[cfg(not(target_os = "macos"))]
+      let (default_w, default_h) = (800.0_f64, 600.0_f64);
+
       webview = webview.with_bounds(Rect {
         position: dpi::LogicalPosition::new(options.x.unwrap_or(0.0), options.y.unwrap_or(0.0))
           .into(),
-        size: dpi::LogicalSize::new(
-          options.width.unwrap_or(800.0),
-          options.height.unwrap_or(600.0),
+        size: dpi::PhysicalSize::new(
+          options.width.map(|w| w as u32).unwrap_or(default_w as u32),
+          options.height.map(|h| h as u32).unwrap_or(default_h as u32),
         )
         .into(),
       });
@@ -410,6 +430,12 @@ impl JsWebview {
       )
     };
 
+    // On macOS we always use build_as_child so the webview becomes a subview of
+    // winit's WinitView rather than replacing the NSWindow contentView.
+    // See: https://github.com/tauri-apps/wry/blob/dev/examples/winit.rs
+    #[cfg(target_os = "macos")]
+    let built = webview.build_as_child(window).map_err(err)?;
+    #[cfg(not(target_os = "macos"))]
     let built = if options.child.unwrap_or(false) {
       webview.build_as_child(window).map_err(err)
     } else {

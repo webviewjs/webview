@@ -13,8 +13,9 @@ use napi::bindgen_prelude::*;
 use napi::Result;
 use napi_derive::napi;
 use winit::{
-  event::{Event, WindowEvent},
-  event_loop::EventLoop,
+  application::ApplicationHandler,
+  event::WindowEvent,
+  event_loop::{ActiveEventLoop, EventLoop},
   window::{Window, WindowId},
 };
 
@@ -141,6 +142,57 @@ impl AppState {
   }
 }
 
+// ── ApplicationHandler ────────────────────────────────────────────────────────
+
+struct AppHandler<'a>(&'a mut AppState);
+
+impl ApplicationHandler for AppHandler<'_> {
+  fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
+
+  fn window_event(
+    &mut self,
+    _event_loop: &ActiveEventLoop,
+    window_id: WindowId,
+    event: WindowEvent,
+  ) {
+    let state = &mut self.0;
+    if state.should_exit {
+      return;
+    }
+
+    match event {
+      WindowEvent::Resized(new_size) => {
+        if let Some(views) = state.webviews.get(&window_id) {
+          let rect = wry::Rect {
+            position: ::dpi::PhysicalPosition::new(0_i32, 0_i32).into(),
+            size: ::dpi::PhysicalSize::new(new_size.width, new_size.height).into(),
+          };
+          for wv in views.borrow().iter() {
+            let _ = wv.set_bounds(rect);
+          }
+        }
+      }
+      WindowEvent::CloseRequested => {
+        if let Some(win) = state.windows.remove(&window_id) {
+          win.set_visible(false);
+        }
+        state.fire(ApplicationEvent {
+          event: WebviewApplicationEvent::WindowCloseRequested,
+          custom_menu_event: None,
+        });
+        if state.windows.is_empty() {
+          state.fire(ApplicationEvent {
+            event: WebviewApplicationEvent::ApplicationCloseRequested,
+            custom_menu_event: None,
+          });
+          state.should_exit = true;
+        }
+      }
+      _ => {}
+    }
+  }
+}
+
 // ── NAPI Application ──────────────────────────────────────────────────────────
 
 #[napi]
@@ -156,6 +208,22 @@ pub struct Application {
 impl Application {
   #[napi(constructor)]
   pub fn new(env: Env, _options: Option<ApplicationOptions>) -> Result<Self> {
+    // On macOS, disable winit's built-in default menu so it doesn't overwrite
+    // the muda-managed menu bar on the first pump iteration.
+    #[cfg(target_os = "macos")]
+    let event_loop = {
+      use winit::platform::macos::EventLoopBuilderExtMacOS;
+      EventLoop::builder()
+        .with_default_menu(false)
+        .build()
+        .map_err(|e| {
+          napi::Error::new(
+            napi::Status::GenericFailure,
+            format!("Failed to create event loop: {}", e),
+          )
+        })?
+    };
+    #[cfg(not(target_os = "macos"))]
     let event_loop = EventLoop::new().map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
@@ -163,8 +231,17 @@ impl Application {
       )
     })?;
 
-    // Auto-initialise the platform menu system (no-op outside macOS).
-    menu::auto_init_platform();
+    // On macOS install a default app menu immediately so the menu bar is
+    // functional from the start.  Store it in global_menu so the ObjC delegate
+    // is kept alive (it would be freed if the Menu were dropped here).
+    // set_menu() will replace this with the user-supplied menu.
+    #[cfg(not(target_os = "android"))]
+    let initial_global_menu: Option<Menu> = {
+      #[cfg(target_os = "macos")]
+      { Some(menu::make_default_macos_menu()) }
+      #[cfg(not(target_os = "macos"))]
+      { None }
+    };
 
     Ok(Self {
       event_loop: Some(event_loop),
@@ -175,10 +252,21 @@ impl Application {
         windows: HashMap::new(),
         webviews: HashMap::new(),
         #[cfg(not(target_os = "android"))]
-        menu_event_receiver: None,
+        menu_event_receiver: {
+          // On macOS we always have a menu from startup so start receiving events
+          // immediately.  On other platforms the receiver is set when set_menu is called.
+          #[cfg(target_os = "macos")]
+          {
+            Some(muda::MenuEvent::receiver().clone())
+          }
+          #[cfg(not(target_os = "macos"))]
+          {
+            None
+          }
+        },
       },
       #[cfg(not(target_os = "android"))]
-      global_menu: Rc::new(RefCell::new(None)),
+      global_menu: Rc::new(RefCell::new(initial_global_menu)),
       window_ids: Arc::new(Mutex::new(HashMap::new())),
     })
   }
@@ -215,6 +303,7 @@ impl Application {
       )
     })?;
 
+    #[allow(unused_mut)]
     let mut window_options = options.unwrap_or_default();
     #[cfg(not(target_os = "android"))]
     if window_options.menu.is_none() && self.global_menu.borrow().is_some() {
@@ -284,8 +373,18 @@ impl Application {
         self.state.menu_event_receiver = Some(muda::MenuEvent::receiver().clone());
         *self.global_menu.borrow_mut() = Some(m);
       } else {
-        *self.global_menu.borrow_mut() = None;
-        self.state.menu_event_receiver = None;
+        // On macOS restoring the default menu keeps the app menu bar functional.
+        #[cfg(target_os = "macos")]
+        {
+          let default_menu = menu::make_default_macos_menu();
+          *self.global_menu.borrow_mut() = Some(default_menu);
+          // Keep the receiver — menu events can still arrive from predefined items.
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+          *self.global_menu.borrow_mut() = None;
+          self.state.menu_event_receiver = None;
+        }
       }
     }
     #[cfg(target_os = "android")]
@@ -320,69 +419,18 @@ impl Application {
       }
     }
 
-    // Split borrows so the closure can capture &mut state independently.
+    // Split borrows so the handler can mutate state independently.
     let event_loop = match &mut self.event_loop {
       Some(el) => el,
       None => return false,
     };
     let state = &mut self.state;
 
-    // Never call target.exit() — doing so permanently marks the runner as
+    // Never call event_loop.exit() — doing so permanently marks the runner as
     // exited until reset_runner() fires, which can cause the next pump to
     // re-emit Init/Resumed and confuse the state machine.  Instead we
     // hide windows and let the JS side stop the interval when we return false.
-    event_loop.pump_events(Some(std::time::Duration::ZERO), |event, _target| {
-      if state.should_exit {
-        return;
-      }
-
-      // Winit's WM_SIZE handler returns ProcResult::Value(0) without calling
-      // DefSubclassProc, so wry's own resize subclass proc is never reached.
-      // We resize all webviews for this window manually here instead.
-      if let Event::WindowEvent {
-        window_id,
-        event: WindowEvent::Resized(new_size),
-      } = &event
-      {
-        if let Some(views) = state.webviews.get(window_id) {
-          // wry uses the standalone `dpi` crate; winit has its own dpi module.
-          // Convert manually to avoid type-mismatch errors.
-          let rect = wry::Rect {
-            position: ::dpi::PhysicalPosition::new(0_i32, 0_i32).into(),
-            size: ::dpi::PhysicalSize::new(new_size.width, new_size.height).into(),
-          };
-          for wv in views.borrow().iter() {
-            let _ = wv.set_bounds(rect);
-          }
-        }
-      }
-
-      if let Event::WindowEvent {
-        window_id,
-        event: WindowEvent::CloseRequested,
-      } = event
-      {
-        // Hide and untrack the closing window so it doesn't linger as a
-        // zombie frame after the pump stops.
-        if let Some(win) = state.windows.remove(&window_id) {
-          win.set_visible(false);
-        }
-
-        state.fire(ApplicationEvent {
-          event: WebviewApplicationEvent::WindowCloseRequested,
-          custom_menu_event: None,
-        });
-
-        // Exit the app when all windows have been closed.
-        if state.windows.is_empty() {
-          state.fire(ApplicationEvent {
-            event: WebviewApplicationEvent::ApplicationCloseRequested,
-            custom_menu_event: None,
-          });
-          state.should_exit = true;
-        }
-      }
-    });
+    event_loop.pump_app_events(Some(std::time::Duration::ZERO), &mut AppHandler(state));
 
     !state.should_exit
   }

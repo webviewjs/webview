@@ -7,41 +7,65 @@
 
 #[cfg(not(target_os = "android"))]
 use muda::{accelerator::Accelerator, Menu, MenuItem, PredefinedMenuItem, Submenu};
+#[cfg(not(target_os = "android"))]
 use napi::Result;
-
+#[cfg(not(target_os = "android"))]
 use crate::{MenuItemOptions, MenuOptions};
 
-/// Perform any one-time platform-level menu initialisation.
-/// Called automatically from `Application::new()` so the caller never needs
-/// to invoke `initMenuSystem()` manually.
-pub fn auto_init_platform() {
-  #[cfg(target_os = "macos")]
-  {
-    // Install a blank menu bar so macOS has somewhere to attach items.
-    // This is idempotent — safe to call multiple times.
-    muda::Menu::new().init_for_nsapp();
-  }
+/// Build a minimal macOS-style app menu (App > About/Hide/Quit) and install it
+/// as the NSApp main menu.  Returns the `Menu` so the caller can keep it alive.
+///
+/// On macOS this is called from `Application::new()` and the returned menu is
+/// stored in `global_menu` so the ObjC delegate is not freed prematurely.
+/// `set_menu()` replaces it with the user-supplied menu.
+#[cfg(target_os = "macos")]
+pub fn make_default_macos_menu() -> muda::Menu {
+  let menu = muda::Menu::new();
+  let app_sub = muda::Submenu::new("App", true);
+  app_sub
+    .append_items(&[
+      &muda::PredefinedMenuItem::about(None, None),
+      &muda::PredefinedMenuItem::separator(),
+      &muda::PredefinedMenuItem::hide(None),
+      &muda::PredefinedMenuItem::hide_others(None),
+      &muda::PredefinedMenuItem::show_all(None),
+      &muda::PredefinedMenuItem::separator(),
+      &muda::PredefinedMenuItem::quit(None),
+    ])
+    .ok();
+  menu.append(&app_sub).ok();
+  menu.init_for_nsapp();
+  menu
 }
 
 /// Build a [`muda::Menu`] from the JS-facing options tree.
+///
+/// On macOS the caller is expected to call `menu.init_for_nsapp()` to make
+/// this the active menu bar.  A macOS-style "App" submenu (About/Hide/Quit)
+/// is prepended automatically so it appears as the first item.
 #[cfg(not(target_os = "android"))]
 pub fn create_menu_from_options(options: MenuOptions) -> Result<Menu> {
   let menu = Menu::new();
 
-  // The built-in "App" submenu ships on every platform (App > Quit etc.).
-  let app = Submenu::new("App", true);
-  app
-    .append_items(&[
-      &PredefinedMenuItem::about(None, None),
-      &PredefinedMenuItem::separator(),
-      &PredefinedMenuItem::hide(None),
-      &PredefinedMenuItem::hide_others(None),
-      &PredefinedMenuItem::show_all(None),
-      &PredefinedMenuItem::separator(),
-      &PredefinedMenuItem::quit(None),
-    ])
-    .ok();
-  menu.append(&app).ok();
+  // On macOS, prepend the standard "App" submenu (About, Hide, Quit…) so
+  // the menu bar matches macOS conventions.  On Windows/Linux the items live
+  // inside the user's own menus.
+  #[cfg(target_os = "macos")]
+  {
+    let app = Submenu::new("App", true);
+    app
+      .append_items(&[
+        &PredefinedMenuItem::about(None, None),
+        &PredefinedMenuItem::separator(),
+        &PredefinedMenuItem::hide(None),
+        &PredefinedMenuItem::hide_others(None),
+        &PredefinedMenuItem::show_all(None),
+        &PredefinedMenuItem::separator(),
+        &PredefinedMenuItem::quit(None),
+      ])
+      .ok();
+    menu.append(&app).ok();
+  }
 
   for item in options.items {
     add_item_to_menu(&menu, item)?;

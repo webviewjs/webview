@@ -1,9 +1,6 @@
 {
   "name": "@webviewjs/webview-win32-x64-msvc",
-  "version": "0.1.0",
-  "os": [
-    "win32"
-  ],
+  "version": "0.1.4",
   "cpu": [
     "x64"
   ],
@@ -11,7 +8,7 @@
   "files": [
     "webview.win32-x64-msvc.node"
   ],
-  "description": "Robust cross-platform webview library for Node.js written in Rust",
+  "description": "Robust cross-platform webview library for Node.js written in Rust. It also works with deno and bun.",
   "keywords": [
     "webview",
     "node",
@@ -21,11 +18,14 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">= 10"
+    "node": ">= 24"
   },
+  "repository": "git@github.com:webviewjs/webview.git",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public"
   },
-  "repository": "git@github.com:webviewjs/webview.git"
+  "os": [
+    "win32"
+  ]
 }

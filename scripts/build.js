@@ -16,6 +16,8 @@ const args = [
   ...process.argv.slice(2),
 ];
 
+console.log(`Executing \x1b[36mnapi ${args.slice(1).join(' ')}\x1b[0m`);
+
 const result = spawnSync(process.execPath, args, {
   stdio: 'inherit',
 });

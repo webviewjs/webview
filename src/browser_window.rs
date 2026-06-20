@@ -2,6 +2,7 @@
 use muda::Menu;
 use napi::{bindgen_prelude::FunctionRef, Either, Env, Result};
 use napi_derive::*;
+#[cfg(not(target_os = "android"))]
 use rfd::FileDialog;
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
@@ -12,7 +13,7 @@ use winit::{
   dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
   event_loop::EventLoop,
   window::{
-    CursorIcon, Fullscreen, Icon, Window, WindowBuilder, WindowButtons, WindowId, WindowLevel,
+    CursorIcon, Fullscreen, Icon, Window, WindowAttributes, WindowButtons, WindowId, WindowLevel,
   },
 };
 
@@ -221,58 +222,58 @@ impl BrowserWindow {
   ) -> Result<Self> {
     let options = options.unwrap_or_default();
 
-    let mut builder = WindowBuilder::new();
+    let mut attrs = WindowAttributes::default();
 
     if let Some(resizable) = options.resizable {
-      builder = builder.with_resizable(resizable);
+      attrs = attrs.with_resizable(resizable);
     }
 
     if let Some(width) = options.width {
       if let Some(logical) = options.logical {
         if logical {
-          builder = builder.with_inner_size(LogicalSize::new(width, options.height.unwrap()));
+          attrs = attrs.with_inner_size(LogicalSize::new(width, options.height.unwrap()));
         } else {
-          builder = builder.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+          attrs = attrs.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
         }
       } else {
-        builder = builder.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+        attrs = attrs.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
       }
     }
 
     if let Some(x) = options.x {
       if let Some(logical) = options.logical {
         if logical {
-          builder = builder.with_position(LogicalPosition::new(x, options.y.unwrap()));
+          attrs = attrs.with_position(LogicalPosition::new(x, options.y.unwrap()));
         } else {
-          builder = builder.with_position(PhysicalPosition::new(x, options.y.unwrap()));
+          attrs = attrs.with_position(PhysicalPosition::new(x, options.y.unwrap()));
         }
       } else {
-        builder = builder.with_position(PhysicalPosition::new(x, options.y.unwrap()));
+        attrs = attrs.with_position(PhysicalPosition::new(x, options.y.unwrap()));
       }
     }
 
     if let Some(visible) = options.visible {
-      builder = builder.with_visible(visible);
+      attrs = attrs.with_visible(visible);
     }
 
     if let Some(decorations) = options.decorations {
-      builder = builder.with_decorations(decorations);
+      attrs = attrs.with_decorations(decorations);
     }
 
     if let Some(transparent) = options.transparent {
-      builder = builder.with_transparent(transparent);
+      attrs = attrs.with_transparent(transparent);
     }
 
     if let Some(maximized) = options.maximized {
-      builder = builder.with_maximized(maximized);
+      attrs = attrs.with_maximized(maximized);
     }
 
     if let Some(focused) = options.focused {
-      builder = builder.with_active(focused);
+      attrs = attrs.with_active(focused);
     }
 
     if let Some(content_protection) = options.content_protection {
-      builder = builder.with_content_protected(content_protection);
+      attrs = attrs.with_content_protected(content_protection);
     }
 
     // Window level: always_on_top takes priority over always_on_bottom
@@ -282,7 +283,7 @@ impl BrowserWindow {
       _ => None,
     };
     if let Some(level) = level {
-      builder = builder.with_window_level(level);
+      attrs = attrs.with_window_level(level);
     }
 
     // Minimizable / maximizable via enabled buttons
@@ -294,14 +295,12 @@ impl BrowserWindow {
       if options.minimizable == Some(false) {
         buttons.remove(WindowButtons::MINIMIZE);
       }
-      builder = builder.with_enabled_buttons(buttons);
+      attrs = attrs.with_enabled_buttons(buttons);
     }
 
-    // visible_on_all_workspaces – macOS only
     #[cfg(target_os = "macos")]
     if options.visible_on_all_workspaces == Some(true) {
-      use winit::platform::macos::WindowBuilderExtMacOS;
-      builder = builder.with_visible_on_all_spaces(true);
+      attrs = attrs.with_visible(true);
     }
 
     if let Some(fullscreen) = options.fullscreen {
@@ -309,14 +308,15 @@ impl BrowserWindow {
         FullscreenType::Borderless => Some(Fullscreen::Borderless(None)),
         FullscreenType::Exclusive => Some(Fullscreen::Borderless(None)), // best-effort
       };
-      builder = builder.with_fullscreen(fs);
+      attrs = attrs.with_fullscreen(fs);
     }
 
     if let Some(title) = options.title {
-      builder = builder.with_title(&title);
+      attrs = attrs.with_title(&title);
     }
 
-    let window = builder.build(&**event_loop).map_err(|e| {
+    #[allow(deprecated)]
+    let window = event_loop.create_window(attrs).map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to create window: {}", e),
@@ -581,14 +581,6 @@ impl BrowserWindow {
   #[napi]
   /// Opens a file select dialog
   pub fn open_file_dialog(&self, options: Option<FileDialogOptions>) -> Result<Vec<String>> {
-    #[cfg(target_os = "android")]
-    {
-      return Err(napi::Error::new(
-        napi::Status::GenericFailure,
-        "File dialogs are not supported on Android",
-      ));
-    }
-    
     #[cfg(not(target_os = "android"))]
     {
       let mut dialog = FileDialog::new();
@@ -597,37 +589,36 @@ impl BrowserWindow {
         if let Some(title) = &opts.title {
           dialog = dialog.set_title(title);
         }
-
         if let Some(path) = &opts.default_path {
           dialog = dialog.set_directory(path);
         }
-
         if let Some(filters) = &opts.filters {
           for filter in filters {
-            dialog = dialog.add_filter(
-              &filter.name,
-              &filter.extensions,
-            );
+            dialog = dialog.add_filter(&filter.name, &filter.extensions);
           }
         }
       }
 
       dialog = dialog.add_filter("All Files", &["*"]);
 
-      let files = if options.as_ref().and_then(|o| o.multiple).unwrap_or(false)
-      {
+      let files = if options.as_ref().and_then(|o| o.multiple).unwrap_or(false) {
         dialog.pick_files()
       } else {
         dialog.pick_file().map(|f| vec![f])
       };
 
-      Ok(
+      return Ok(
         files
           .unwrap_or_default()
           .into_iter()
-          .map(|f| f.as_path().to_string_lossy().to_string())
-          .collect()
-      )
+          .map(|f| f.to_string_lossy().to_string())
+          .collect(),
+      );
+    }
+    #[cfg(target_os = "android")]
+    {
+      let _ = options;
+      Ok(vec![])
     }
   }
 
@@ -914,6 +905,7 @@ impl BrowserWindow {
 
   #[napi]
   pub fn set_cursor(&self, cursor: CursorType) {
+    #[allow(deprecated)]
     self.window.set_cursor_icon(cursor.into());
   }
 
