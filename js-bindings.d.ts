@@ -48,10 +48,15 @@ export declare class BrowserWindow {
   setMaximizable(maximizable: boolean): void
   setMinimizable(minimizable: boolean): void
   setResizable(resizable: boolean): void
-  setSize(width: number, height: number): void
-  getSize(width: number, height: number): Dimensions
-  setPosition(x: number, y: number): void
-  getPosition(x: number, y: number): Position
+  /** Sets the window inner size (width and height). */
+  setMinSize(width: number, height: number, logical?: boolean | undefined | null): void
+  /** Gets the window inner size. */
+  getInnerSize(logical?: boolean | undefined | null): Dimensions
+  /** Sets the max window inner size (width and height). */
+  setMaxSize(width: number, height: number, logical?: boolean | undefined | null): void
+  /** Gets the window outer size. */
+  getOuterSize(logical?: boolean | undefined | null): Dimensions
+  /** Opens a file select dialog */
   openFileDialog(options?: FileDialogOptions | undefined | null): Array<string>
   id(): number
   hasMenu(): boolean
@@ -80,34 +85,17 @@ export declare class BrowserWindow {
   hide(): void
   show(): void
   /**
-   * Returns the window's outer top-left position in physical pixels, or
-   * `null` if the platform does not expose it.
-   */
-  getPosition(): Position | null
-  /**
    * Move the window so its outer top-left corner is at (`x`, `y`) in
    * physical pixels.
    */
-  setPosition(x: number, y: number): void
+  setPosition(x: number, y: number, logical?: boolean | undefined | null): void
+  /** Gets the window position. */
+  getPosition(logical?: boolean | undefined | null): Position
   /**
    * Center the window on its current monitor.  Does nothing if the current
    * monitor cannot be determined.
    */
   center(): void
-  /** Inner (content-area) size in physical pixels. */
-  getSize(): Dimensions
-  /** Outer (including decorations) size in physical pixels. */
-  getOuterSize(): Dimensions
-  /**
-   * Set minimum inner size.  Pass `null` / `undefined` for both to remove the
-   * constraint.
-   */
-  setMinSize(width?: number | undefined | null, height?: number | undefined | null): void
-  /**
-   * Set maximum inner size.  Pass `null` / `undefined` for both to remove the
-   * constraint.
-   */
-  setMaxSize(width?: number | undefined | null, height?: number | undefined | null): void
   /** Device-pixel ratio for the monitor the window is currently on. */
   scaleFactor(): number
   setCursor(cursor: CursorType): void
@@ -216,6 +204,7 @@ export interface BrowserWindowOptions {
   showMenu?: boolean
   resizable?: boolean
   title?: string
+  logical?: boolean
   width?: number
   height?: number
   x?: number
