@@ -1,12 +1,12 @@
 {
-  "name": "@webviewjs/webview-darwin-arm64",
+  "name": "@webviewjs/webview-linux-arm-gnueabihf",
   "version": "0.1.4",
   "cpu": [
-    "arm64"
+    "arm"
   ],
-  "main": "webview.darwin-arm64.node",
+  "main": "webview.linux-arm-gnueabihf.node",
   "files": [
-    "webview.darwin-arm64.node"
+    "webview.linux-arm-gnueabihf.node"
   ],
   "description": "Robust cross-platform webview library for Node.js written in Rust. It also works with deno and bun.",
   "keywords": [
@@ -26,6 +26,6 @@
     "access": "public"
   },
   "os": [
-    "darwin"
+    "linux"
   ]
 }
