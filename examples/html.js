@@ -5,6 +5,8 @@ const { Application } = require('../index.js');
 const app = new Application();
 const window = app.createBrowserWindow();
 
+let count = 0;
+
 const webview = window.createWebview({
     html: `<!DOCTYPE html>
     <html>
@@ -12,11 +14,11 @@ const webview = window.createWebview({
             <title>Webview</title>
         </head>
         <body>
-            <h1 id="output">Hello world!</h1>
+            <h1 id="output">${count}</h1>
             <button id="btn">Click me!</button>
             <script>
                 btn.onclick = function send() {
-                    window.ipc.postMessage('Hello from webview');
+                    window.ipc.postMessage('count');
                 }
             </script>
         </body>
@@ -24,15 +26,21 @@ const webview = window.createWebview({
     `,
     preload: `window.onIpcMessage = function(data) {
         const output = document.getElementById('output');
-        output.innerText = \`Server Sent A Message: \${data}\`;
+        output.innerText = \`\${data}\`;
+        return \`The current count is: \${data}\`
     }`
 });
 
 if (!webview.isDevtoolsOpen()) webview.openDevtools();
 
-webview.onIpcMessage((data) => {
-    const reply = `You sent ${data.body.toString('utf-8')}`;
-    webview.evaluateScript(`onIpcMessage("${reply}")`)
-})
+webview.onIpcMessage(() => {
+    webview.evaluateScriptWithCallback(`onIpcMessage("${++count}")`, (err, result) => {
+        if (err) {
+            console.error('Error evaluating script:', err);
+        } else {
+            console.log("[webview] >>", result);
+        }
+    });
+});
 
 app.run();

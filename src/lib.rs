@@ -238,9 +238,13 @@ impl Application {
     #[cfg(not(target_os = "android"))]
     let initial_global_menu: Option<Menu> = {
       #[cfg(target_os = "macos")]
-      { Some(menu::make_default_macos_menu()) }
+      {
+        Some(menu::make_default_macos_menu())
+      }
       #[cfg(not(target_os = "macos"))]
-      { None }
+      {
+        None
+      }
     };
 
     Ok(Self {

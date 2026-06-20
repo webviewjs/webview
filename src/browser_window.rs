@@ -18,11 +18,6 @@ use winit::{
 };
 
 #[cfg(not(target_os = "android"))]
-use rfd::FileDialog;
-#[cfg(not(target_os = "android"))]
-use muda::Menu;
-
-#[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
 use crate::webview::{
   CustomProtocolResponse, JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap,
@@ -514,21 +509,27 @@ impl BrowserWindow {
 
   #[napi]
   /// Sets the window inner size (width and height).
-  pub fn set_size(&self, width: u32, height: u32, logical: Option<bool>) {
+  pub fn set_min_size(&self, width: u32, height: u32, logical: Option<bool>) {
     if let Some(logical) = logical {
       if logical {
-        self.window.set_inner_size(LogicalSize::new(width, height));
+        self
+          .window
+          .set_min_inner_size(Some(LogicalSize::new(width, height)));
       } else {
-        self.window.set_inner_size(PhysicalSize::new(width, height));
+        self
+          .window
+          .set_min_inner_size(Some(PhysicalSize::new(width, height)));
       }
     } else {
-      self.window.set_inner_size(PhysicalSize::new(width, height));
+      self
+        .window
+        .set_min_inner_size(Some(PhysicalSize::new(width, height)));
     }
   }
 
   #[napi]
   /// Gets the window inner size.
-  pub fn get_size(&self, logical: Option<bool>) -> Dimensions {
+  pub fn get_inner_size(&self, logical: Option<bool>) -> Dimensions {
     let size = self.window.inner_size();
     if let Some(logical) = logical {
       if logical {
@@ -546,35 +547,41 @@ impl BrowserWindow {
   }
 
   #[napi]
-  /// Sets the window position (x and y).
-  pub fn set_position(&self, x: i32, y: i32, logical: Option<bool>) {
+  /// Sets the max window inner size (width and height).
+  pub fn set_max_size(&self, width: u32, height: u32, logical: Option<bool>) {
     if let Some(logical) = logical {
       if logical {
-        self.window.set_outer_position(LogicalPosition::new(x, y));
+        self
+          .window
+          .set_max_inner_size(Some(LogicalSize::new(width, height)));
       } else {
-        self.window.set_outer_position(PhysicalPosition::new(x, y));
+        self
+          .window
+          .set_max_inner_size(Some(PhysicalSize::new(width, height)));
       }
     } else {
-      self.window.set_outer_position(PhysicalPosition::new(x, y));
+      self
+        .window
+        .set_max_inner_size(Some(PhysicalSize::new(width, height)));
     }
   }
 
   #[napi]
-  /// Gets the window position.
-  pub fn get_position(&self, logical: Option<bool>) -> Position {
-    let position = self.window.outer_position().unwrap_or(PhysicalPosition::new(0, 0));
+  /// Gets the window outer size.
+  pub fn get_outer_size(&self, logical: Option<bool>) -> Dimensions {
+    let size = self.window.outer_size();
     if let Some(logical) = logical {
       if logical {
-        let logical_position = position.to_logical::<f64>(self.window.scale_factor());
-        return Position {
-          x: logical_position.x as i32,
-          y: logical_position.y as i32,
+        let logical_size = size.to_logical::<f64>(self.window.scale_factor());
+        return Dimensions {
+          width: logical_size.width as u32,
+          height: logical_size.height as u32,
         };
       }
     }
-    Position {
-      x: position.x,
-      y: position.y,
+    Dimensions {
+      width: size.width,
+      height: size.height,
     }
   }
 
@@ -817,22 +824,41 @@ impl BrowserWindow {
 
   // ── Position ────────────────────────────────────────────────────────────────
 
-  /// Returns the window's outer top-left position in physical pixels, or
-  /// `null` if the platform does not expose it.
   #[napi]
-  pub fn get_position(&self) -> Option<Position> {
-    self
-      .window
-      .outer_position()
-      .ok()
-      .map(|p| Position { x: p.x, y: p.y })
-  }
-
   /// Move the window so its outer top-left corner is at (`x`, `y`) in
   /// physical pixels.
+  pub fn set_position(&self, x: i32, y: i32, logical: Option<bool>) {
+    if let Some(logical) = logical {
+      if logical {
+        self.window.set_outer_position(LogicalPosition::new(x, y));
+      } else {
+        self.window.set_outer_position(PhysicalPosition::new(x, y));
+      }
+    } else {
+      self.window.set_outer_position(PhysicalPosition::new(x, y));
+    }
+  }
+
   #[napi]
-  pub fn set_position(&self, x: i32, y: i32) {
-    self.window.set_outer_position(PhysicalPosition::new(x, y));
+  /// Gets the window position.
+  pub fn get_position(&self, logical: Option<bool>) -> Position {
+    let position = self
+      .window
+      .outer_position()
+      .unwrap_or(PhysicalPosition::new(0, 0));
+    if let Some(logical) = logical {
+      if logical {
+        let logical_position = position.to_logical::<f64>(self.window.scale_factor());
+        return Position {
+          x: logical_position.x as i32,
+          y: logical_position.y as i32,
+        };
+      }
+    }
+    Position {
+      x: position.x,
+      y: position.y,
+    }
   }
 
   /// Center the window on its current monitor.  Does nothing if the current
@@ -847,50 +873,6 @@ impl BrowserWindow {
       let y = mpos.y + (msize.height as i32 - wsize.height as i32) / 2;
       self.window.set_outer_position(PhysicalPosition::new(x, y));
     }
-  }
-
-  // ── Size queries & constraints ───────────────────────────────────────────────
-
-  /// Inner (content-area) size in physical pixels.
-  #[napi]
-  pub fn get_size(&self) -> Dimensions {
-    let s = self.window.inner_size();
-    Dimensions {
-      width: s.width,
-      height: s.height,
-    }
-  }
-
-  /// Outer (including decorations) size in physical pixels.
-  #[napi]
-  pub fn get_outer_size(&self) -> Dimensions {
-    let s = self.window.outer_size();
-    Dimensions {
-      width: s.width,
-      height: s.height,
-    }
-  }
-
-  /// Set minimum inner size.  Pass `null` / `undefined` for both to remove the
-  /// constraint.
-  #[napi]
-  pub fn set_min_size(&self, width: Option<f64>, height: Option<f64>) {
-    let size: Option<winit::dpi::Size> = match (width, height) {
-      (Some(w), Some(h)) => Some(LogicalSize::new(w, h).into()),
-      _ => None,
-    };
-    self.window.set_min_inner_size(size);
-  }
-
-  /// Set maximum inner size.  Pass `null` / `undefined` for both to remove the
-  /// constraint.
-  #[napi]
-  pub fn set_max_size(&self, width: Option<f64>, height: Option<f64>) {
-    let size: Option<winit::dpi::Size> = match (width, height) {
-      (Some(w), Some(h)) => Some(LogicalSize::new(w, h).into()),
-      _ => None,
-    };
-    self.window.set_max_inner_size(size);
   }
 
   // ── DPI ─────────────────────────────────────────────────────────────────────
