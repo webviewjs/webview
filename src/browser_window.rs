@@ -1,7 +1,9 @@
 use dpi::Size;
+use image::GenericImageView;
 #[cfg(not(target_os = "android"))]
 use muda::Menu;
-use napi::{bindgen_prelude::FunctionRef, Either, Env, Result};
+use napi::Either;
+use napi::{bindgen_prelude::FunctionRef, Env, Result};
 use napi_derive::*;
 #[cfg(not(target_os = "android"))]
 use rfd::FileDialog;
@@ -682,20 +684,39 @@ impl BrowserWindow {
   }
 
   #[napi]
-  #[allow(unused_variables)]
+  /// Set the window icon.
+  /// - Passing raw RGBA bytes requires `width` and `height` (or just `width` to assume square).
+  /// - Passing an encoded image buffer (PNG, ICO, JPEG, etc.) will auto-detect dimensions.
   pub fn set_window_icon(
     &self,
-    icon: Either<Vec<u8>, String>,
-    width: u32,
-    height: u32,
+    icon: Either<&[u8], Vec<u8>>,
+    width: Option<u32>,
+    height: Option<u32>,
   ) -> Result<()> {
-    let rgba = match icon {
+    let icon_bytes: &[u8] = match &icon {
       Either::A(bytes) => bytes,
-      Either::B(_path) => {
+      Either::B(bytes) => bytes.as_slice(),
+    };
+
+    let (rgba, width, height) = match (width, height) {
+      (Some(w), Some(h)) => (icon_bytes.to_vec(), w, h),
+      (Some(w), None) => (icon_bytes.to_vec(), w, w), // assume square if only width provided
+      (None, None) => {
+        let img = image::load_from_memory(icon_bytes).map_err(|e| {
+          napi::Error::new(
+            napi::Status::GenericFailure,
+            format!("Failed to decode icon: {}", e),
+          )
+        })?;
+        let (w, h) = img.dimensions();
+        (img.to_rgba8().into_raw(), w, h)
+      }
+      _ => {
         return Err(napi::Error::new(
           napi::Status::InvalidArg,
-          "Path-based icons are not supported; provide RGBA bytes instead",
-        ));
+          "Either width and height must be provided together, or at least width only, or neither"
+            .to_string(),
+        ))
       }
     };
 

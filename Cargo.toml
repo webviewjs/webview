@@ -16,6 +16,7 @@ winit       = { version = ">=0.30,<0.31", features = ["android-native-activity"]
 wry         = { version = "0.53.5", features = ["devtools", "fullscreen"] }
 dpi         = "0.1"
 serde_json  = "1"
+image = "0.25.10"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd  = "0.15.4"

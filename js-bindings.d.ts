@@ -62,7 +62,12 @@ export declare class BrowserWindow {
   hasMenu(): boolean
   get theme(): Theme
   setTheme(theme: Theme): void
-  setWindowIcon(icon: Array<number> | string, width: number, height: number): void
+  /**
+   * Set the window icon.
+   * - Passing raw RGBA bytes requires `width` and `height` (or just `width` to assume square).
+   * - Passing an encoded image buffer (PNG, ICO, JPEG, etc.) will auto-detect dimensions.
+   */
+  setWindowIcon(icon: Uint8Array | Array<number>, width?: number | undefined | null, height?: number | undefined | null): void
   removeWindowIcon(): void
   setVisible(visible: boolean): void
   /** No-op: winit does not expose a progress bar API. */
