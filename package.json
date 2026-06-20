@@ -21,7 +21,9 @@
   "files": [
     "cli",
     "index.d.ts",
-    "index.js"
+    "index.js",
+    "js-bindings.js",
+    "js-bindings.d.ts"
   ],
   "napi": {
     "binaryName": "webview",
