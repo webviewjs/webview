@@ -238,7 +238,7 @@ impl Application {
     #[cfg(target_os = "macos")]
     let initial_global_menu = Some(menu::make_default_macos_menu());
     #[cfg(not(target_os = "macos"))]
-    let initial_global_menu = None;
+    let initial_global_menu: Option<Menu> = None;
 
     Ok(Self {
       event_loop: Some(event_loop),
@@ -300,6 +300,7 @@ impl Application {
       )
     })?;
 
+    #[allow(unused_mut)]
     let mut window_options = options.unwrap_or_default();
     #[cfg(not(target_os = "android"))]
     if window_options.menu.is_none() && self.global_menu.borrow().is_some() {
