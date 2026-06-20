@@ -148,10 +148,6 @@ bun.lockb
 .cargo-cache/
 Cargo.lock
 
-# NAPI
-index.d.ts
-npm/
-
 # IDE
 .idea/
 *.swp
