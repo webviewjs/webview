@@ -2,6 +2,7 @@
 use muda::Menu;
 use napi::{bindgen_prelude::FunctionRef, Either, Env, Result};
 use napi_derive::*;
+#[cfg(not(target_os = "android"))]
 use rfd::FileDialog;
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
@@ -137,6 +138,7 @@ pub struct BrowserWindowOptions {
   pub fullscreen: Option<FullscreenType>,
 }
 
+#[cfg(not(target_os = "android"))]
 #[napi(object)]
 pub struct FileDialogOptions {
   pub multiple: Option<bool>,
@@ -145,6 +147,7 @@ pub struct FileDialogOptions {
   pub filters: Option<Vec<FileFilter>>,
 }
 
+#[cfg(not(target_os = "android"))]
 #[napi(object)]
 pub struct FileFilter {
   pub name: String,
@@ -494,6 +497,7 @@ impl BrowserWindow {
       .request_inner_size(LogicalSize::new(width, height));
   }
 
+  #[cfg(not(target_os = "android"))]
   #[napi]
   pub fn open_file_dialog(&self, options: Option<FileDialogOptions>) -> Result<Vec<String>> {
     let mut dialog = FileDialog::new();
