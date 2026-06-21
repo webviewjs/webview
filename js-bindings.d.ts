@@ -50,8 +50,6 @@ export declare class BrowserWindow {
   setResizable(resizable: boolean): void
   /** Sets the window inner size (width and height). */
   setSize(width: number, height: number, logical?: boolean | undefined |null): void
-  /** Sets the window outer size (width and height). */
-  setOuterSize(width: number, height: number, logical?: boolean | undefined |null): void
   /** Sets the min window inner size (width and height). */
   setMinSize(width: number, height: number, logical?: boolean | undefined | null): void
   /** Gets the window inner size. */
