@@ -515,12 +515,12 @@ impl BrowserWindow {
   pub fn set_size(&self, width: u32, height: u32, logical: Option<bool>) {
     if let Some(logical) = logical {
       if logical {
-        self.window.set_inner_size(LogicalSize::new(width, height));
+        self.window.request_inner_size(LogicalSize::new(width as f64, height as f64));
       } else {
-        self.window.set_inner_size(PhysicalSize::new(width, height));
+        self.window.request_inner_size(PhysicalSize::new(width, height));
       }
     } else {
-      self.window.set_inner_size(PhysicalSize::new(width, height));
+      self.window.request_inner_size(PhysicalSize::new(width, height));
     }
   }
 
