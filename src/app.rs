@@ -894,7 +894,7 @@ impl Application {
         // On macOS restoring the default menu keeps the app menu bar functional.
         #[cfg(target_os = "macos")]
         {
-          let default_menu = menu::make_default_macos_menu();
+          let default_menu = crate::menu::make_default_macos_menu();
           *self.global_menu.borrow_mut() = Some(default_menu);
           // Keep the receiver — menu events can still arrive from predefined items.
         }

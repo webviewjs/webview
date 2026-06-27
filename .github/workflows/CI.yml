@@ -231,35 +231,38 @@ jobs:
     runs-on: ubuntu-latest
     name: FreeBSD x64 (stub)
     timeout-minutes: 90
+    defaults:
+      run:
+        shell: cpa.sh {0}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build FreeBSD stub via cross-platform VM
-        id: build
-        uses: cross-platform-actions/action@v0.25.0
+      - name: Start FreeBSD VM
+        uses: cross-platform-actions/action@v1.3.0
+        with:
+          operating_system: freebsd
+          version: '15.1'
+          memory: 8G
+          cpu_count: 3
+
+      - name: Install dependencies
+        run: |
+          sudo pkg install -y -f curl node npm
+          sudo npm install -g bun --ignore-scripts
+          curl https://sh.rustup.rs -sSf --output rustup.sh
+          sh rustup.sh -y --profile minimal --default-toolchain stable
+
+      - name: Build
         env:
           DEBUG: napi:*
           RUSTUP_IO_THREADS: 1
-        with:
-          operating_system: freebsd
-          version: '14.2'
-          memory: 8G
-          cpu_count: 3
-          environment_variables: 'DEBUG RUSTUP_IO_THREADS'
-          shell: bash
-          run: |
-            set -e
-            sudo pkg install -y -f curl node npm
-            sudo npm install -g bun --ignore-scripts
-            curl https://sh.rustup.rs -sSf --output rustup.sh
-            sh rustup.sh -y --profile minimal --default-toolchain stable
-            source "$HOME/.cargo/env"
-            rustc --version
-            node -v
-            bun --version
-            bun install --frozen-lockfile
-            bun run build
-            rm -rf node_modules target .bun/cache
+        run: |
+          source "$HOME/.cargo/env"
+          rustc --version
+          node -v
+          bun --version
+          bun install --frozen-lockfile
+          bun run build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
