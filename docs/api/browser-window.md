@@ -33,7 +33,7 @@ interface BrowserWindowOptions {
 
 ### `createWebview(options?)`
 
-Attach a webview to the window. Returns a [`Webview`](./webview.md).
+Attach a webview to the window. Returns a [`Webview`](./webview).
 
 ```ts
 win.createWebview(options?: WebviewOptions): Webview
@@ -44,7 +44,7 @@ needed. Do not rely on a discarded temporary wrapper.
 
 Pass `options.webContext` to share browser data with other webviews. Pass
 `options.navigationHandler` to synchronously allow or reject navigation. See
-the [Webview reference](./webview.md).
+the [Webview reference](./webview).
 
 ### Window state
 
@@ -270,7 +270,7 @@ win.setTheme(theme: Theme | null): void   // 'Light' | 'Dark' | null (system)
 win.setMenu(options: MenuOptions | null): void
 ```
 
-See [Menus guide](../guides/menus.md).
+See [Menus guide](../guides/menus).
 
 ### Custom protocols
 
@@ -284,7 +284,7 @@ win.registerProtocol(
 ): void
 ```
 
-The handler may perform asynchronous file, database, or network work. See [Custom Protocols guide](../guides/custom-protocols.md).
+The handler may perform asynchronous file, database, or network work. See [Custom Protocols guide](../guides/custom-protocols).
 
 ### File dialogs
 

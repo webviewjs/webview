@@ -6,4 +6,4 @@ string.
 
 System tray creation is unsupported and returns an error on Android.
 
-See [BrowserWindow platform APIs](../api/browser-window.md#android-runtime-extensions).
+See [BrowserWindow platform APIs](../api/browser-window#android-runtime-extensions).

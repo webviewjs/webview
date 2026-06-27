@@ -94,7 +94,7 @@ interface WebContextOptions {
 }
 ```
 
-See the [WebContext reference](./web-context.md).
+See the [WebContext reference](./web-context).
 
 ## Webview event payloads
 
@@ -223,7 +223,7 @@ enum ProgressBarState {
 
 ### `CursorType`
 
-See [BrowserWindow cursor section](./browser-window.md#cursor) for the full list.
+See [BrowserWindow cursor section](./browser-window#cursor) for the full list.
 
 ### `WindowEventType`
 

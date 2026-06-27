@@ -141,7 +141,7 @@ interface ApplicationEvent {
 
 ### `createBrowserWindow(options?)`
 
-Create and return a new [`BrowserWindow`](./browser-window.md).
+Create and return a new [`BrowserWindow`](./browser-window).
 
 ```ts
 app.createBrowserWindow(options?: BrowserWindowOptions): BrowserWindow
@@ -164,7 +164,7 @@ app.createWebContext(options?: WebContextOptions): WebContext
 ```
 
 Create contexts through the application rather than with `new WebContext()`.
-See the [WebContext reference](./web-context.md).
+See the [WebContext reference](./web-context).
 
 ### `setMenu(options?)`
 
@@ -174,7 +174,7 @@ Set the global application menu. Pass `null` to remove it.
 app.setMenu(options?: MenuOptions): void
 ```
 
-See [Menus guide](../guides/menus.md) for the full options shape.
+See [Menus guide](../guides/menus) for the full options shape.
 
 This API remains supported. Compare its numeric event value with the exported
 enum:

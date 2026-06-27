@@ -29,7 +29,7 @@ const webview = win.createWebview({
 
 The page can then call either `window.ipc.postMessage(...)` or `window.bindings.postMessage(...)`.
 
-On Windows, load IPC-enabled pages through a custom protocol such as `app://`, not a `file:` URL. See [Custom Protocols](./custom-protocols.md).
+On Windows, load IPC-enabled pages through a custom protocol such as `app://`, not a `file:` URL. See [Custom Protocols](./custom-protocols).
 
 ## Node to page
 
@@ -65,4 +65,4 @@ webview.onIpcMessage((message) => {
 });
 ```
 
-For a structured Promise-based Node bridge, use [`webview.expose()`](../api/webview.md#expose-name-target) instead of building your own IPC request/response protocol.
+For a structured Promise-based Node bridge, use [`webview.expose()`](../api/webview#expose-name-target) instead of building your own IPC request/response protocol.

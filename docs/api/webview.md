@@ -157,7 +157,7 @@ Node registers its handler with `webview.onIpcMessage(handler)`.
 
 Set `ipcName: 'bindings'` to add `window.bindings` as an alias. `window.ipc` always remains available.
 
-See [IPC guide](../guides/ipc-messaging.md) for a complete walkthrough.
+See [IPC guide](../guides/ipc-messaging) for a complete walkthrough.
 
 ## `expose(name, target)`
 
@@ -192,7 +192,7 @@ win.registerProtocol('app', async (request) => {
 const webview = win.createWebview({ url: 'app://localhost/index.html' });
 ```
 
-See [Custom Protocols guide](../guides/custom-protocols.md) for full details.
+See [Custom Protocols guide](../guides/custom-protocols) for full details.
 
 ## Disposal
 

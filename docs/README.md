@@ -22,8 +22,52 @@ Robust cross-platform webview library for Node.js written in Rust. It is a nativ
 > [!CAUTION]
 > This library is still in development and not ready for production use. Feel free to experiment with it and report any issues you find.
 
-See the [full documentation](./docs/) for API references, guides, platform
+See the [full documentation](./) for API references, guides, platform
 notes, and runnable examples.
+
+# Documentation
+
+## Getting started
+
+|                                                        |                                 |
+| ------------------------------------------------------ | ------------------------------- |
+| [Installation](./getting-started/installation) | System requirements and setup   |
+| [Quick Start](./getting-started/quick-start)   | Your first window in minutes    |
+| [Event Loop](./getting-started/event-loop)     | How the non-blocking pump works |
+
+## API reference
+
+|                                               |                                                        |
+| --------------------------------------------- | ------------------------------------------------------ |
+| [Application](./api/application)      | Root object — event loop, windows, menus               |
+| [BrowserWindow](./api/browser-window) | OS window, size, position, cursor, decorations         |
+| [Webview](./api/webview)              | Embedded browser — navigation, cookies, script, bounds |
+| [WebContext](./api/web-context)       | Shared browser data, profiles, and automation          |
+| [System Tray](./api/tray)             | Tray icons, menus, updates, and pointer events         |
+| [Menu](./api/menu)                    | Native menu bar construction                           |
+| [Types](./api/types)                  | Shared interfaces and enums                            |
+
+## Guides
+
+|                                                               |                                                 |
+| ------------------------------------------------------------- | ----------------------------------------------- |
+| [Building Executables](./guides/building-executables) | Compile to `.exe` / binary with node, deno, bun |
+| [IPC Messaging](./guides/ipc-messaging)               | Page ↔ Node communication                       |
+| [Menus](./guides/menus)                               | Building menu bars with roles and accelerators  |
+| [Multiple Windows](./guides/multiple-windows)         | Managing several windows                        |
+| [Cookies & Storage](./guides/cookies-and-storage)     | Reading, writing, and clearing cookies          |
+| [Custom Protocols](./guides/custom-protocols)         | Serving local content to the webview            |
+
+## Platform notes
+
+|                                       |                                           |
+| ------------------------------------- | ----------------------------------------- |
+| [Windows](./platform/windows) | WebView2, taskbar, DPI                    |
+| [macOS](./platform/macos)     | WebKit, main-thread requirement, app menu |
+| [Linux](./platform/linux)     | WebKitGTK, Wayland/X11, menu limitations  |
+| [iOS](./platform/ios)         | Orientation, status bar, and gestures     |
+| [Android](./platform/android) | Content rectangle and configuration       |
+
 
 # Installation
 
@@ -105,7 +149,7 @@ app.whenReady().then(() => {
 });
 ```
 
-See the [system tray reference](./api/tray.md) and
+See the [system tray reference](./api/tray) and
 [runnable tray example](../examples/tray.mjs).
 
 ## IPC and exposed functions
@@ -159,7 +203,7 @@ window.registerProtocol('app', async (request) => {
 window.createWebview({ url: 'app://localhost/index.html' });
 ```
 
-See [Custom Protocols](./guides/custom-protocols.md), [IPC](./guides/ipc-messaging.md), and the runnable [custom protocol](../examples/custom-protocol.mjs) and [expose](../examples/expose.mjs) examples for more details.
+See [Custom Protocols](./guides/custom-protocols), [IPC](./guides/ipc-messaging), and the runnable [custom protocol](../examples/custom-protocol.mjs) and [expose](../examples/expose.mjs) examples for more details.
 
 ## Menu System
 
@@ -342,7 +386,7 @@ window.show(); // Show the window again
 webview.reload();
 ```
 
-For more details on closing applications and cleaning up resources, see the [Closing Guide](./CLOSING_GUIDE.md).
+For more details on closing applications and cleaning up resources, see the [Closing Guide](./CLOSING_GUIDE).
 
 ## Keep strong references
 
@@ -402,50 +446,7 @@ webview --build --runtime bun  --input ./src/index.ts --name my-app
 | `--name` / `-n`      | `webviewjs`   | Executable name            |
 | `--resources` / `-r` | —             | JSON asset map (node only) |
 
-For the full compilation guide including cross-compilation and code signing, see [Building Executables](./guides/building-executables.md).
-
-# Documentation
-
-## Getting started
-
-|                                                        |                                 |
-| ------------------------------------------------------ | ------------------------------- |
-| [Installation](./getting-started/installation.md) | System requirements and setup   |
-| [Quick Start](./getting-started/quick-start.md)   | Your first window in minutes    |
-| [Event Loop](./getting-started/event-loop.md)     | How the non-blocking pump works |
-
-## API reference
-
-|                                               |                                                        |
-| --------------------------------------------- | ------------------------------------------------------ |
-| [Application](./api/application.md)      | Root object — event loop, windows, menus               |
-| [BrowserWindow](./api/browser-window.md) | OS window, size, position, cursor, decorations         |
-| [Webview](./api/webview.md)              | Embedded browser — navigation, cookies, script, bounds |
-| [WebContext](./api/web-context.md)       | Shared browser data, profiles, and automation          |
-| [System Tray](./api/tray.md)             | Tray icons, menus, updates, and pointer events         |
-| [Menu](./api/menu.md)                    | Native menu bar construction                           |
-| [Types](./api/types.md)                  | Shared interfaces and enums                            |
-
-## Guides
-
-|                                                               |                                                 |
-| ------------------------------------------------------------- | ----------------------------------------------- |
-| [Building Executables](./guides/building-executables.md) | Compile to `.exe` / binary with node, deno, bun |
-| [IPC Messaging](./guides/ipc-messaging.md)               | Page ↔ Node communication                       |
-| [Menus](./guides/menus.md)                               | Building menu bars with roles and accelerators  |
-| [Multiple Windows](./guides/multiple-windows.md)         | Managing several windows                        |
-| [Cookies & Storage](./guides/cookies-and-storage.md)     | Reading, writing, and clearing cookies          |
-| [Custom Protocols](./guides/custom-protocols.md)         | Serving local content to the webview            |
-
-## Platform notes
-
-|                                       |                                           |
-| ------------------------------------- | ----------------------------------------- |
-| [Windows](./platform/windows.md) | WebView2, taskbar, DPI                    |
-| [macOS](./platform/macos.md)     | WebKit, main-thread requirement, app menu |
-| [Linux](./platform/linux.md)     | WebKitGTK, Wayland/X11, menu limitations  |
-| [iOS](./platform/ios.md)         | Orientation, status bar, and gestures     |
-| [Android](./platform/android.md) | Content rectangle and configuration       |
+For the full compilation guide including cross-compilation and code signing, see [Building Executables](./guides/building-executables).
 
 # Development
 

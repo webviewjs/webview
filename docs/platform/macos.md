@@ -57,7 +57,7 @@ first-mouse, HiDPI, tabbing, Option-as-Alt, and borderless-game attributes.
 Runtime methods support simple fullscreen, shadows, native window tabs,
 document-edited state, Option-as-Alt behavior, and borderless-game mode.
 
-See [BrowserWindow platform APIs](../api/browser-window.md#macos-creation-options).
+See [BrowserWindow platform APIs](../api/browser-window#macos-creation-options).
 
 ## Known limitations
 
