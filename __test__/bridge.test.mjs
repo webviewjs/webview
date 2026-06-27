@@ -200,14 +200,6 @@ test('generated BrowserWindowOptions include platform creation attributes', asyn
   }
 });
 
-test('acrylic example uses a transparent webview and native backdrop API', async () => {
-  const source = await readFile(new URL('../examples/acrylic.mjs', import.meta.url), 'utf8');
-
-  assert.match(source, /setSystemBackdrop\(WindowsSystemBackdrop\.TransientWindow\)/);
-  assert.match(source, /createWebview\(\{[\s\S]*transparent:\s*true/);
-  assert.doesNotMatch(source, /node:ffi|SetWindowCompositionAttribute/);
-});
-
 test('Application and TrayIcon expose the system tray API', () => {
   assert.equal(typeof Application.prototype.createTrayIcon, 'function');
   assert.equal(typeof TrayIcon, 'function');

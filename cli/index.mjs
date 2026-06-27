@@ -12,13 +12,27 @@ async function readPackageJSON() {
 
 const { version, description, main } = await readPackageJSON();
 
+function inferRuntime() {
+  if (typeof globalThis.Bun !== 'undefined') return 'bun';
+  if (typeof globalThis.Deno !== 'undefined') return 'deno';
+  return 'node';
+}
+
+const defaultRuntime = inferRuntime();
+
 const options = {
   help: { type: 'boolean', short: 'h', description: 'Show help' },
   version: { type: 'boolean', short: 'v', description: 'Show version' },
   build: {
     type: 'boolean',
     short: 'b',
-    description: 'Build the project',
+    description: 'Build the project into a standalone executable',
+  },
+  runtime: {
+    type: 'string',
+    short: 'R',
+    default: defaultRuntime,
+    description: 'Runtime to use for compilation (node, deno, bun)',
   },
   name: {
     type: 'string',
@@ -41,7 +55,7 @@ const options = {
   resources: {
     type: 'string',
     short: 'r',
-    description: 'Resources mapping json file path',
+    description: 'Resources mapping json file path (node runtime only)',
   },
   'dry-run': {
     type: 'boolean',
@@ -72,9 +86,9 @@ if (!Object.keys(args.values).filter((k) => !defaultValuesOptionNames.has(k)).le
 
 if (args.values.help) {
   const message = stripIndents`WebviewJS: ${styleText('greenBright', description)}
-    
+
     ${styleText('dim', 'Usage:')} ${styleText('greenBright', 'webview [options]')}
-    
+
     ${styleText('dim', 'Options:')}
 ${Object.entries(options)
   .map(([name, { short, default: defaultValue, type }]) => {
@@ -96,13 +110,19 @@ ${Object.entries(options)
   );
 } else if (args.values.build) {
   const isDry = !!args.values['dry-run'];
-  const { output, input, resources } = args.values;
+  const { output, input, resources, runtime } = args.values;
+
+  const validRuntimes = ['node', 'deno', 'bun'];
+  if (!validRuntimes.includes(runtime)) {
+    console.error(styleText('red', `Invalid runtime "${runtime}". Must be one of: ${validRuntimes.join(', ')}`));
+    process.exit(1);
+  }
 
   if (isDry) {
-    logger(`Dry run: building ${input} to ${output}`);
+    logger(`Dry run: building ${input} to ${output} using ${runtime} runtime`);
   } else {
     const projectName = args.values.name || 'webviewjs';
-    const target = build(input, output, prettify(projectName), resources);
+    const target = build(input, output, prettify(projectName), resources, runtime);
     logger(
       styleText(
         'greenBright',
