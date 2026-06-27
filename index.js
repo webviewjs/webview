@@ -39,17 +39,26 @@ nativeBinding.Application.prototype[Symbol.dispose] = function dispose() {
 // ── BrowserWindow EventEmitter ────────────────────────────────────────────────
 // Maps WindowEventType numeric values (from Rust enum order) to event names.
 const _windowEventNames = [
-  'move',        // 0  Moved
-  'resize',      // 1  Resized
-  'close',       // 2  CloseRequested
-  'focus',       // 3  Focused
-  'blur',        // 4  Blurred
-  'mouse-enter', // 5  MouseEnter
-  'mouse-leave', // 6  MouseLeave
-  'mouse-move',  // 7  MouseMove
-  'mouse-down',  // 8  MouseDown
-  'mouse-up',    // 9  MouseUp
-  'scroll',      // 10 Scroll
+  'move',                 // 0  Moved
+  'resize',               // 1  Resized
+  'close',                // 2  CloseRequested
+  'focus',                // 3  Focused
+  'blur',                 // 4  Blurred
+  'mouse-enter',          // 5  MouseEnter
+  'mouse-leave',          // 6  MouseLeave
+  'mouse-move',           // 7  MouseMove
+  'mouse-down',           // 8  MouseDown
+  'mouse-up',             // 9  MouseUp
+  'scroll',               // 10 Scroll
+  'key-down',             // 11 KeyDown
+  'key-up',               // 12 KeyUp
+  'file-drop',            // 13 FileDrop
+  'file-hover',           // 14 FileHover
+  'file-hover-cancelled', // 15 FileHoverCancelled
+  'scale-factor-changed', // 16 ScaleFactorChanged
+  'theme-changed',        // 17 ThemeChanged
+  'ime',                  // 18 Ime
+  'touch',                // 19 Touch
 ];
 
 const _windowEmitters = new WeakMap();

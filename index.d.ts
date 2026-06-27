@@ -34,6 +34,7 @@ export interface WindowMouseEvent {
   x: number;
   y: number;
   button?: number;
+  modifiers?: number;
 }
 
 export interface WindowScrollEvent {
@@ -44,6 +45,43 @@ export interface WindowScrollEvent {
 
 export interface WindowBaseEvent {
   event: number;
+}
+
+export interface WindowKeyEvent {
+  event: number;
+  key?: string;
+  code?: string;
+  modifiers?: number;
+  isRepeat?: boolean;
+}
+
+export interface WindowFileEvent {
+  event: number;
+  files?: string[];
+}
+
+export interface WindowScaleEvent {
+  event: number;
+  scaleFactor: number;
+}
+
+export interface WindowThemeEvent {
+  event: number;
+  text: 'light' | 'dark';
+}
+
+export interface WindowImeEvent {
+  event: number;
+  text?: string;
+  phase: 'enabled' | 'preedit' | 'commit' | 'disabled';
+}
+
+export interface WindowTouchEvent {
+  event: number;
+  x: number;
+  y: number;
+  touchId: number;
+  phase: 'started' | 'moved' | 'ended' | 'cancelled';
 }
 
 export interface BrowserWindowEventMap {
@@ -58,6 +96,15 @@ export interface BrowserWindowEventMap {
   'mouse-down': WindowMouseEvent;
   'mouse-up': WindowMouseEvent;
   'scroll': WindowScrollEvent;
+  'key-down': WindowKeyEvent;
+  'key-up': WindowKeyEvent;
+  'file-drop': WindowFileEvent;
+  'file-hover': WindowFileEvent;
+  'file-hover-cancelled': WindowBaseEvent;
+  'scale-factor-changed': WindowScaleEvent;
+  'theme-changed': WindowThemeEvent;
+  'ime': WindowImeEvent;
+  'touch': WindowTouchEvent;
 }
 
 declare module './js-bindings' {
