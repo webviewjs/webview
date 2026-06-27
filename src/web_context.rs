@@ -1,4 +1,8 @@
-use std::path::Path;
+use std::{
+  cell::{RefCell, RefMut},
+  path::Path,
+  rc::Rc,
+};
 
 use napi::Result;
 use napi_derive::napi;
@@ -16,8 +20,10 @@ pub struct WebContextOptions {
 
 #[napi(js_name = "WebContext")]
 pub struct JsWebContext {
-  web_context_inner: WebContext,
+  web_context_inner: WebContextResource,
 }
+
+pub(crate) type WebContextResource = Rc<RefCell<Option<WebContext>>>;
 
 #[napi]
 impl JsWebContext {
@@ -45,11 +51,18 @@ impl JsWebContext {
       web_context_inner.set_allows_automation(true);
     }
 
-    JsWebContext { web_context_inner }
+    JsWebContext {
+      web_context_inner: Rc::new(RefCell::new(Some(web_context_inner))),
+    }
   }
 
-  pub fn inner(&mut self) -> &mut WebContext {
-    &mut self.web_context_inner
+  pub(crate) fn resource(&self) -> WebContextResource {
+    Rc::clone(&self.web_context_inner)
+  }
+
+  pub fn inner(&mut self) -> Result<RefMut<'_, WebContext>> {
+    RefMut::filter_map(self.web_context_inner.borrow_mut(), Option::as_mut)
+      .map_err(|_| napi::Error::new(napi::Status::GenericFailure, "WebContext has been disposed"))
   }
 
   #[napi(getter)]
@@ -57,6 +70,8 @@ impl JsWebContext {
   pub fn data_directory(&self) -> Option<String> {
     self
       .web_context_inner
+      .borrow()
+      .as_ref()?
       .data_directory()
       .map(|path| path.to_string_lossy().to_string())
   }
@@ -66,13 +81,27 @@ impl JsWebContext {
   pub fn is_custom_protocol_registered(&self, scheme: String) -> bool {
     self
       .web_context_inner
-      .is_custom_protocol_registered(&scheme)
+      .borrow()
+      .as_ref()
+      .map(|context| context.is_custom_protocol_registered(&scheme))
+      .unwrap_or(false)
   }
 
   #[napi]
   /// Set if this context allows automation.
   /// Note: this is currently only enforced on Linux, and has the stipulation that only 1 context allows automation at a time.
-  pub fn set_allows_automation(&mut self, flag: bool) {
-    self.web_context_inner.set_allows_automation(flag);
+  pub fn set_allows_automation(&mut self, flag: bool) -> Result<()> {
+    self.inner()?.set_allows_automation(flag);
+    Ok(())
+  }
+
+  #[napi]
+  pub fn dispose(&mut self) {
+    self.web_context_inner.borrow_mut().take();
+  }
+
+  #[napi]
+  pub fn is_disposed(&self) -> bool {
+    self.web_context_inner.borrow().is_none()
   }
 }

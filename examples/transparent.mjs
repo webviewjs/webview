@@ -6,7 +6,7 @@ const window = app.createBrowserWindow({
   decorations: false,
 });
 
-const webview = window.createWebview({
+const _webview = window.createWebview({
   html: /* html */ `
       <html>
         <body style="background-color:rgba(87,87,87,0.5);">

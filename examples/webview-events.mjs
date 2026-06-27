@@ -1,4 +1,4 @@
-import { Application, WebviewApplicationEvent } from '../index.js';
+import { Application } from '../index.js';
 
 const app = new Application();
 const window = app.createBrowserWindow({
@@ -30,10 +30,6 @@ for (const name of [
   webview.on(name, (event) => console.log(name, event));
 }
 
-app.onEvent((event) => {
-  if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
-    app.exit();
-  }
-});
+app.on('application-close-requested', () => app.exit());
 
 app.run();

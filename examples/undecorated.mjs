@@ -9,7 +9,7 @@ let window = app.createBrowserWindow({
   resizable: true,
 });
 
-let webview = window.createWebview({
+const _webview = window.createWebview({
   html: `<!DOCTYPE html>
     <html>
         <head>

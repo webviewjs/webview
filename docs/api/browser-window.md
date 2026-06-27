@@ -39,6 +39,9 @@ Attach a webview to the window. Returns a [`Webview`](./webview.md).
 win.createWebview(options?: WebviewOptions): Webview
 ```
 
+Keep the returned `Webview` in application state for as long as the view is
+needed. Do not rely on a discarded temporary wrapper.
+
 Pass `options.webContext` to share browser data with other webviews. Pass
 `options.navigationHandler` to synchronously allow or reject navigation. See
 the [Webview reference](./webview.md).
@@ -116,6 +119,135 @@ win.setSkipTaskbar(skip: boolean): void         // Windows only
 win.setWindowIcon(rgba: Buffer, width: number, height: number): void
 win.setProgressBar(progress: JsProgressBar): void
 ```
+
+### Windows extensions
+
+These methods call winit's `WindowExtWindows` API on Windows and are no-ops on
+other platforms:
+
+Creation options expose the matching native attributes:
+
+```ts
+windowsOwnerWindow?: bigint
+windowsTaskbarIcon?: TrayIconImage
+windowsNoRedirectionBitmap?: boolean
+windowsDragAndDrop?: boolean
+windowsSkipTaskbar?: boolean
+windowsClassName?: string
+windowsUndecoratedShadow?: boolean
+windowsSystemBackdrop?: WindowsSystemBackdrop
+windowsClipChildren?: boolean
+windowsBorderColor?: number // 0xRRGGBB
+windowsTitleBackgroundColor?: number // 0xRRGGBB
+windowsTitleTextColor?: number // 0xRRGGBB
+windowsCornerPreference?: WindowsCornerPreference
+```
+
+Use the existing `menu` option instead of a raw Win32 `HMENU`.
+
+```ts
+win.setEnable(enabled: boolean): void
+win.setTaskbarIcon(data: Buffer, width?: number, height?: number): void
+win.removeTaskbarIcon(): void
+win.setUndecoratedShadow(shadow: boolean): void
+win.setSystemBackdrop(backdrop: WindowsSystemBackdrop): void
+win.setBorderColor(r?: number, g?: number, b?: number): void
+win.setTitleBackgroundColor(r?: number, g?: number, b?: number): void
+win.setTitleTextColor(r: number, g: number, b: number): void
+win.setCornerPreference(preference: WindowsCornerPreference): void
+win.getNativeHandleAnyThread(): bigint
+```
+
+Taskbar icon input follows `setWindowIcon`. Omit all color components to
+restore system border or title-background behavior.
+
+### macOS creation options
+
+```ts
+macosMovableByWindowBackground?: boolean
+macosTitlebarTransparent?: boolean
+macosTitleHidden?: boolean
+macosTitlebarHidden?: boolean
+macosTitlebarButtonsHidden?: boolean
+macosFullsizeContentView?: boolean
+macosDisallowHidpi?: boolean
+macosHasShadow?: boolean
+macosAcceptsFirstMouse?: boolean
+macosTabbingIdentifier?: string
+macosOptionAsAlt?: MacosOptionAsAlt
+macosBorderlessGame?: boolean
+```
+
+### macOS runtime extensions
+
+```ts
+win.simpleFullscreen(): boolean
+win.setSimpleFullscreen(fullscreen: boolean): boolean
+win.hasShadow(): boolean
+win.setHasShadow(value: boolean): void
+win.setTabbingIdentifier(identifier: string): void
+win.tabbingIdentifier(): string
+win.selectNextTab(): void
+win.selectPreviousTab(): void
+win.selectTabAtIndex(index: number): void
+win.numTabs(): number
+win.isDocumentEdited(): boolean
+win.setDocumentEdited(edited: boolean): void
+win.setOptionAsAlt(value: MacosOptionAsAlt): void
+win.optionAsAlt(): MacosOptionAsAlt
+win.setBorderlessGame(value: boolean): void
+win.isBorderlessGame(): boolean
+```
+
+### Linux creation options
+
+X11 options:
+
+```ts
+x11VisualId?: number
+x11Screen?: number
+x11GeneralName?: string
+x11InstanceName?: string
+x11OverrideRedirect?: boolean
+x11WindowTypes?: X11WindowType[]
+x11BaseWidth?: number
+x11BaseHeight?: number
+x11EmbedParentWindow?: number
+```
+
+Wayland options:
+
+```ts
+waylandAppId?: string
+waylandInstance?: string
+```
+
+`win.getWaylandXdgToplevel()` returns the native pointer as a bigint, or `0n`
+when the window is not using Wayland.
+
+### iOS options and runtime extensions
+
+Creation options use the `ios` prefix: `iosScaleFactor`,
+`iosValidOrientations`, `iosPrefersHomeIndicatorHidden`,
+`iosDeferredSystemGestureEdges`, `iosPrefersStatusBarHidden`, and
+`iosStatusBarStyle`.
+
+Runtime methods expose scale factor, valid orientations, home-indicator and
+status-bar preferences, deferred system-gesture edges, and pinch, pan,
+double-tap, and rotation gesture recognition.
+
+Screen edges use a bitmask: top `1`, left `2`, bottom `4`, right `8`.
+
+### Android runtime extensions
+
+```ts
+win.androidContentRect(): AndroidContentRect
+win.androidConfig(): string
+```
+
+`androidConfig()` provides the current native configuration as a diagnostic
+string. Runtime methods on unsupported platforms return neutral values or do
+nothing.
 
 `JsProgressBar`:
 
@@ -274,5 +406,12 @@ OS resize handles are absent. WebviewJS automatically handles this:
 
 ```ts
 const win = app.createBrowserWindow({ decorations: false, resizable: true });
-// Resize just works — no extra code needed.
+// Resize works without extra code.
 ```
+
+## Disposal
+
+Call `win.dispose()` for early cleanup, or use `Symbol.dispose`. Disposal is
+idempotent. `win.isDisposed()` reports its state. Disposing a window also
+disposes its webviews. `app.exit()` disposes every window owned by the
+application.

@@ -29,23 +29,29 @@ const webview = win.createWebview({
 ## Reacting to window events
 
 ```js
-app.onEvent((event) => {
-  switch (event.event) {
-    case WebviewApplicationEvent.WindowCloseRequested:
-      console.log('A window was closed');
-      break;
+app.on('window-close-requested', () => {
+  console.log('A window was closed');
+});
 
-    case WebviewApplicationEvent.ApplicationCloseRequested:
-      console.log('All windows closed — exiting');
-      app.exit();
-      break;
+app.on('application-close-requested', () => {
+  console.log('All windows closed; exiting');
+  app.exit();
+});
 
-    case WebviewApplicationEvent.CustomMenuClick:
-      console.log('Menu item clicked:', event.customMenuEvent?.id);
-      break;
-  }
+app.on('custom-menu-click', ({ customMenuEvent }) => {
+  console.log('Menu item clicked:', customMenuEvent.id);
 });
 ```
+
+## Retaining native handles
+
+Keep strong references to windows, webviews, contexts, and tray icons while
+you need their wrapper methods or event listeners. Store handles in
+application state instead of discarding creation results.
+
+The root `Application` owns their native resources. Calling `app.exit()`
+disposes all root-created resources. Retained wrappers subsequently return
+`true` from `isDisposed()` and reject further method calls.
 
 ## IPC
 
@@ -80,3 +86,6 @@ The page calls `await window.native.getGreeting('Ada')`.
   // …
 } // app.exit() is called automatically
 ```
+
+Each `BrowserWindow`, `Webview`, `WebContext`, and `TrayIcon` also supports
+`dispose()` and `Symbol.dispose` for early cleanup.

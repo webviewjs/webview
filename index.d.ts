@@ -12,7 +12,28 @@ export interface ApplicationEventMap {
   'window-close-requested': import('./js-bindings').ApplicationEvent;
   'application-close-requested': import('./js-bindings').ApplicationEvent;
   'custom-menu-click': import('./js-bindings').ApplicationEvent;
+  ready: import('./js-bindings').ApplicationEvent;
 }
+
+export interface TrayEventMap {
+  click: import('./js-bindings').TrayEventPayload;
+  'double-click': import('./js-bindings').TrayEventPayload;
+  enter: import('./js-bindings').TrayEventPayload;
+  move: import('./js-bindings').TrayEventPayload;
+  leave: import('./js-bindings').TrayEventPayload;
+}
+
+export type ApplicationWhenReadyOptions =
+  | {
+      autoRun?: true;
+      interval?: number;
+      ref?: boolean;
+    }
+  | {
+      autoRun: false;
+      interval?: never;
+      ref?: never;
+    };
 
 // ── Webview events ────────────────────────────────────────────────────────────
 
@@ -147,7 +168,31 @@ export interface BrowserWindowEventMap {
 }
 
 declare module './js-bindings' {
+  interface TrayIcon {
+    [Symbol.dispose](): void;
+
+    on<K extends keyof TrayEventMap>(event: K, listener: (payload: TrayEventMap[K]) => void): this;
+    on(event: string, listener: (...args: any[]) => void): this;
+    once<K extends keyof TrayEventMap>(event: K, listener: (payload: TrayEventMap[K]) => void): this;
+    once(event: string, listener: (...args: any[]) => void): this;
+    off<K extends keyof TrayEventMap>(event: K, listener: (payload: TrayEventMap[K]) => void): this;
+    off(event: string, listener: (...args: any[]) => void): this;
+    addListener<K extends keyof TrayEventMap>(event: K, listener: (payload: TrayEventMap[K]) => void): this;
+    addListener(event: string, listener: (...args: any[]) => void): this;
+    removeListener<K extends keyof TrayEventMap>(event: K, listener: (payload: TrayEventMap[K]) => void): this;
+    removeListener(event: string, listener: (...args: any[]) => void): this;
+    removeAllListeners(event?: string): this;
+    listenerCount(event: string): number;
+    listeners(event: string): Function[];
+    rawListeners(event: string): Function[];
+    emit(event: string, ...args: any[]): boolean;
+    eventNames(): (string | symbol)[];
+  }
+
   interface Application {
+    [Symbol.dispose](): void;
+
+    whenReady(options?: ApplicationWhenReadyOptions): Promise<void>;
     on<K extends keyof ApplicationEventMap>(event: K, listener: (payload: ApplicationEventMap[K]) => void): this;
     on(event: string, listener: (...args: any[]) => void): this;
     once<K extends keyof ApplicationEventMap>(event: K, listener: (payload: ApplicationEventMap[K]) => void): this;
@@ -188,6 +233,8 @@ declare module './js-bindings' {
   }
 
   interface BrowserWindow {
+    [Symbol.dispose](): void;
+
     /**
      * Register a custom protocol handler.
      *
@@ -237,6 +284,8 @@ declare module './js-bindings' {
   }
 
   interface Webview {
+    [Symbol.dispose](): void;
+
     expose(name: string, target: ExposedTarget): void;
 
     // EventEmitter — mirrors BrowserWindow events but for webview-level events.
@@ -256,5 +305,9 @@ declare module './js-bindings' {
     rawListeners(event: string): Function[];
     emit(event: string, ...args: any[]): boolean;
     eventNames(): (string | symbol)[];
+  }
+
+  interface WebContext {
+    [Symbol.dispose](): void;
   }
 }

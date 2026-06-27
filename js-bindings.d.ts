@@ -4,9 +4,11 @@ export declare class Application {
   constructor(options?: ApplicationOptions | undefined | null);
   onEvent(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void;
   bind(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void;
+  isReady(): boolean;
   exit(): void;
   /** Creates a new WebContext with the given options. */
   createWebContext(options?: WebContextOptions | undefined | null): JsWebContext;
+  createTrayIcon(options: TrayIconOptions): JsTrayIcon;
   createBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow;
   createChildBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow;
   setMenu(menuOptions?: MenuOptions | undefined | null): void;
@@ -89,6 +91,8 @@ export declare class BrowserWindow {
   openFileDialog(options?: FileDialogOptions | undefined | null): Array<string>;
   id(): number;
   hasMenu(): boolean;
+  dispose(): void;
+  isDisposed(): boolean;
   /**
    * Register a raw callback to receive window events.  Used internally by the
    * JS EventEmitter wrapper; prefer `window.on(event, handler)` in user code.
@@ -107,6 +111,53 @@ export declare class BrowserWindow {
     height?: number | undefined | null,
   ): void;
   removeWindowIcon(): void;
+  setEnable(enabled: boolean): void;
+  setTaskbarIcon(
+    icon: Uint8Array | Array<number>,
+    width?: number | undefined | null,
+    height?: number | undefined | null,
+  ): void;
+  removeTaskbarIcon(): void;
+  setUndecoratedShadow(shadow: boolean): void;
+  setSystemBackdrop(backdrop: WindowsSystemBackdrop): void;
+  setBorderColor(r?: number | undefined | null, g?: number | undefined | null, b?: number | undefined | null): void;
+  setTitleBackgroundColor(
+    r?: number | undefined | null,
+    g?: number | undefined | null,
+    b?: number | undefined | null,
+  ): void;
+  setTitleTextColor(r: number, g: number, b: number): void;
+  setCornerPreference(preference: WindowsCornerPreference): void;
+  getNativeHandleAnyThread(): bigint;
+  simpleFullscreen(): boolean;
+  setSimpleFullscreen(fullscreen: boolean): boolean;
+  hasShadow(): boolean;
+  setHasShadow(value: boolean): void;
+  setTabbingIdentifier(identifier: string): void;
+  tabbingIdentifier(): string;
+  selectNextTab(): void;
+  selectPreviousTab(): void;
+  selectTabAtIndex(index: number): void;
+  numTabs(): number;
+  isDocumentEdited(): boolean;
+  setDocumentEdited(edited: boolean): void;
+  setOptionAsAlt(value: MacosOptionAsAlt): void;
+  optionAsAlt(): MacosOptionAsAlt;
+  setBorderlessGame(value: boolean): void;
+  isBorderlessGame(): boolean;
+  getWaylandXdgToplevel(): bigint;
+  setIosScaleFactor(value: number): void;
+  setValidOrientations(value: IosValidOrientations): void;
+  setPrefersHomeIndicatorHidden(value: boolean): void;
+  setPreferredScreenEdgesDeferringSystemGestures(edges: number): void;
+  setPrefersStatusBarHidden(value: boolean): void;
+  setPreferredStatusBarStyle(value: IosStatusBarStyle): void;
+  recognizePinchGesture(value: boolean): void;
+  recognizePanGesture(value: boolean, minimumTouches: number, maximumTouches: number): void;
+  recognizeDoubletapGesture(value: boolean): void;
+  recognizeRotationGesture(value: boolean): void;
+  androidContentRect(): AndroidContentRect;
+  androidConfig(): string;
   setVisible(visible: boolean): void;
   /** No-op: winit does not expose a progress bar API. */
   setProgressBar(state: JsProgressBar): void;
@@ -169,6 +220,30 @@ export declare class BrowserWindow {
   requestRedraw(): void;
 }
 
+export declare class TrayIcon {
+  constructor();
+  get id(): string;
+  _onTrayEvent(handler?: ((arg: TrayEventPayload) => void) | undefined | null): void;
+  setIcon(
+    icon: Uint8Array | Array<number>,
+    width?: number | undefined | null,
+    height?: number | undefined | null,
+  ): void;
+  removeIcon(): void;
+  setMenu(menu?: MenuOptions | undefined | null): void;
+  setTooltip(tooltip?: string | undefined | null): void;
+  setTitle(title?: string | undefined | null): void;
+  setVisible(visible: boolean): void;
+  setIconAsTemplate(value: boolean): void;
+  setShowMenuOnLeftClick(value: boolean): void;
+  setShowMenuOnRightClick(value: boolean): void;
+  showMenu(): void;
+  rect(): TrayRect | null;
+  dispose(): void;
+  isDisposed(): boolean;
+}
+export type JsTrayIcon = TrayIcon;
+
 export declare class WebContext {
   /** Not supported. Use `app.createWebContext(options)` instead. */
   constructor();
@@ -181,12 +256,16 @@ export declare class WebContext {
    * Note: this is currently only enforced on Linux, and has the stipulation that only 1 context allows automation at a time.
    */
   setAllowsAutomation(flag: boolean): void;
+  dispose(): void;
+  isDisposed(): boolean;
 }
 export type JsWebContext = WebContext;
 
 export declare class Webview {
   constructor();
   onIpcMessage(handler?: ((arg: IpcMessage) => void) | undefined | null): void;
+  dispose(): void;
+  isDisposed(): boolean;
   /**
    * Low-level method used by the JS `expose()` wrapper.
    *
@@ -260,6 +339,13 @@ export declare class Webview {
 }
 export type JsWebview = Webview;
 
+export interface AndroidContentRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export interface ApplicationEvent {
   event: WebviewApplicationEvent;
   customMenuEvent?: CustomMenuEvent;
@@ -300,6 +386,48 @@ export interface BrowserWindowOptions {
   focused?: boolean;
   transparent?: boolean;
   fullscreen?: FullscreenType;
+  windowsOwnerWindow?: bigint;
+  windowsTaskbarIcon?: TrayIconImage;
+  windowsNoRedirectionBitmap?: boolean;
+  windowsDragAndDrop?: boolean;
+  windowsSkipTaskbar?: boolean;
+  windowsClassName?: string;
+  windowsUndecoratedShadow?: boolean;
+  windowsSystemBackdrop?: WindowsSystemBackdrop;
+  windowsClipChildren?: boolean;
+  windowsBorderColor?: number;
+  windowsTitleBackgroundColor?: number;
+  windowsTitleTextColor?: number;
+  windowsCornerPreference?: WindowsCornerPreference;
+  macosMovableByWindowBackground?: boolean;
+  macosTitlebarTransparent?: boolean;
+  macosTitleHidden?: boolean;
+  macosTitlebarHidden?: boolean;
+  macosTitlebarButtonsHidden?: boolean;
+  macosFullsizeContentView?: boolean;
+  macosDisallowHidpi?: boolean;
+  macosHasShadow?: boolean;
+  macosAcceptsFirstMouse?: boolean;
+  macosTabbingIdentifier?: string;
+  macosOptionAsAlt?: MacosOptionAsAlt;
+  macosBorderlessGame?: boolean;
+  x11VisualId?: number;
+  x11Screen?: number;
+  x11GeneralName?: string;
+  x11InstanceName?: string;
+  x11OverrideRedirect?: boolean;
+  x11WindowTypes?: Array<X11WindowType>;
+  x11BaseWidth?: number;
+  x11BaseHeight?: number;
+  x11EmbedParentWindow?: number;
+  waylandAppId?: string;
+  waylandInstance?: string;
+  iosScaleFactor?: number;
+  iosValidOrientations?: IosValidOrientations;
+  iosPrefersHomeIndicatorHidden?: boolean;
+  iosDeferredSystemGestureEdges?: number;
+  iosPrefersStatusBarHidden?: boolean;
+  iosStatusBarStyle?: IosStatusBarStyle;
 }
 
 /** Kept for backward compat; no longer used internally. */
@@ -412,6 +540,18 @@ export interface HeaderData {
   value?: string;
 }
 
+export declare enum IosStatusBarStyle {
+  Default = 0,
+  LightContent = 1,
+  DarkContent = 2,
+}
+
+export declare enum IosValidOrientations {
+  LandscapeAndPortrait = 0,
+  Landscape = 1,
+  Portrait = 2,
+}
+
 export interface IpcMessage {
   body: Buffer;
   method: string;
@@ -422,6 +562,13 @@ export interface IpcMessage {
 export interface JsProgressBar {
   state?: ProgressBarState;
   progress?: number;
+}
+
+export declare enum MacosOptionAsAlt {
+  OnlyLeft = 0,
+  OnlyRight = 1,
+  Both = 2,
+  None = 3,
 }
 
 export interface MenuItemOptions {
@@ -464,6 +611,40 @@ export declare enum Theme {
   System = 2,
 }
 
+export interface TrayEventPayload {
+  event: string;
+  id: string;
+  x: number;
+  y: number;
+  rect: TrayRect;
+  button?: string;
+  buttonState?: string;
+}
+
+export interface TrayIconImage {
+  data: Buffer;
+  width?: number;
+  height?: number;
+}
+
+export interface TrayIconOptions {
+  id?: string;
+  icon?: TrayIconImage;
+  tooltip?: string;
+  title?: string;
+  menu?: MenuOptions;
+  iconIsTemplate?: boolean;
+  menuOnLeftClick?: boolean;
+  menuOnRightClick?: boolean;
+}
+
+export interface TrayRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface VideoMode {
   size: Dimensions;
   bitDepth: number;
@@ -487,6 +668,7 @@ export declare enum WebviewApplicationEvent {
   WindowCloseRequested = 0,
   ApplicationCloseRequested = 1,
   CustomMenuClick = 2,
+  Ready = 3,
 }
 
 export interface WebviewBounds {
@@ -624,4 +806,36 @@ export declare enum WindowEventType {
   ThemeChanged = 17,
   Ime = 18,
   Touch = 19,
+}
+
+export declare enum WindowsCornerPreference {
+  Default = 0,
+  DoNotRound = 1,
+  Round = 2,
+  RoundSmall = 3,
+}
+
+export declare enum WindowsSystemBackdrop {
+  Auto = 0,
+  None = 1,
+  MainWindow = 2,
+  TransientWindow = 3,
+  TabbedWindow = 4,
+}
+
+export declare enum X11WindowType {
+  Desktop = 0,
+  Dock = 1,
+  Toolbar = 2,
+  Menu = 3,
+  Utility = 4,
+  Splash = 5,
+  Dialog = 6,
+  DropdownMenu = 7,
+  PopupMenu = 8,
+  Tooltip = 9,
+  Notification = 10,
+  Combo = 11,
+  Dnd = 12,
+  Normal = 13,
 }

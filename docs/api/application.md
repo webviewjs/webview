@@ -54,6 +54,32 @@ Process one batch of OS events without blocking. Returns `true` while alive, `fa
 app.pumpEvents(): boolean
 ```
 
+### `whenReady(options?)`
+
+Resolve when winit emits its first native `resumed()` lifecycle callback.
+`whenReady()` starts the event pump by default:
+
+```js
+app.whenReady().then(() => {
+  const window = app.createBrowserWindow();
+  window.createWebview({ url: 'https://example.com' });
+});
+```
+
+```ts
+type ApplicationWhenReadyOptions =
+  | { autoRun?: true; interval?: number; ref?: boolean }
+  | { autoRun: false; interval?: never; ref?: never };
+
+app.whenReady(options?: ApplicationWhenReadyOptions): Promise<void>
+app.isReady(): boolean
+```
+
+`autoRun` defaults to `true`; `interval` and `ref` are forwarded to `run()`.
+Use `{ autoRun: false }` when manually calling `run()` or `pumpEvents()`.
+Manual mode rejects `interval` and `ref` because no implicit timer is created.
+Calls made after readiness still resolve asynchronously.
+
 ## Application events
 
 `Application` implements the standard Node.js `EventEmitter` API. Prefer this
@@ -78,6 +104,7 @@ app.on('custom-menu-click', ({ customMenuEvent }) => {
 | `window-close-requested`      | A user requests that a window be closed |
 | `application-close-requested` | The last window has been closed         |
 | `custom-menu-click`           | A custom menu item is selected          |
+| `ready`                       | The native event loop is ready          |
 
 The usual `on`, `once`, `off`, `addListener`, `removeListener`,
 `removeAllListeners`, `listenerCount`, `listeners`, `rawListeners`, `emit`, and
@@ -110,6 +137,7 @@ interface ApplicationEvent {
 | `WindowCloseRequested`      | User clicks the OS close button on a window              |
 | `ApplicationCloseRequested` | The last window was closed                               |
 | `CustomMenuClick`           | A custom menu item was clicked; see `customMenuEvent.id` |
+| `Ready`                     | The native event loop emitted its first resume event     |
 
 ### `createBrowserWindow(options?)`
 
@@ -169,3 +197,11 @@ app.onEvent((event) => {
   // …
 } // app.exit() called automatically
 ```
+
+### Root-owned disposal
+
+Resources created through an application are owned by that application.
+`app.exit()`, `Symbol.dispose`, and application finalization dispose tray
+icons, webviews, windows, web contexts, menus, and callbacks. Cleanup is
+idempotent. Retained resource wrappers report `isDisposed() === true` and
+reject subsequent method calls. Creating new resources after exit also fails.

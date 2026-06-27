@@ -3,7 +3,7 @@
 ## Basic setup
 
 ```js
-import { Application, WebviewApplicationEvent } from '@webviewjs/webview';
+import { Application } from '@webviewjs/webview';
 
 const app = new Application();
 
@@ -36,16 +36,14 @@ app.setMenu({
   ],
 });
 
-app.onEvent((ev) => {
-  if (ev.event === WebviewApplicationEvent.CustomMenuClick) {
-    switch (ev.customMenuEvent.id) {
-      case 'new':
-        createNewWindow();
-        break;
-      case 'open':
-        openFilePicker();
-        break;
-    }
+app.on('custom-menu-click', ({ customMenuEvent }) => {
+  switch (customMenuEvent.id) {
+    case 'new':
+      createNewWindow();
+      break;
+    case 'open':
+      openFilePicker();
+      break;
   }
 });
 ```
@@ -72,7 +70,8 @@ win.setMenu({
 });
 ```
 
-Per-window menus override the global menu for that window. Clicking items still fires `CustomMenuClick` on the application event handler.
+Per-window menus override the global menu for that window. Clicking items emits
+`custom-menu-click` on the application.
 
 ## Nested submenus
 

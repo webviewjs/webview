@@ -1,4 +1,7 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+  cell::{Cell, Ref, RefCell},
+  rc::Rc,
+};
 // wry::WebView is not Send, so Rc (not Arc) is correct here — everything
 // runs on the main thread.
 
@@ -16,12 +19,14 @@ use wry::{
 
 use crate::browser_window::next_protocol_id;
 use crate::types::*;
+use crate::web_context::JsWebContext;
 
 /// Shared reference to the webview event dispatch callback.
 /// The `Arc<ThreadsafeFunction>` wrapper lets us cheaply clone the pointer into
 /// `Send + Sync` closures (e.g. `with_new_window_req_handler`).
 pub(crate) type WebviewEventHandlerRef =
   Rc<RefCell<Option<Arc<ThreadsafeFunction<WebviewEventPayload>>>>>;
+pub(crate) type WebviewResource = Rc<RefCell<Option<Rc<wry::WebView>>>>;
 
 /// Shared reference to a sync bool-returning JS function (navigation guard).
 /// `with_navigation_handler` doesn't require `Send`, so `FunctionRef` is fine.
@@ -83,10 +88,11 @@ impl Default for WebviewOptions {
 pub struct JsWebview {
   // Rc is shared with the owning BrowserWindow so the WebView stays alive
   // even if JS garbage-collects this handle.
-  pub(crate) webview_inner: Rc<wry::WebView>,
+  pub(crate) webview_inner: WebviewResource,
   ipc_state: Rc<RefCell<Option<FunctionRef<IpcMessage, ()>>>>,
   // expose() handlers: namespace → JS function that receives ExposeCallData.
   expose_handlers: Rc<RefCell<std::collections::HashMap<String, FunctionRef<ExposeCallData, ()>>>>,
+  disposed: Rc<Cell<bool>>,
 }
 
 #[napi]
@@ -106,8 +112,9 @@ impl JsWebview {
     event_handler: WebviewEventHandlerRef,
     nav_handler: WebviewBoolHandlerRef,
   ) -> Result<Self> {
-    let mut webview = if let Some(ctx) = web_context {
-      WebViewBuilder::new_with_web_context(ctx.inner())
+    let mut context = web_context.map(JsWebContext::inner).transpose()?;
+    let mut webview = if let Some(ctx) = context.as_mut() {
+      WebViewBuilder::new_with_web_context(&mut *ctx)
     } else {
       WebViewBuilder::new()
     };
@@ -566,9 +573,10 @@ impl JsWebview {
     }?;
 
     Ok(Self {
-      webview_inner: Rc::new(built),
+      webview_inner: Rc::new(RefCell::new(Some(Rc::new(built)))),
       ipc_state,
       expose_handlers,
+      disposed: Rc::new(Cell::new(false)),
     })
   }
 
@@ -583,6 +591,34 @@ impl JsWebview {
   #[napi]
   pub fn on_ipc_message(&mut self, handler: Option<FunctionRef<IpcMessage, ()>>) {
     *self.ipc_state.borrow_mut() = handler;
+  }
+
+  pub(crate) fn lifecycle_shared(&self) -> Rc<Cell<bool>> {
+    Rc::clone(&self.disposed)
+  }
+
+  fn webview(&self) -> Ref<'_, Rc<wry::WebView>> {
+    match Ref::filter_map(self.webview_inner.borrow(), Option::as_ref) {
+      Ok(webview) => webview,
+      Err(_) => panic!("Webview has been disposed"),
+    }
+  }
+
+  #[napi]
+  pub fn dispose(&mut self) {
+    if self.disposed.replace(true) {
+      return;
+    }
+    if let Some(webview) = self.webview_inner.borrow_mut().take() {
+      let _ = webview.set_visible(false);
+    }
+    self.ipc_state.borrow_mut().take();
+    self.expose_handlers.borrow_mut().clear();
+  }
+
+  #[napi]
+  pub fn is_disposed(&self) -> bool {
+    self.disposed.get()
   }
 
   // ── expose() support ─────────────────────────────────────────────────────────
@@ -652,14 +688,14 @@ impl JsWebview {
     );
 
     self
-      .webview_inner
+      .webview()
       .evaluate_script(&script)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
 
   #[napi]
   pub fn print(&self) -> Result<()> {
-    self.webview_inner.print().map_err(|e| {
+    self.webview().print().map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to print: {}", e),
@@ -669,7 +705,7 @@ impl JsWebview {
 
   #[napi]
   pub fn zoom(&self, scale_factor: f64) -> Result<()> {
-    self.webview_inner.zoom(scale_factor).map_err(|e| {
+    self.webview().zoom(scale_factor).map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to zoom: {}", e),
@@ -679,7 +715,7 @@ impl JsWebview {
 
   #[napi]
   pub fn set_webview_visibility(&self, visible: bool) -> Result<()> {
-    self.webview_inner.set_visible(visible).map_err(|e| {
+    self.webview().set_visible(visible).map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to set webview visibility: {}", e),
@@ -689,22 +725,22 @@ impl JsWebview {
 
   #[napi]
   pub fn is_devtools_open(&self) -> bool {
-    self.webview_inner.is_devtools_open()
+    self.webview().is_devtools_open()
   }
 
   #[napi]
   pub fn open_devtools(&self) {
-    self.webview_inner.open_devtools();
+    self.webview().open_devtools();
   }
 
   #[napi]
   pub fn close_devtools(&self) {
-    self.webview_inner.close_devtools();
+    self.webview().close_devtools();
   }
 
   #[napi]
   pub fn load_url(&self, url: String) -> Result<()> {
-    self.webview_inner.load_url(&url).map_err(|e| {
+    self.webview().load_url(&url).map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to load URL: {}", e),
@@ -714,7 +750,7 @@ impl JsWebview {
 
   #[napi]
   pub fn load_html(&self, html: String) -> Result<()> {
-    self.webview_inner.load_html(&html).map_err(|e| {
+    self.webview().load_html(&html).map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to load HTML: {}", e),
@@ -725,7 +761,7 @@ impl JsWebview {
   #[napi]
   pub fn evaluate_script(&self, js: String) -> Result<()> {
     self
-      .webview_inner
+      .webview()
       .evaluate_script(&js)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("{}", e)))
   }
@@ -737,7 +773,7 @@ impl JsWebview {
     callback: ThreadsafeFunction<String>,
   ) -> Result<()> {
     self
-      .webview_inner
+      .webview()
       .evaluate_script_with_callback(&js, move |val| {
         callback.call(Ok(val), ThreadsafeFunctionCallMode::Blocking);
       })
@@ -746,7 +782,7 @@ impl JsWebview {
 
   #[napi]
   pub fn reload(&self) -> Result<()> {
-    self.webview_inner.reload().map_err(|e| {
+    self.webview().reload().map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to reload: {}", e),
@@ -759,14 +795,14 @@ impl JsWebview {
   /// The URL the webview is currently showing.
   #[napi]
   pub fn url(&self) -> Option<String> {
-    self.webview_inner.url().ok()
+    self.webview().url().ok()
   }
 
   /// Webview width in logical pixels (same coordinate space as `set_bounds`).
   #[napi(getter)]
   pub fn width(&self) -> Option<f64> {
     self
-      .webview_inner
+      .webview()
       .bounds()
       .ok()
       .map(|r| r.size.to_logical::<f64>(1.0).width)
@@ -776,7 +812,7 @@ impl JsWebview {
   #[napi(getter)]
   pub fn height(&self) -> Option<f64> {
     self
-      .webview_inner
+      .webview()
       .bounds()
       .ok()
       .map(|r| r.size.to_logical::<f64>(1.0).height)
@@ -786,7 +822,7 @@ impl JsWebview {
   #[napi(getter)]
   pub fn x(&self) -> Option<f64> {
     self
-      .webview_inner
+      .webview()
       .bounds()
       .ok()
       .map(|r| r.position.to_logical::<f64>(1.0).x)
@@ -796,7 +832,7 @@ impl JsWebview {
   #[napi(getter)]
   pub fn y(&self) -> Option<f64> {
     self
-      .webview_inner
+      .webview()
       .bounds()
       .ok()
       .map(|r| r.position.to_logical::<f64>(1.0).y)
@@ -814,7 +850,7 @@ impl JsWebview {
       }
     }
     self
-      .webview_inner
+      .webview()
       .load_url_with_headers(&url, map)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -826,8 +862,8 @@ impl JsWebview {
   #[napi]
   pub fn get_cookies(&self, url: Option<String>) -> Result<Vec<WebviewCookie>> {
     let raw = match url {
-      Some(ref u) => self.webview_inner.cookies_for_url(u),
-      None => self.webview_inner.cookies(),
+      Some(ref u) => self.webview().cookies_for_url(u),
+      None => self.webview().cookies(),
     }
     .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
 
@@ -839,7 +875,7 @@ impl JsWebview {
   pub fn set_cookie(&self, cookie: WebviewCookie) -> Result<()> {
     let c = js_to_cookie(&cookie);
     self
-      .webview_inner
+      .webview()
       .set_cookie(&c)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -862,7 +898,7 @@ impl JsWebview {
     }
     let c = builder.build();
     self
-      .webview_inner
+      .webview()
       .delete_cookie(&c)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -871,7 +907,7 @@ impl JsWebview {
   #[napi]
   pub fn clear_all_browsing_data(&self) -> Result<()> {
     self
-      .webview_inner
+      .webview()
       .clear_all_browsing_data()
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -883,7 +919,7 @@ impl JsWebview {
   #[napi]
   pub fn set_background_color(&self, r: u8, g: u8, b: u8, a: u8) -> Result<()> {
     self
-      .webview_inner
+      .webview()
       .set_background_color((r, g, b, a))
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -894,7 +930,7 @@ impl JsWebview {
   /// pixels.
   #[napi]
   pub fn get_bounds(&self) -> Option<WebviewBounds> {
-    self.webview_inner.bounds().ok().map(|r| {
+    self.webview().bounds().ok().map(|r| {
       let pos = r.position.to_logical::<f64>(1.0);
       let size = r.size.to_logical::<f64>(1.0);
       WebviewBounds {
@@ -914,7 +950,7 @@ impl JsWebview {
       size: dpi::LogicalSize::new(bounds.width, bounds.height).into(),
     };
     self
-      .webview_inner
+      .webview()
       .set_bounds(rect)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -925,7 +961,7 @@ impl JsWebview {
   #[napi]
   pub fn focus(&self) -> Result<()> {
     self
-      .webview_inner
+      .webview()
       .focus()
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -934,7 +970,7 @@ impl JsWebview {
   #[napi]
   pub fn focus_parent(&self) -> Result<()> {
     self
-      .webview_inner
+      .webview()
       .focus_parent()
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }

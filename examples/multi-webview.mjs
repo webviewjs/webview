@@ -1,11 +1,12 @@
-import { Application, ProgressBarState } from '../index.js';
+import { Application } from '../index.js';
 
 const width = 800;
 const height = 600;
 
 const app = new Application();
 
-app.onEvent(console.log);
+app.on('window-close-requested', console.log);
+app.on('application-close-requested', console.log);
 
 const window = app.createBrowserWindow({
   width,

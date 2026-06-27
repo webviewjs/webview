@@ -1,4 +1,4 @@
-import { Application, WebviewApplicationEvent } from '../index.js';
+import { Application } from '../index.js';
 
 const app = new Application();
 const window = app.createBrowserWindow({
@@ -24,10 +24,6 @@ const webview = window.createWebview({
 
 webview.on('navigation', ({ url }) => console.log('navigation attempted', url));
 
-app.onEvent((event) => {
-  if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
-    app.exit();
-  }
-});
+app.on('application-close-requested', () => app.exit());
 
 app.run();

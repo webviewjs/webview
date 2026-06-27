@@ -36,12 +36,82 @@ nativeBinding.Application.prototype[Symbol.dispose] = function dispose() {
   this.exit();
 };
 
+for (const Type of [
+  nativeBinding.BrowserWindow,
+  nativeBinding.Webview,
+  nativeBinding.WebContext,
+  nativeBinding.TrayIcon,
+]) {
+  if (Type?.prototype?.dispose) {
+    Type.prototype[Symbol.dispose] = function dispose() {
+      this.dispose();
+    };
+  }
+}
+
+for (const Type of [
+  nativeBinding.BrowserWindow,
+  nativeBinding.Webview,
+  nativeBinding.WebContext,
+  nativeBinding.TrayIcon,
+]) {
+  if (!Type?.prototype?.isDisposed) continue;
+
+  for (const name of Object.getOwnPropertyNames(Type.prototype)) {
+    if (name === 'constructor' || name === 'dispose' || name === 'isDisposed') continue;
+    const descriptor = Object.getOwnPropertyDescriptor(Type.prototype, name);
+    if (typeof descriptor?.value !== 'function') continue;
+    const nativeMethod = descriptor.value;
+    Type.prototype[name] = function (...args) {
+      if (this.isDisposed()) {
+        throw new Error(`${Type.name} has been disposed`);
+      }
+      return nativeMethod.apply(this, args);
+    };
+  }
+}
+
+// ── TrayIcon EventEmitter ────────────────────────────────────────────────────
+const _trayEmitters = new WeakMap();
+
+function _getTrayEmitter(tray) {
+  if (!_trayEmitters.has(tray)) {
+    const emitter = new EventEmitter();
+    _trayEmitters.set(tray, emitter);
+    tray._onTrayEvent(function (payload) {
+      emitter.emit(payload.event, payload);
+    });
+  }
+  return _trayEmitters.get(tray);
+}
+
+[
+  'on',
+  'once',
+  'off',
+  'addListener',
+  'removeListener',
+  'removeAllListeners',
+  'listenerCount',
+  'listeners',
+  'rawListeners',
+  'emit',
+  'eventNames',
+].forEach((method) => {
+  nativeBinding.TrayIcon.prototype[method] = function (...args) {
+    const emitter = _getTrayEmitter(this);
+    const result = emitter[method](...args);
+    return result === emitter ? this : result;
+  };
+});
+
 // ── Application EventEmitter ─────────────────────────────────────────────────
 // Maps WebviewApplicationEvent numeric values (from Rust enum order) to names.
 const _applicationEventNames = [
   'window-close-requested', // 0 WindowCloseRequested
   'application-close-requested', // 1 ApplicationCloseRequested
   'custom-menu-click', // 2 CustomMenuClick
+  'ready', // 3 Ready
 ];
 
 const _applicationEmitters = new WeakMap();
@@ -57,6 +127,34 @@ function _getApplicationEmitter(app) {
   }
   return _applicationEmitters.get(app);
 }
+
+nativeBinding.Application.prototype.whenReady = function whenReady(options = {}) {
+  const { autoRun = true, interval, ref } = options;
+
+  if (!autoRun) {
+    if (Object.prototype.hasOwnProperty.call(options, 'interval')) {
+      throw new TypeError('interval is not supported when autoRun is false');
+    }
+    if (Object.prototype.hasOwnProperty.call(options, 'ref')) {
+      throw new TypeError('ref is not supported when autoRun is false');
+    }
+  }
+
+  const ready = this.isReady()
+    ? Promise.resolve()
+    : new Promise((resolve) => {
+        nativeBinding.Application.prototype.once.call(this, 'ready', resolve);
+      });
+
+  if (autoRun) {
+    const runOptions = {};
+    if (interval !== undefined) runOptions.interval = interval;
+    if (ref !== undefined) runOptions.ref = ref;
+    this.run(runOptions);
+  }
+
+  return ready;
+};
 
 [
   'on',
@@ -369,6 +467,8 @@ module.exports.SerializationError = SerializationError;
 // Auto-generated exports by postbuild.js. Do not edit directly.
 module.exports.Application = nativeBinding.Application;
 module.exports.BrowserWindow = nativeBinding.BrowserWindow;
+module.exports.TrayIcon = nativeBinding.TrayIcon;
+module.exports.JsTrayIcon = nativeBinding.JsTrayIcon;
 module.exports.WebContext = nativeBinding.WebContext;
 module.exports.JsWebContext = nativeBinding.JsWebContext;
 module.exports.Webview = nativeBinding.Webview;
@@ -378,6 +478,9 @@ module.exports.JsControlFlow = nativeBinding.JsControlFlow;
 module.exports.CursorType = nativeBinding.CursorType;
 module.exports.FullscreenType = nativeBinding.FullscreenType;
 module.exports.getWebviewVersion = nativeBinding.getWebviewVersion;
+module.exports.IosStatusBarStyle = nativeBinding.IosStatusBarStyle;
+module.exports.IosValidOrientations = nativeBinding.IosValidOrientations;
+module.exports.MacosOptionAsAlt = nativeBinding.MacosOptionAsAlt;
 module.exports.ProgressBarState = nativeBinding.ProgressBarState;
 module.exports.JsProgressBarState = nativeBinding.JsProgressBarState;
 module.exports.Theme = nativeBinding.Theme;
@@ -385,3 +488,6 @@ module.exports.WebviewApplicationEvent = nativeBinding.WebviewApplicationEvent;
 module.exports.WebviewEventType = nativeBinding.WebviewEventType;
 module.exports.WindowCommand = nativeBinding.WindowCommand;
 module.exports.WindowEventType = nativeBinding.WindowEventType;
+module.exports.WindowsCornerPreference = nativeBinding.WindowsCornerPreference;
+module.exports.WindowsSystemBackdrop = nativeBinding.WindowsSystemBackdrop;
+module.exports.X11WindowType = nativeBinding.X11WindowType;

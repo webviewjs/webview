@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { extname, join, relative, resolve } from 'node:path';
+import { extname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Application } from '../index.js';
@@ -45,5 +45,6 @@ window.registerProtocol('app', async (request) => {
   }
 });
 
-window.createWebview({ url: 'app://localhost/index.html' }).openDevtools();
+const webview = window.createWebview({ url: 'app://localhost/index.html' });
+webview.openDevtools();
 app.run();

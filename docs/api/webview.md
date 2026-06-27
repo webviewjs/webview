@@ -2,6 +2,10 @@
 
 Controls the embedded browser view attached to a `BrowserWindow`. Created via `win.createWebview()`.
 
+Keep a strong JavaScript reference to each `Webview` for its intended
+lifetime. This preserves access to methods and EventEmitter listeners. The
+root `Application` owns the native webview and disposes it during `app.exit()`.
+
 ## Creation options
 
 ```ts
@@ -189,3 +193,9 @@ const webview = win.createWebview({ url: 'app://localhost/index.html' });
 ```
 
 See [Custom Protocols guide](../guides/custom-protocols.md) for full details.
+
+## Disposal
+
+Call `webview.dispose()` for early cleanup, or use `Symbol.dispose`. Disposal
+is idempotent. `webview.isDisposed()` reports its state. `app.exit()` also
+disposes every webview created under that application.

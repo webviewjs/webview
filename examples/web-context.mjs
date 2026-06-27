@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { Application, WebviewApplicationEvent } from '../index.js';
+import { Application } from '../index.js';
 
 const app = new Application();
 const context = app.createWebContext({
@@ -19,21 +19,17 @@ const secondWindow = app.createBrowserWindow({
   y: 80,
 });
 
-firstWindow.createWebview({
+const _firstWebview = firstWindow.createWebview({
   url: 'https://example.com',
   webContext: context,
 });
-secondWindow.createWebview({
+const _secondWebview = secondWindow.createWebview({
   url: 'https://example.com',
   webContext: context,
 });
 
 console.log('Shared data directory:', context.dataDirectory);
 
-app.onEvent((event) => {
-  if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
-    app.exit();
-  }
-});
+app.on('application-close-requested', () => app.exit());
 
 app.run();

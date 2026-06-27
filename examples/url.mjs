@@ -3,7 +3,7 @@ import { Application, Theme } from '../index.js';
 const app = new Application();
 const window = app.createBrowserWindow();
 
-window.createWebview({
+const _webview = window.createWebview({
   title: 'Hello world',
   url: 'https://nodejs.org',
 });

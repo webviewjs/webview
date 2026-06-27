@@ -60,6 +60,6 @@ const window = app.createBrowserWindow({
 });
 
 window.registerProtocol('app', router.fetch);
-window.createWebview({ url: 'app://localhost' });
+const _webview = window.createWebview({ url: 'app://localhost' });
 
 app.run();

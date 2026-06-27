@@ -17,6 +17,33 @@ Each call to `pumpEvents()` drains the OS message queue without waiting, then re
 
 Because this runs inside a Node.js timer, all Node APIs (file I/O, network, child processes, etc.) work normally alongside the GUI.
 
+## Application readiness
+
+`app.whenReady()` starts the event pump and resolves when it reaches winit's
+first native `resumed()` callback:
+
+```js
+app.whenReady().then(() => {
+  console.log('native application is ready');
+});
+```
+
+Configure the implicit timer through readiness options:
+
+```js
+app.whenReady({ interval: 33, ref: false });
+```
+
+For manual control, disable auto-run and then start your own pump:
+
+```js
+const ready = app.whenReady({ autoRun: false });
+app.pumpEvents();
+await ready;
+```
+
+`interval` and `ref` are not accepted when `autoRun` is `false`.
+
 ## Controlling the interval
 
 ```js

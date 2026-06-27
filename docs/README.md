@@ -18,6 +18,7 @@ WebviewJS is a Node.js binding for creating native desktop windows with an embed
 | [BrowserWindow](./api/browser-window.md) | OS window, size, position, cursor, decorations         |
 | [Webview](./api/webview.md)              | Embedded browser — navigation, cookies, script, bounds |
 | [WebContext](./api/web-context.md)       | Shared browser data, profiles, and automation          |
+| [System Tray](./api/tray.md)             | Tray icons, menus, updates, and pointer events         |
 | [Menu](./api/menu.md)                    | Native menu bar construction                           |
 | [Types](./api/types.md)                  | Shared interfaces and enums                            |
 
@@ -42,6 +43,7 @@ WebviewJS is a Node.js binding for creating native desktop windows with an embed
 | [Custom protocol](../examples/custom-protocol.mjs)           | Serving local content through a custom scheme       |
 | [Hono custom protocol](../examples/custom-protocol-hono.mjs) | Routing Fetch requests and responses through Hono   |
 | [Expose](../examples/expose.mjs)                             | Calling Node functions from page JavaScript         |
+| [System tray](../examples/tray.mjs)                          | Tray icon menus, events, and runtime updates        |
 
 ## Platform notes
 
@@ -50,3 +52,5 @@ WebviewJS is a Node.js binding for creating native desktop windows with an embed
 | [Windows](./platform/windows.md) | WebView2, taskbar, DPI                    |
 | [macOS](./platform/macos.md)     | WebKit, main-thread requirement, app menu |
 | [Linux](./platform/linux.md)     | WebKitGTK, Wayland/X11, menu limitations  |
+| [iOS](./platform/ios.md)         | Orientation, status bar, and gestures     |
+| [Android](./platform/android.md) | Content rectangle and configuration       |

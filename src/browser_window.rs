@@ -8,7 +8,7 @@ use napi::{bindgen_prelude::FunctionRef, threadsafe_function::ThreadsafeFunction
 use napi_derive::*;
 #[cfg(not(target_os = "android"))]
 use rfd::FileDialog;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -21,12 +21,62 @@ use winit::{
   },
 };
 
+#[cfg(target_os = "windows")]
+use winit::platform::windows::WindowExtWindows;
+
 #[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
 use crate::webview::{
   JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap, WebviewBoolHandlerRef,
-  WebviewEventHandlerRef,
+  WebviewEventHandlerRef, WebviewResource,
 };
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn decode_icon(
+  bytes: &[u8],
+  width: Option<u32>,
+  height: Option<u32>,
+) -> Result<(Vec<u8>, u32, u32)> {
+  match (width, height) {
+    (Some(w), Some(h)) => Ok((bytes.to_vec(), w, h)),
+    (Some(w), None) => Ok((bytes.to_vec(), w, w)),
+    (None, None) => {
+      let image = image::load_from_memory(bytes).map_err(|e| {
+        napi::Error::new(
+          napi::Status::GenericFailure,
+          format!("Failed to decode icon: {}", e),
+        )
+      })?;
+      let (width, height) = image.dimensions();
+      Ok((image.to_rgba8().into_raw(), width, height))
+    }
+    _ => Err(napi::Error::new(
+      napi::Status::InvalidArg,
+      "height requires width",
+    )),
+  }
+}
+
+#[cfg(target_os = "windows")]
+fn rgb_option(
+  r: Option<u8>,
+  g: Option<u8>,
+  b: Option<u8>,
+) -> Option<winit::platform::windows::Color> {
+  match (r, g, b) {
+    (Some(r), Some(g), Some(b)) => Some(winit::platform::windows::Color::from_rgb(r, g, b)),
+    _ => None,
+  }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_color(value: u32) -> winit::platform::windows::Color {
+  winit::platform::windows::Color::from_rgb(
+    ((value >> 16) & 0xff) as u8,
+    ((value >> 8) & 0xff) as u8,
+    (value & 0xff) as u8,
+  )
+}
 
 impl Default for BrowserWindowOptions {
   fn default() -> Self {
@@ -52,6 +102,48 @@ impl Default for BrowserWindowOptions {
       focused: Some(true),
       transparent: Some(false),
       fullscreen: None,
+      windows_owner_window: None,
+      windows_taskbar_icon: None,
+      windows_no_redirection_bitmap: None,
+      windows_drag_and_drop: None,
+      windows_skip_taskbar: None,
+      windows_class_name: None,
+      windows_undecorated_shadow: None,
+      windows_system_backdrop: None,
+      windows_clip_children: None,
+      windows_border_color: None,
+      windows_title_background_color: None,
+      windows_title_text_color: None,
+      windows_corner_preference: None,
+      macos_movable_by_window_background: None,
+      macos_titlebar_transparent: None,
+      macos_title_hidden: None,
+      macos_titlebar_hidden: None,
+      macos_titlebar_buttons_hidden: None,
+      macos_fullsize_content_view: None,
+      macos_disallow_hidpi: None,
+      macos_has_shadow: None,
+      macos_accepts_first_mouse: None,
+      macos_tabbing_identifier: None,
+      macos_option_as_alt: None,
+      macos_borderless_game: None,
+      x11_visual_id: None,
+      x11_screen: None,
+      x11_general_name: None,
+      x11_instance_name: None,
+      x11_override_redirect: None,
+      x11_window_types: None,
+      x11_base_width: None,
+      x11_base_height: None,
+      x11_embed_parent_window: None,
+      wayland_app_id: None,
+      wayland_instance: None,
+      ios_scale_factor: None,
+      ios_valid_orientations: None,
+      ios_prefers_home_indicator_hidden: None,
+      ios_deferred_system_gesture_edges: None,
+      ios_prefers_status_bar_hidden: None,
+      ios_status_bar_style: None,
     }
   }
 }
@@ -65,7 +157,7 @@ pub struct BrowserWindow {
   window_menu: Option<Menu>,
   /// Shared with AppState so resize events can trigger WebView2 resize.
   /// wry's own WM_SIZE subclass is bypassed by winit, so we do it manually.
-  webviews: Rc<RefCell<Vec<Rc<wry::WebView>>>>,
+  webviews: Rc<RefCell<Vec<WebviewResource>>>,
   /// Per-window event handler shared with AppState for dispatching window events.
   event_handler: Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>>,
   /// Async protocol handlers: (scheme, js_handler_ref, responders, next_id).
@@ -78,6 +170,8 @@ pub struct BrowserWindow {
   pending_webview_event_handler: WebviewEventHandlerRef,
   /// Pending sync navigation-guard (allow/deny navigation by URL).
   pending_nav_handler: WebviewBoolHandlerRef,
+  disposed: Rc<Cell<bool>>,
+  webview_lifecycles: Rc<RefCell<Vec<Rc<Cell<bool>>>>>,
 }
 
 type PendingProtocol = (
@@ -187,6 +281,211 @@ impl BrowserWindow {
       attrs = attrs.with_fullscreen(fs);
     }
 
+    #[cfg(target_os = "windows")]
+    {
+      use winit::platform::windows::{BackdropType, CornerPreference, WindowAttributesExtWindows};
+      if let Some(value) = options.windows_owner_window {
+        let (negative, value, lossless) = value.get_u64();
+        if negative || !lossless {
+          return Err(napi::Error::new(
+            napi::Status::InvalidArg,
+            "windowsOwnerWindow must be a non-negative 64-bit bigint",
+          ));
+        }
+        attrs = attrs.with_owner_window(value as isize);
+      }
+      if let Some(image) = options.windows_taskbar_icon {
+        let (rgba, width, height) = decode_icon(image.data.as_ref(), image.width, image.height)?;
+        let icon = Icon::from_rgba(rgba, width, height)
+          .map_err(|e| napi::Error::new(napi::Status::InvalidArg, e.to_string()))?;
+        attrs = attrs.with_taskbar_icon(Some(icon));
+      }
+      if let Some(value) = options.windows_no_redirection_bitmap {
+        attrs = attrs.with_no_redirection_bitmap(value);
+      }
+      if let Some(value) = options.windows_drag_and_drop {
+        attrs = attrs.with_drag_and_drop(value);
+      }
+      if let Some(value) = options.windows_skip_taskbar {
+        attrs = attrs.with_skip_taskbar(value);
+      }
+      if let Some(value) = options.windows_class_name {
+        attrs = attrs.with_class_name(value);
+      }
+      if let Some(value) = options.windows_undecorated_shadow {
+        attrs = attrs.with_undecorated_shadow(value);
+      }
+      if let Some(value) = options.windows_system_backdrop {
+        attrs = attrs.with_system_backdrop(match value {
+          WindowsSystemBackdrop::Auto => BackdropType::Auto,
+          WindowsSystemBackdrop::None => BackdropType::None,
+          WindowsSystemBackdrop::MainWindow => BackdropType::MainWindow,
+          WindowsSystemBackdrop::TransientWindow => BackdropType::TransientWindow,
+          WindowsSystemBackdrop::TabbedWindow => BackdropType::TabbedWindow,
+        });
+      }
+      if let Some(value) = options.windows_clip_children {
+        attrs = attrs.with_clip_children(value);
+      }
+      if let Some(value) = options.windows_border_color {
+        attrs = attrs.with_border_color(Some(windows_color(value)));
+      }
+      if let Some(value) = options.windows_title_background_color {
+        attrs = attrs.with_title_background_color(Some(windows_color(value)));
+      }
+      if let Some(value) = options.windows_title_text_color {
+        attrs = attrs.with_title_text_color(windows_color(value));
+      }
+      if let Some(value) = options.windows_corner_preference {
+        attrs = attrs.with_corner_preference(match value {
+          WindowsCornerPreference::Default => CornerPreference::Default,
+          WindowsCornerPreference::DoNotRound => CornerPreference::DoNotRound,
+          WindowsCornerPreference::Round => CornerPreference::Round,
+          WindowsCornerPreference::RoundSmall => CornerPreference::RoundSmall,
+        });
+      }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::{OptionAsAlt, WindowAttributesExtMacOS};
+      if let Some(value) = options.macos_movable_by_window_background {
+        attrs = attrs.with_movable_by_window_background(value);
+      }
+      if let Some(value) = options.macos_titlebar_transparent {
+        attrs = attrs.with_titlebar_transparent(value);
+      }
+      if let Some(value) = options.macos_title_hidden {
+        attrs = attrs.with_title_hidden(value);
+      }
+      if let Some(value) = options.macos_titlebar_hidden {
+        attrs = attrs.with_titlebar_hidden(value);
+      }
+      if let Some(value) = options.macos_titlebar_buttons_hidden {
+        attrs = attrs.with_titlebar_buttons_hidden(value);
+      }
+      if let Some(value) = options.macos_fullsize_content_view {
+        attrs = attrs.with_fullsize_content_view(value);
+      }
+      if let Some(value) = options.macos_disallow_hidpi {
+        attrs = attrs.with_disallow_hidpi(value);
+      }
+      if let Some(value) = options.macos_has_shadow {
+        attrs = attrs.with_has_shadow(value);
+      }
+      if let Some(value) = options.macos_accepts_first_mouse {
+        attrs = attrs.with_accepts_first_mouse(value);
+      }
+      if let Some(value) = options.macos_tabbing_identifier.as_deref() {
+        attrs = attrs.with_tabbing_identifier(value);
+      }
+      if let Some(value) = options.macos_option_as_alt {
+        attrs = attrs.with_option_as_alt(match value {
+          MacosOptionAsAlt::OnlyLeft => OptionAsAlt::OnlyLeft,
+          MacosOptionAsAlt::OnlyRight => OptionAsAlt::OnlyRight,
+          MacosOptionAsAlt::Both => OptionAsAlt::Both,
+          MacosOptionAsAlt::None => OptionAsAlt::None,
+        });
+      }
+      if let Some(value) = options.macos_borderless_game {
+        attrs = attrs.with_borderless_game(value);
+      }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      use winit::platform::x11::{WindowAttributesExtX11, WindowType};
+      if let Some(value) = options.x11_visual_id {
+        attrs = attrs.with_x11_visual(value);
+      }
+      if let Some(value) = options.x11_screen {
+        attrs = attrs.with_x11_screen(value);
+      }
+      if let (Some(general), Some(instance)) = (
+        options.x11_general_name.as_deref(),
+        options.x11_instance_name.as_deref(),
+      ) {
+        attrs = WindowAttributesExtX11::with_name(attrs, general, instance);
+      }
+      if let Some(value) = options.x11_override_redirect {
+        attrs = attrs.with_override_redirect(value);
+      }
+      if let Some(values) = options.x11_window_types.as_ref() {
+        attrs = attrs.with_x11_window_type(
+          values
+            .iter()
+            .map(|value| match value {
+              X11WindowType::Desktop => WindowType::Desktop,
+              X11WindowType::Dock => WindowType::Dock,
+              X11WindowType::Toolbar => WindowType::Toolbar,
+              X11WindowType::Menu => WindowType::Menu,
+              X11WindowType::Utility => WindowType::Utility,
+              X11WindowType::Splash => WindowType::Splash,
+              X11WindowType::Dialog => WindowType::Dialog,
+              X11WindowType::DropdownMenu => WindowType::DropdownMenu,
+              X11WindowType::PopupMenu => WindowType::PopupMenu,
+              X11WindowType::Tooltip => WindowType::Tooltip,
+              X11WindowType::Notification => WindowType::Notification,
+              X11WindowType::Combo => WindowType::Combo,
+              X11WindowType::Dnd => WindowType::Dnd,
+              X11WindowType::Normal => WindowType::Normal,
+            })
+            .collect(),
+        );
+      }
+      if let (Some(width), Some(height)) = (options.x11_base_width, options.x11_base_height) {
+        attrs = attrs.with_base_size(LogicalSize::new(width, height));
+      }
+      if let Some(value) = options.x11_embed_parent_window {
+        attrs = attrs.with_embed_parent_window(value);
+      }
+    }
+
+    #[cfg(target_os = "linux")]
+    if let Some(general) = options.wayland_app_id.as_deref() {
+      use winit::platform::wayland::WindowAttributesExtWayland;
+      attrs = WindowAttributesExtWayland::with_name(
+        attrs,
+        general,
+        options.wayland_instance.as_deref().unwrap_or(general),
+      );
+    }
+
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::{
+        ScreenEdge, StatusBarStyle, ValidOrientations, WindowAttributesExtIOS,
+      };
+      if let Some(value) = options.ios_scale_factor {
+        attrs = attrs.with_scale_factor(value);
+      }
+      if let Some(value) = options.ios_valid_orientations {
+        attrs = attrs.with_valid_orientations(match value {
+          IosValidOrientations::LandscapeAndPortrait => ValidOrientations::LandscapeAndPortrait,
+          IosValidOrientations::Landscape => ValidOrientations::Landscape,
+          IosValidOrientations::Portrait => ValidOrientations::Portrait,
+        });
+      }
+      if let Some(value) = options.ios_prefers_home_indicator_hidden {
+        attrs = attrs.with_prefers_home_indicator_hidden(value);
+      }
+      if let Some(value) = options.ios_deferred_system_gesture_edges {
+        attrs = attrs.with_preferred_screen_edges_deferring_system_gestures(
+          ScreenEdge::from_bits_truncate(value),
+        );
+      }
+      if let Some(value) = options.ios_prefers_status_bar_hidden {
+        attrs = attrs.with_prefers_status_bar_hidden(value);
+      }
+      if let Some(value) = options.ios_status_bar_style {
+        attrs = attrs.with_preferred_status_bar_style(match value {
+          IosStatusBarStyle::Default => StatusBarStyle::Default,
+          IosStatusBarStyle::LightContent => StatusBarStyle::LightContent,
+          IosStatusBarStyle::DarkContent => StatusBarStyle::DarkContent,
+        });
+      }
+    }
+
     if let Some(title) = options.title {
       attrs = attrs.with_title(&title);
     }
@@ -240,13 +539,23 @@ impl BrowserWindow {
       protocol_next_id: Rc::new(RefCell::new(0)),
       pending_webview_event_handler: Rc::new(RefCell::new(None)),
       pending_nav_handler: Rc::new(RefCell::new(None)),
+      disposed: Rc::new(Cell::new(false)),
+      webview_lifecycles: Rc::new(RefCell::new(Vec::new())),
     })
   }
 
   /// Return a clone of the shared webview list. AppState holds this Rc so it
   /// can resize all webviews when a Resized event arrives for this window.
-  pub(crate) fn webviews_shared(&self) -> Rc<RefCell<Vec<Rc<wry::WebView>>>> {
+  pub(crate) fn webviews_shared(&self) -> Rc<RefCell<Vec<WebviewResource>>> {
     Rc::clone(&self.webviews)
+  }
+
+  pub(crate) fn lifecycle_shared(&self) -> Rc<Cell<bool>> {
+    Rc::clone(&self.disposed)
+  }
+
+  pub(crate) fn webview_lifecycles_shared(&self) -> Rc<RefCell<Vec<Rc<Cell<bool>>>>> {
+    Rc::clone(&self.webview_lifecycles)
   }
 
   /// Low-level protocol registration used by the JS `registerProtocol` wrapper.
@@ -287,6 +596,12 @@ impl BrowserWindow {
     options: Option<WebviewOptions>,
     web_context: Option<&mut crate::web_context::JsWebContext>,
   ) -> Result<JsWebview> {
+    if self.disposed.get() {
+      return Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "BrowserWindow has been disposed",
+      ));
+    }
     let webview = JsWebview::create(
       &env,
       &self.window,
@@ -302,6 +617,10 @@ impl BrowserWindow {
       .webviews
       .borrow_mut()
       .push(Rc::clone(&webview.webview_inner));
+    self
+      .webview_lifecycles
+      .borrow_mut()
+      .push(webview.lifecycle_shared());
     Ok(webview)
   }
 
@@ -598,13 +917,13 @@ impl BrowserWindow {
         dialog.pick_file().map(|f| vec![f])
       };
 
-      return Ok(
+      Ok(
         files
           .unwrap_or_default()
           .into_iter()
           .map(|f| f.to_string_lossy().to_string())
           .collect(),
-      );
+      )
     }
     #[cfg(target_os = "android")]
     {
@@ -641,6 +960,39 @@ impl BrowserWindow {
     &self,
   ) -> Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>> {
     Rc::clone(&self.event_handler)
+  }
+
+  #[napi]
+  pub fn dispose(&mut self) {
+    if self.disposed.replace(true) {
+      return;
+    }
+    self.window.set_visible(false);
+    for resource in self.webviews.borrow().iter() {
+      if let Some(webview) = resource.borrow_mut().take() {
+        let _ = webview.set_visible(false);
+      }
+    }
+    self.webviews.borrow_mut().clear();
+    for lifecycle in self.webview_lifecycles.borrow().iter() {
+      lifecycle.set(true);
+    }
+    self.webview_lifecycles.borrow_mut().clear();
+    self.event_handler.borrow_mut().take();
+    self.pending_webview_event_handler.borrow_mut().take();
+    self.pending_nav_handler.borrow_mut().take();
+    for (_, handler, responders, _) in &self.pending_protocols {
+      handler.borrow_mut().take();
+      responders.borrow_mut().clear();
+    }
+    self.pending_protocols.clear();
+    #[cfg(not(target_os = "android"))]
+    self.window_menu.take();
+  }
+
+  #[napi]
+  pub fn is_disposed(&self) -> bool {
+    self.disposed.get()
   }
 
   /// Register a raw callback to receive window events.  Used internally by the
@@ -720,6 +1072,483 @@ impl BrowserWindow {
   #[napi]
   pub fn remove_window_icon(&self) {
     self.window.set_window_icon(None);
+  }
+
+  #[napi]
+  pub fn set_enable(&self, enabled: bool) {
+    #[cfg(target_os = "windows")]
+    self.window.set_enable(enabled);
+    #[cfg(not(target_os = "windows"))]
+    let _ = enabled;
+  }
+
+  #[napi]
+  pub fn set_taskbar_icon(
+    &self,
+    icon: Either<&[u8], Vec<u8>>,
+    width: Option<u32>,
+    height: Option<u32>,
+  ) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+      let icon_bytes = match &icon {
+        Either::A(bytes) => *bytes,
+        Either::B(bytes) => bytes.as_slice(),
+      };
+      let (rgba, width, height) = decode_icon(icon_bytes, width, height)?;
+      let icon = Icon::from_rgba(rgba, width, height)
+        .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
+      self.window.set_taskbar_icon(Some(icon));
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = (icon, width, height);
+    Ok(())
+  }
+
+  #[napi]
+  pub fn remove_taskbar_icon(&self) {
+    #[cfg(target_os = "windows")]
+    self.window.set_taskbar_icon(None);
+  }
+
+  #[napi]
+  pub fn set_undecorated_shadow(&self, shadow: bool) {
+    #[cfg(target_os = "windows")]
+    self.window.set_undecorated_shadow(shadow);
+    #[cfg(not(target_os = "windows"))]
+    let _ = shadow;
+  }
+
+  #[napi]
+  pub fn set_system_backdrop(&self, backdrop: WindowsSystemBackdrop) {
+    #[cfg(target_os = "windows")]
+    {
+      use winit::platform::windows::BackdropType;
+      let value = match backdrop {
+        WindowsSystemBackdrop::Auto => BackdropType::Auto,
+        WindowsSystemBackdrop::None => BackdropType::None,
+        WindowsSystemBackdrop::MainWindow => BackdropType::MainWindow,
+        WindowsSystemBackdrop::TransientWindow => BackdropType::TransientWindow,
+        WindowsSystemBackdrop::TabbedWindow => BackdropType::TabbedWindow,
+      };
+      self.window.set_system_backdrop(value);
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = backdrop;
+  }
+
+  #[napi]
+  pub fn set_border_color(&self, r: Option<u8>, g: Option<u8>, b: Option<u8>) {
+    #[cfg(target_os = "windows")]
+    self.window.set_border_color(rgb_option(r, g, b));
+    #[cfg(not(target_os = "windows"))]
+    let _ = (r, g, b);
+  }
+
+  #[napi]
+  pub fn set_title_background_color(&self, r: Option<u8>, g: Option<u8>, b: Option<u8>) {
+    #[cfg(target_os = "windows")]
+    self.window.set_title_background_color(rgb_option(r, g, b));
+    #[cfg(not(target_os = "windows"))]
+    let _ = (r, g, b);
+  }
+
+  #[napi]
+  pub fn set_title_text_color(&self, r: u8, g: u8, b: u8) {
+    #[cfg(target_os = "windows")]
+    self
+      .window
+      .set_title_text_color(winit::platform::windows::Color::from_rgb(r, g, b));
+    #[cfg(not(target_os = "windows"))]
+    let _ = (r, g, b);
+  }
+
+  #[napi]
+  pub fn set_corner_preference(&self, preference: WindowsCornerPreference) {
+    #[cfg(target_os = "windows")]
+    {
+      use winit::platform::windows::CornerPreference;
+      let value = match preference {
+        WindowsCornerPreference::Default => CornerPreference::Default,
+        WindowsCornerPreference::DoNotRound => CornerPreference::DoNotRound,
+        WindowsCornerPreference::Round => CornerPreference::Round,
+        WindowsCornerPreference::RoundSmall => CornerPreference::RoundSmall,
+      };
+      self.window.set_corner_preference(value);
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = preference;
+  }
+
+  #[napi]
+  pub fn get_native_handle_any_thread(&self) -> u64 {
+    #[cfg(target_os = "windows")]
+    unsafe {
+      use winit::raw_window_handle::RawWindowHandle;
+      if let Ok(handle) = self.window.window_handle_any_thread() {
+        if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+          return handle.hwnd.get() as u64;
+        }
+      }
+    }
+    0
+  }
+
+  #[napi]
+  pub fn simple_fullscreen(&self) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      return self.window.simple_fullscreen();
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+  }
+
+  #[napi]
+  pub fn set_simple_fullscreen(&self, fullscreen: bool) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      return self.window.set_simple_fullscreen(fullscreen);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+      let _ = fullscreen;
+      false
+    }
+  }
+
+  #[napi]
+  pub fn has_shadow(&self) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      return self.window.has_shadow();
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+  }
+
+  #[napi]
+  pub fn set_has_shadow(&self, value: bool) {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      self.window.set_has_shadow(value);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn set_tabbing_identifier(&self, identifier: String) {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      self.window.set_tabbing_identifier(&identifier);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = identifier;
+  }
+
+  #[napi]
+  pub fn tabbing_identifier(&self) -> String {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      return self.window.tabbing_identifier();
+    }
+    #[cfg(not(target_os = "macos"))]
+    String::new()
+  }
+
+  #[napi]
+  pub fn select_next_tab(&self) {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      self.window.select_next_tab();
+    }
+  }
+
+  #[napi]
+  pub fn select_previous_tab(&self) {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      self.window.select_previous_tab();
+    }
+  }
+
+  #[napi]
+  pub fn select_tab_at_index(&self, index: u32) {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      self.window.select_tab_at_index(index as usize);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = index;
+  }
+
+  #[napi]
+  pub fn num_tabs(&self) -> u32 {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      return self.window.num_tabs() as u32;
+    }
+    #[cfg(not(target_os = "macos"))]
+    0
+  }
+
+  #[napi]
+  pub fn is_document_edited(&self) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      return self.window.is_document_edited();
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+  }
+
+  #[napi]
+  pub fn set_document_edited(&self, edited: bool) {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      self.window.set_document_edited(edited);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = edited;
+  }
+
+  #[napi]
+  pub fn set_option_as_alt(&self, value: MacosOptionAsAlt) {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::{OptionAsAlt, WindowExtMacOS};
+      self.window.set_option_as_alt(match value {
+        MacosOptionAsAlt::OnlyLeft => OptionAsAlt::OnlyLeft,
+        MacosOptionAsAlt::OnlyRight => OptionAsAlt::OnlyRight,
+        MacosOptionAsAlt::Both => OptionAsAlt::Both,
+        MacosOptionAsAlt::None => OptionAsAlt::None,
+      });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn option_as_alt(&self) -> MacosOptionAsAlt {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::{OptionAsAlt, WindowExtMacOS};
+      return match self.window.option_as_alt() {
+        OptionAsAlt::OnlyLeft => MacosOptionAsAlt::OnlyLeft,
+        OptionAsAlt::OnlyRight => MacosOptionAsAlt::OnlyRight,
+        OptionAsAlt::Both => MacosOptionAsAlt::Both,
+        OptionAsAlt::None => MacosOptionAsAlt::None,
+      };
+    }
+    #[cfg(not(target_os = "macos"))]
+    MacosOptionAsAlt::None
+  }
+
+  #[napi]
+  pub fn set_borderless_game(&self, value: bool) {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      self.window.set_borderless_game(value);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn is_borderless_game(&self) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+      use winit::platform::macos::WindowExtMacOS;
+      return self.window.is_borderless_game();
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+  }
+
+  #[napi]
+  pub fn get_wayland_xdg_toplevel(&self) -> u64 {
+    #[cfg(target_os = "linux")]
+    {
+      use winit::platform::wayland::WindowExtWayland;
+      return self
+        .window
+        .xdg_toplevel()
+        .map(|value| value.as_ptr() as u64)
+        .unwrap_or(0);
+    }
+    #[cfg(not(target_os = "linux"))]
+    0
+  }
+
+  #[napi]
+  pub fn set_ios_scale_factor(&self, value: f64) {
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::WindowExtIOS;
+      self.window.set_scale_factor(value);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn set_valid_orientations(&self, value: IosValidOrientations) {
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::{ValidOrientations, WindowExtIOS};
+      self.window.set_valid_orientations(match value {
+        IosValidOrientations::LandscapeAndPortrait => ValidOrientations::LandscapeAndPortrait,
+        IosValidOrientations::Landscape => ValidOrientations::Landscape,
+        IosValidOrientations::Portrait => ValidOrientations::Portrait,
+      });
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn set_prefers_home_indicator_hidden(&self, value: bool) {
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::WindowExtIOS;
+      self.window.set_prefers_home_indicator_hidden(value);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn set_preferred_screen_edges_deferring_system_gestures(&self, edges: u8) {
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::{ScreenEdge, WindowExtIOS};
+      self
+        .window
+        .set_preferred_screen_edges_deferring_system_gestures(ScreenEdge::from_bits_truncate(
+          edges,
+        ));
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = edges;
+  }
+
+  #[napi]
+  pub fn set_prefers_status_bar_hidden(&self, value: bool) {
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::WindowExtIOS;
+      self.window.set_prefers_status_bar_hidden(value);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn set_preferred_status_bar_style(&self, value: IosStatusBarStyle) {
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::{StatusBarStyle, WindowExtIOS};
+      self.window.set_preferred_status_bar_style(match value {
+        IosStatusBarStyle::Default => StatusBarStyle::Default,
+        IosStatusBarStyle::LightContent => StatusBarStyle::LightContent,
+        IosStatusBarStyle::DarkContent => StatusBarStyle::DarkContent,
+      });
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn recognize_pinch_gesture(&self, value: bool) {
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::WindowExtIOS;
+      self.window.recognize_pinch_gesture(value);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn recognize_pan_gesture(&self, value: bool, minimum_touches: u8, maximum_touches: u8) {
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::WindowExtIOS;
+      self
+        .window
+        .recognize_pan_gesture(value, minimum_touches, maximum_touches);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = (value, minimum_touches, maximum_touches);
+  }
+
+  #[napi]
+  pub fn recognize_doubletap_gesture(&self, value: bool) {
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::WindowExtIOS;
+      self.window.recognize_doubletap_gesture(value);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn recognize_rotation_gesture(&self, value: bool) {
+    #[cfg(target_os = "ios")]
+    {
+      use winit::platform::ios::WindowExtIOS;
+      self.window.recognize_rotation_gesture(value);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
+
+  #[napi]
+  pub fn android_content_rect(&self) -> AndroidContentRect {
+    #[cfg(target_os = "android")]
+    {
+      use winit::platform::android::WindowExtAndroid;
+      let rect = self.window.content_rect();
+      return AndroidContentRect {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+      };
+    }
+    #[cfg(not(target_os = "android"))]
+    AndroidContentRect {
+      left: 0,
+      top: 0,
+      right: 0,
+      bottom: 0,
+    }
+  }
+
+  #[napi]
+  pub fn android_config(&self) -> String {
+    #[cfg(target_os = "android")]
+    {
+      use winit::platform::android::WindowExtAndroid;
+      return format!("{:?}", self.window.config());
+    }
+    #[cfg(not(target_os = "android"))]
+    String::new()
   }
 
   #[napi]

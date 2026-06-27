@@ -1,11 +1,16 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use crate::browser_window::BrowserWindow;
+#[cfg(target_os = "android")]
+use crate::tray::JsTrayIcon;
+#[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+use crate::tray::{event_payload, JsTrayIcon, TrayEventHandler, TrayResource};
 use crate::types::*;
-use crate::web_context::{JsWebContext, WebContextOptions};
+use crate::web_context::{JsWebContext, WebContextOptions, WebContextResource};
+use crate::webview::WebviewResource;
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))]
 use muda::Menu;
 use napi::bindgen_prelude::*;
@@ -32,45 +37,78 @@ pub fn get_webview_version() -> Result<String> {
 
 // ── Internal state ────────────────────────────────────────────────────────────
 
+type WindowEventHandler = Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>>;
+type WebviewLifecycles = Rc<RefCell<Vec<Rc<Cell<bool>>>>>;
+
+fn dispatch_reentrant<T>(
+  slot: &RefCell<Option<T>>,
+  invoke: impl FnOnce(&T),
+  should_restore: impl FnOnce() -> bool,
+) {
+  let handler = slot.borrow_mut().take();
+  if let Some(handler) = handler {
+    invoke(&handler);
+    if should_restore() && slot.borrow().is_none() {
+      slot.borrow_mut().replace(handler);
+    }
+  }
+}
+
 struct AppState {
   handler: Rc<RefCell<Option<FunctionRef<ApplicationEvent, ()>>>>,
   env: Env,
   should_exit: bool,
+  ready: bool,
   /// Tracks open windows so we can hide them on close without dropping BrowserWindow.
   windows: HashMap<WindowId, Arc<Window>>,
   /// Shared handle into each BrowserWindow's webview list.  Winit swallows
   /// WM_SIZE without forwarding to wry's subclass proc, so we resize manually
   /// when WindowEvent::Resized arrives.
-  webviews: HashMap<WindowId, Rc<RefCell<Vec<Rc<wry::WebView>>>>>,
+  webviews: HashMap<WindowId, Rc<RefCell<Vec<WebviewResource>>>>,
   /// Per-window event handlers shared with each BrowserWindow instance.
-  window_handlers: HashMap<WindowId, Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>>>,
+  window_handlers: HashMap<WindowId, WindowEventHandler>,
+  window_lifecycles: HashMap<WindowId, Rc<Cell<bool>>>,
+  webview_lifecycles: HashMap<WindowId, WebviewLifecycles>,
   /// Last known physical cursor position per window (for edge-resize hit testing).
   cursor_positions: HashMap<WindowId, (f64, f64)>,
   /// Last known modifier state.
   current_modifiers: winit::event::Modifiers,
   #[cfg(not(target_os = "android"))]
   menu_event_receiver: Option<muda::MenuEventReceiver>,
+  #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+  tray_handlers: HashMap<String, TrayEventHandler>,
+  #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+  tray_resources: Vec<TrayResource>,
+  web_contexts: Vec<WebContextResource>,
 }
 
 impl AppState {
   fn fire(&self, event: ApplicationEvent) {
-    let cb = self.handler.borrow();
-    if let Some(f) = cb.as_ref() {
-      if let Ok(func) = f.borrow_back(&self.env) {
-        let _ = func.call(event);
-      }
-    }
+    dispatch_reentrant(
+      &self.handler,
+      |f| {
+        if let Ok(func) = f.borrow_back(&self.env) {
+          let _ = func.call(event);
+        }
+      },
+      || !self.should_exit,
+    );
   }
 
   fn fire_window_event(&self, window_id: WindowId, payload: WindowEventPayload) {
-    if let Some(cell) = self.window_handlers.get(&window_id) {
-      let cb = cell.borrow();
-      if let Some(f) = cb.as_ref() {
+    let Some(handler) = self.window_handlers.get(&window_id).cloned() else {
+      return;
+    };
+    let lifecycle = self.window_lifecycles.get(&window_id).cloned();
+    dispatch_reentrant(
+      &handler,
+      |f| {
         if let Ok(func) = f.borrow_back(&self.env) {
           let _ = func.call(payload);
         }
-      }
-    }
+      },
+      || !self.should_exit && lifecycle.is_none_or(|disposed| !disposed.get()),
+    );
   }
 }
 
@@ -153,7 +191,16 @@ fn physical_key_code(key: &winit::keyboard::PhysicalKey) -> Option<String> {
 struct AppHandler<'a>(&'a mut AppState);
 
 impl ApplicationHandler for AppHandler<'_> {
-  fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
+  fn resumed(&mut self, _event_loop: &ActiveEventLoop) {
+    let state = &mut *self.0;
+    if !state.ready {
+      state.ready = true;
+      state.fire(ApplicationEvent {
+        event: WebviewApplicationEvent::Ready,
+        custom_menu_event: None,
+      });
+    }
+  }
 
   fn window_event(
     &mut self,
@@ -173,8 +220,10 @@ impl ApplicationHandler for AppHandler<'_> {
             position: ::dpi::PhysicalPosition::new(0_i32, 0_i32).into(),
             size: ::dpi::PhysicalSize::new(new_size.width, new_size.height).into(),
           };
-          for wv in views.borrow().iter() {
-            let _ = wv.set_bounds(rect);
+          for resource in views.borrow().iter() {
+            if let Some(webview) = resource.borrow().as_ref() {
+              let _ = webview.set_bounds(rect);
+            }
           }
         }
         state.fire_window_event(
@@ -757,9 +806,12 @@ impl Application {
         handler: Rc::new(RefCell::new(None)),
         env,
         should_exit: false,
+        ready: false,
         windows: HashMap::new(),
         webviews: HashMap::new(),
         window_handlers: HashMap::new(),
+        window_lifecycles: HashMap::new(),
+        webview_lifecycles: HashMap::new(),
         cursor_positions: HashMap::new(),
         current_modifiers: winit::event::Modifiers::default(),
         #[cfg(not(target_os = "android"))]
@@ -775,6 +827,11 @@ impl Application {
             None
           }
         },
+        #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+        tray_handlers: HashMap::new(),
+        #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+        tray_resources: Vec::new(),
+        web_contexts: Vec::new(),
       },
       #[cfg(not(target_os = "android"))]
       global_menu: Rc::new(RefCell::new(initial_global_menu)),
@@ -793,19 +850,99 @@ impl Application {
   }
 
   #[napi]
+  pub fn is_ready(&self) -> bool {
+    self.state.ready
+  }
+
+  #[napi]
   pub fn exit(&mut self) {
+    if self.state.should_exit {
+      return;
+    }
+    #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+    {
+      for resource in self.state.tray_resources.drain(..) {
+        resource.borrow_mut().take();
+      }
+      self.state.tray_handlers.clear();
+    }
+    for views in self.state.webviews.values() {
+      for resource in views.borrow().iter() {
+        if let Some(view) = resource.borrow_mut().take() {
+          let _ = view.set_visible(false);
+        }
+      }
+    }
     // Hide all managed windows so they don't become zombie frames.
     for win in self.state.windows.values() {
       win.set_visible(false);
     }
     self.state.windows.clear();
+    self.state.webviews.clear();
+    for handler in self.state.window_handlers.values() {
+      handler.borrow_mut().take();
+    }
+    self.state.window_handlers.clear();
+    for lifecycle in self.state.window_lifecycles.values() {
+      lifecycle.set(true);
+    }
+    self.state.window_lifecycles.clear();
+    for lifecycles in self.state.webview_lifecycles.values() {
+      for lifecycle in lifecycles.borrow().iter() {
+        lifecycle.set(true);
+      }
+      lifecycles.borrow_mut().clear();
+    }
+    self.state.webview_lifecycles.clear();
+    self.state.cursor_positions.clear();
+    for context in self.state.web_contexts.drain(..) {
+      context.borrow_mut().take();
+    }
+    self.state.handler.borrow_mut().take();
+    #[cfg(not(target_os = "android"))]
+    {
+      self.state.menu_event_receiver = None;
+      self.global_menu.borrow_mut().take();
+    }
+    if let Ok(mut ids) = self.window_ids.lock() {
+      ids.clear();
+    }
     self.state.should_exit = true;
   }
 
   #[napi]
   /// Creates a new WebContext with the given options.
-  pub fn create_web_context(&mut self, options: Option<WebContextOptions>) -> JsWebContext {
-    JsWebContext::create(options)
+  pub fn create_web_context(&mut self, options: Option<WebContextOptions>) -> Result<JsWebContext> {
+    if self.state.should_exit {
+      return Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "Application has been disposed",
+      ));
+    }
+    let context = JsWebContext::create(options);
+    self.state.web_contexts.push(context.resource());
+    Ok(context)
+  }
+
+  #[napi]
+  pub fn create_tray_icon(&mut self, options: TrayIconOptions) -> Result<JsTrayIcon> {
+    if self.state.should_exit {
+      return Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "Application has been disposed",
+      ));
+    }
+    let tray = JsTrayIcon::create(options)?;
+    #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+    {
+      self
+        .state
+        .tray_handlers
+        .insert(tray.id(), tray.event_handler());
+      self.state.tray_resources.push(tray.resource());
+      self.state.menu_event_receiver = Some(muda::MenuEvent::receiver().clone());
+    }
+    Ok(tray)
   }
 
   #[napi]
@@ -813,6 +950,12 @@ impl Application {
     &mut self,
     options: Option<BrowserWindowOptions>,
   ) -> Result<BrowserWindow> {
+    if self.state.should_exit {
+      return Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "Application has been disposed",
+      ));
+    }
     let event_loop = self.event_loop.as_ref().ok_or_else(|| {
       napi::Error::new(
         napi::Status::GenericFailure,
@@ -855,6 +998,14 @@ impl Application {
       .state
       .window_handlers
       .insert(wid, window.event_handler_shared());
+    self
+      .state
+      .window_lifecycles
+      .insert(wid, window.lifecycle_shared());
+    self
+      .state
+      .webview_lifecycles
+      .insert(wid, window.webview_lifecycles_shared());
 
     Ok(window)
   }
@@ -864,6 +1015,12 @@ impl Application {
     &mut self,
     options: Option<BrowserWindowOptions>,
   ) -> Result<BrowserWindow> {
+    if self.state.should_exit {
+      return Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "Application has been disposed",
+      ));
+    }
     let event_loop = self.event_loop.as_ref().ok_or_else(|| {
       napi::Error::new(
         napi::Status::GenericFailure,
@@ -883,12 +1040,26 @@ impl Application {
       .state
       .window_handlers
       .insert(wid, window.event_handler_shared());
+    self
+      .state
+      .window_lifecycles
+      .insert(wid, window.lifecycle_shared());
+    self
+      .state
+      .webview_lifecycles
+      .insert(wid, window.webview_lifecycles_shared());
 
     Ok(window)
   }
 
   #[napi]
   pub fn set_menu(&mut self, menu_options: Option<MenuOptions>) -> Result<()> {
+    if self.state.should_exit {
+      return Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "Application has been disposed",
+      ));
+    }
     #[cfg(not(target_os = "android"))]
     {
       if let Some(options) = menu_options {
@@ -944,6 +1115,20 @@ impl Application {
       }
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+    while let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
+      if let Some(handler) = self.state.tray_handlers.get(&event.id().0) {
+        let callback = handler.borrow();
+        if let Some(callback) = callback.as_ref() {
+          if let Ok(function) = callback.borrow_back(&self.state.env) {
+            if let Some(payload) = event_payload(event) {
+              let _ = function.call(payload);
+            }
+          }
+        }
+      }
+    }
+
     // Split borrows so the handler can mutate state independently.
     let event_loop = match &mut self.event_loop {
       Some(el) => el,
@@ -965,5 +1150,48 @@ impl Application {
   pub fn run(&mut self, _options: Option<ApplicationRunOptions>) -> Result<()> {
     // Note: this is intentionally no-op in rust. The binding loader file patches this to call `pump_events()` in a `setInterval` loop.
     Ok(())
+  }
+}
+
+impl Drop for Application {
+  fn drop(&mut self) {
+    self.exit();
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::dispatch_reentrant;
+  use std::cell::RefCell;
+
+  #[test]
+  fn reentrant_dispatch_allows_callback_to_clear_its_slot() {
+    let slot = RefCell::new(Some(1));
+
+    dispatch_reentrant(
+      &slot,
+      |value| {
+        assert_eq!(*value, 1);
+        slot.borrow_mut().take();
+      },
+      || false,
+    );
+
+    assert!(slot.borrow().is_none());
+  }
+
+  #[test]
+  fn reentrant_dispatch_preserves_a_replacement_callback() {
+    let slot = RefCell::new(Some(1));
+
+    dispatch_reentrant(
+      &slot,
+      |_| {
+        slot.borrow_mut().replace(2);
+      },
+      || true,
+    );
+
+    assert_eq!(*slot.borrow(), Some(2));
   }
 }

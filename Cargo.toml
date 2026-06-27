@@ -23,7 +23,8 @@ image = "0.25.10"
 
 [target.'cfg(not(any(target_os = "android", target_os = "freebsd")))'.dependencies]
 rfd = "0.15.4"
-muda = { version = "0.17", features = ["libxdo"] }
+muda = { version = "0.19", features = ["libxdo"] }
+tray-icon = "0.24.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.52", features = [

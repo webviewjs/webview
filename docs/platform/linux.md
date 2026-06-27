@@ -1,5 +1,17 @@
 # Linux
 
+## X11 and Wayland window attributes
+
+X11 creation options expose visual and screen IDs, `WM_CLASS` names,
+override-redirect, `_NET_WM_WINDOW_TYPE`, base size, and embedding into a
+parent X11 window.
+
+Wayland creation options expose the application ID and instance name.
+`getWaylandXdgToplevel()` returns the native `xdg_toplevel` pointer for
+interoperability, or `0n` when the window uses X11.
+
+See [BrowserWindow platform APIs](../api/browser-window.md#linux-creation-options).
+
 ## WebKitGTK
 
 WebviewJS on Linux uses **WebKitGTK 4.1** (WebKit-based). Install the runtime and development headers before building or running:

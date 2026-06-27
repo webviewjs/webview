@@ -1,4 +1,4 @@
-import { Application, WebviewApplicationEvent } from '../index.js';
+import { Application } from '../index.js';
 
 const app = new Application();
 
@@ -9,7 +9,7 @@ const browserWindow = app.createBrowserWindow({
   height: 600,
 });
 
-const webview = browserWindow.createWebview({
+const _webview = browserWindow.createWebview({
   html: `
     <!DOCTYPE html>
     <html>
@@ -52,22 +52,12 @@ const webview = browserWindow.createWebview({
   `,
 });
 
-// Set up event handler for application events
-// You can use either onEvent() or bind() - they are equivalent
-app.bind((event) => {
-  console.log('Application event:', event.event);
+app.on('window-close-requested', () => {
+  console.log('Window close requested');
+});
 
-  if (event.event === WebviewApplicationEvent.WindowCloseRequested) {
-    console.log('Window close requested');
-    // You can perform cleanup here before the window closes
-    // For example: save data, close connections, etc.
-  }
-
-  if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
-    console.log('Application close requested');
-    // Perform final cleanup before the application exits
-    // This is where temp folders will be cleaned up
-  }
+app.on('application-close-requested', () => {
+  console.log('Application close requested');
 });
 
 // Example: Programmatically close the application after 5 seconds

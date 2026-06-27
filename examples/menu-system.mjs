@@ -1,53 +1,54 @@
-import { Application, WebviewApplicationEvent } from '../index.js';
+import { Application } from '../index.js';
 
 const app = new Application();
 
 // Set up menu event handler
-app.bind((event) => {
-  if (event.event === WebviewApplicationEvent.CustomMenuClick) {
-    const menuEvent = event.customMenuEvent;
-    console.log(`Menu item clicked: "${menuEvent.id}" from window ${menuEvent.windowId}`);
+app.on('custom-menu-click', ({ customMenuEvent: menuEvent }) => {
+  console.log(`Menu item clicked: "${menuEvent.id}" from window ${menuEvent.windowId}`);
 
-    // Handle specific menu items
-    switch (menuEvent.id) {
-      case 'new':
-        console.log('📄 Creating new document...');
-        break;
-      case 'open':
-        console.log('📂 Opening file...');
-        const result = window.openFileDialog({ title: 'Select a file to open' });
-        console.log({ result });
-        break;
-      case 'save':
-        console.log('💾 Saving file...');
-        break;
-      case 'about':
-        console.log('ℹ️  About this application...');
-        break;
-      case 'preferences':
-        console.log('⚙️  Opening preferences...');
-        break;
-      case 'quit':
-        console.log('👋 Goodbye!');
-        app.exit();
-        break;
-      case 'reload':
-        console.log('🔄 Reloading webview...');
-        webview.reload();
-        break;
-      case 'devtools':
-        console.log('🔧 Opening developer tools...');
-        webview.openDevtools();
-        break;
-      default:
-        console.log(`Unhandled menu item: ${menuEvent.id}`);
-    }
-  } else if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
-    console.log('Application close requested');
-    app.exit();
-  } else if (event.event === WebviewApplicationEvent.WindowCloseRequested) {
-    console.log('Window close requested');
+  // Handle specific menu items
+  switch (menuEvent.id) {
+    case 'new':
+      console.log('📄 Creating new document...');
+      break;
+    case 'open':
+      console.log('📂 Opening file...');
+      const result = window.openFileDialog({ title: 'Select a file to open' });
+      console.log({ result });
+      break;
+    case 'save':
+      console.log('💾 Saving file...');
+      break;
+    case 'about':
+      console.log('ℹ️  About this application...');
+      break;
+    case 'preferences':
+      console.log('⚙️  Opening preferences...');
+      break;
+    case 'quit':
+      console.log('👋 Goodbye!');
+      app.exit();
+      break;
+    case 'reload':
+      console.log('🔄 Reloading webview...');
+      webview.reload();
+      break;
+    case 'devtools':
+      console.log('🔧 Opening developer tools...');
+      webview.openDevtools();
+      break;
+    default:
+      console.log(`Unhandled menu item: ${menuEvent.id}`);
   }
+});
+
+app.on('application-close-requested', () => {
+  console.log('Application close requested');
+  app.exit();
+});
+
+app.on('window-close-requested', () => {
+  console.log('Window close requested');
 });
 
 // Set up comprehensive application menu

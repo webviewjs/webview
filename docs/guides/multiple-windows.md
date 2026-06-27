@@ -7,8 +7,8 @@ const app = new Application();
 
 function createWindow(url) {
   const win = app.createBrowserWindow({ title: url, width: 900, height: 600 });
-  win.createWebview({ url });
-  return win;
+  const webview = win.createWebview({ url });
+  return { win, webview };
 }
 
 const win1 = createWindow('https://example.com');
@@ -22,28 +22,24 @@ Both windows share the same event loop driven by the single `setInterval` pump.
 ## Tracking windows yourself
 
 ```js
-const windows = new Map(); // id → BrowserWindow
+const windows = new Map(); // id → { win, webview }
 
 function openWindow(id, url) {
   if (windows.has(id)) {
-    windows.get(id).show();
+    windows.get(id).win.show();
     return;
   }
   const win = app.createBrowserWindow({ title: id });
-  win.createWebview({ url });
-  windows.set(id, win);
+  const webview = win.createWebview({ url });
+  windows.set(id, { win, webview });
 }
 
-app.onEvent((ev) => {
-  if (ev.event === WebviewApplicationEvent.WindowCloseRequested) {
-    // The window has been hidden by the runtime.
-    // Remove it from your map if you track open state.
-  }
+app.on('window-close-requested', () => {
+  // The window has been hidden by the runtime.
+});
 
-  if (ev.event === WebviewApplicationEvent.ApplicationCloseRequested) {
-    // All windows closed — shut down.
-    app.exit();
-  }
+app.on('application-close-requested', () => {
+  app.exit();
 });
 ```
 
@@ -57,7 +53,7 @@ const child = app.createChildBrowserWindow({
   width: 400,
   height: 300,
 });
-child.createWebview({
+const childWebview = child.createWebview({
   url: 'app://settings',
   // x/y/width/height position the webview within the child window
 });
@@ -76,17 +72,12 @@ function toggleWindow(win) {
 ## Window lifecycle events
 
 ```js
-app.onEvent((ev) => {
-  switch (ev.event) {
-    case WebviewApplicationEvent.WindowCloseRequested:
-      // One window was hidden. If you want to exit when the last one closes,
-      // track the count yourself or rely on ApplicationCloseRequested.
-      break;
+app.on('window-close-requested', () => {
+  // One window was hidden.
+});
 
-    case WebviewApplicationEvent.ApplicationCloseRequested:
-      // All tracked windows are now hidden.
-      app.exit();
-      break;
-  }
+app.on('application-close-requested', () => {
+  // All tracked windows are now hidden.
+  app.exit();
 });
 ```

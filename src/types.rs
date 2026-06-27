@@ -1,4 +1,4 @@
-use napi::bindgen_prelude::Buffer;
+use napi::bindgen_prelude::{BigInt, Buffer};
 use napi_derive::napi;
 
 #[napi]
@@ -9,10 +9,114 @@ pub enum WindowCommand {
 }
 
 #[napi]
+pub enum WindowsSystemBackdrop {
+  Auto,
+  None,
+  MainWindow,
+  TransientWindow,
+  TabbedWindow,
+}
+
+#[napi]
+pub enum WindowsCornerPreference {
+  Default,
+  DoNotRound,
+  Round,
+  RoundSmall,
+}
+
+#[napi]
+pub enum MacosOptionAsAlt {
+  OnlyLeft,
+  OnlyRight,
+  Both,
+  None,
+}
+
+#[napi]
+pub enum X11WindowType {
+  Desktop,
+  Dock,
+  Toolbar,
+  Menu,
+  Utility,
+  Splash,
+  Dialog,
+  DropdownMenu,
+  PopupMenu,
+  Tooltip,
+  Notification,
+  Combo,
+  Dnd,
+  Normal,
+}
+
+#[napi]
+pub enum IosValidOrientations {
+  LandscapeAndPortrait,
+  Landscape,
+  Portrait,
+}
+
+#[napi]
+pub enum IosStatusBarStyle {
+  Default,
+  LightContent,
+  DarkContent,
+}
+
+#[napi(object)]
+pub struct TrayIconImage {
+  pub data: Buffer,
+  pub width: Option<u32>,
+  pub height: Option<u32>,
+}
+
+#[napi(object)]
+pub struct TrayIconOptions {
+  pub id: Option<String>,
+  pub icon: Option<TrayIconImage>,
+  pub tooltip: Option<String>,
+  pub title: Option<String>,
+  pub menu: Option<MenuOptions>,
+  pub icon_is_template: Option<bool>,
+  pub menu_on_left_click: Option<bool>,
+  pub menu_on_right_click: Option<bool>,
+}
+
+#[napi(object)]
+pub struct TrayRect {
+  pub x: f64,
+  pub y: f64,
+  pub width: u32,
+  pub height: u32,
+}
+
+#[napi(object)]
+pub struct TrayEventPayload {
+  pub event: String,
+  pub id: String,
+  pub x: f64,
+  pub y: f64,
+  pub rect: TrayRect,
+  pub button: Option<String>,
+  pub button_state: Option<String>,
+}
+
+#[napi(object)]
+pub struct AndroidContentRect {
+  pub left: i32,
+  pub top: i32,
+  pub right: i32,
+  pub bottom: i32,
+}
+
+#[napi]
 pub enum WebviewApplicationEvent {
   WindowCloseRequested,
   ApplicationCloseRequested,
   CustomMenuClick,
+  Ready,
 }
 
 #[napi]
@@ -260,6 +364,48 @@ pub struct BrowserWindowOptions {
   pub focused: Option<bool>,
   pub transparent: Option<bool>,
   pub fullscreen: Option<FullscreenType>,
+  pub windows_owner_window: Option<BigInt>,
+  pub windows_taskbar_icon: Option<TrayIconImage>,
+  pub windows_no_redirection_bitmap: Option<bool>,
+  pub windows_drag_and_drop: Option<bool>,
+  pub windows_skip_taskbar: Option<bool>,
+  pub windows_class_name: Option<String>,
+  pub windows_undecorated_shadow: Option<bool>,
+  pub windows_system_backdrop: Option<WindowsSystemBackdrop>,
+  pub windows_clip_children: Option<bool>,
+  pub windows_border_color: Option<u32>,
+  pub windows_title_background_color: Option<u32>,
+  pub windows_title_text_color: Option<u32>,
+  pub windows_corner_preference: Option<WindowsCornerPreference>,
+  pub macos_movable_by_window_background: Option<bool>,
+  pub macos_titlebar_transparent: Option<bool>,
+  pub macos_title_hidden: Option<bool>,
+  pub macos_titlebar_hidden: Option<bool>,
+  pub macos_titlebar_buttons_hidden: Option<bool>,
+  pub macos_fullsize_content_view: Option<bool>,
+  pub macos_disallow_hidpi: Option<bool>,
+  pub macos_has_shadow: Option<bool>,
+  pub macos_accepts_first_mouse: Option<bool>,
+  pub macos_tabbing_identifier: Option<String>,
+  pub macos_option_as_alt: Option<MacosOptionAsAlt>,
+  pub macos_borderless_game: Option<bool>,
+  pub x11_visual_id: Option<u32>,
+  pub x11_screen: Option<i32>,
+  pub x11_general_name: Option<String>,
+  pub x11_instance_name: Option<String>,
+  pub x11_override_redirect: Option<bool>,
+  pub x11_window_types: Option<Vec<X11WindowType>>,
+  pub x11_base_width: Option<f64>,
+  pub x11_base_height: Option<f64>,
+  pub x11_embed_parent_window: Option<u32>,
+  pub wayland_app_id: Option<String>,
+  pub wayland_instance: Option<String>,
+  pub ios_scale_factor: Option<f64>,
+  pub ios_valid_orientations: Option<IosValidOrientations>,
+  pub ios_prefers_home_indicator_hidden: Option<bool>,
+  pub ios_deferred_system_gesture_edges: Option<u8>,
+  pub ios_prefers_status_bar_hidden: Option<bool>,
+  pub ios_status_bar_style: Option<IosStatusBarStyle>,
 }
 
 #[napi(object)]
@@ -338,7 +484,9 @@ pub struct WebviewBounds {
 
 /// Event types fired by a Webview and surfaced as EventEmitter events in JS.
 #[napi]
+#[derive(Default)]
 pub enum WebviewEventType {
+  #[default]
   PageLoadStarted,
   PageLoadFinished,
   TitleChanged,
@@ -361,12 +509,6 @@ pub struct WebviewEventPayload {
   pub title: Option<String>,
   /// Download success flag for `DownloadCompleted` events.
   pub success: Option<bool>,
-}
-
-impl Default for WebviewEventType {
-  fn default() -> Self {
-    WebviewEventType::PageLoadStarted
-  }
 }
 
 #[napi(object)]

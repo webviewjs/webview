@@ -50,6 +50,15 @@ const win = app.createBrowserWindow({ transparent: true, decorations: false });
 
 Combine with `webview.setBackgroundColor(0, 0, 0, 0)` for a fully transparent, frameless window.
 
+## Platform extensions
+
+`BrowserWindowOptions` exposes native titlebar, full-size content, shadow,
+first-mouse, HiDPI, tabbing, Option-as-Alt, and borderless-game attributes.
+Runtime methods support simple fullscreen, shadows, native window tabs,
+document-edited state, Option-as-Alt behavior, and borderless-game mode.
+
+See [BrowserWindow platform APIs](../api/browser-window.md#macos-creation-options).
+
 ## Known limitations
 
 - **`setSkipTaskbar`** is a no-op on macOS (use `NSApplication.setActivationPolicy` for dock hiding, which requires an entitlement).

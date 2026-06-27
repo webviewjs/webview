@@ -53,11 +53,8 @@ A per-window menu overrides the global menu for that window only.
 ## Handling menu clicks
 
 ```js
-app.onEvent((ev) => {
-  if (ev.event === WebviewApplicationEvent.CustomMenuClick) {
-    const { id } = ev.customMenuEvent;
-    console.log('clicked:', id);
-  }
+app.on('custom-menu-click', ({ customMenuEvent }) => {
+  console.log('clicked:', customMenuEvent.id);
 });
 ```
 

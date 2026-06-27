@@ -1,32 +1,29 @@
-import { Application, WebviewApplicationEvent } from '../index.js';
+import { Application } from '../index.js';
 
 const app = new Application();
 
 // Handle menu events
-app.bind((event) => {
-  if (event.event === WebviewApplicationEvent.CustomMenuClick) {
-    const menuEvent = event.customMenuEvent;
-    console.log(`Menu "${menuEvent.id}" clicked on window ${menuEvent.windowId}`);
+app.on('custom-menu-click', ({ customMenuEvent: menuEvent }) => {
+  console.log(`Menu "${menuEvent.id}" clicked on window ${menuEvent.windowId}`);
 
-    switch (menuEvent.id) {
-      case 'close-window':
-        console.log('Closing window...');
-        // In a real app, you would close the specific window
-        break;
-      case 'window-1-action':
-        console.log('Window 1 specific action!');
-        break;
-      case 'window-2-action':
-        console.log('Window 2 specific action!');
-        break;
-      case 'global-action':
-        console.log('Global action from any window!');
-        break;
-      case 'quit':
-        console.log('Quitting application...');
-        app.exit();
-        break;
-    }
+  switch (menuEvent.id) {
+    case 'close-window':
+      console.log('Closing window...');
+      // In a real app, you would close the specific window
+      break;
+    case 'window-1-action':
+      console.log('Window 1 specific action!');
+      break;
+    case 'window-2-action':
+      console.log('Window 2 specific action!');
+      break;
+    case 'global-action':
+      console.log('Global action from any window!');
+      break;
+    case 'quit':
+      console.log('Quitting application...');
+      app.exit();
+      break;
   }
 });
 
@@ -78,7 +75,7 @@ const window1 = app.createBrowserWindow({
   },
 });
 
-window1.createWebview({
+const _webview1 = window1.createWebview({
   html: `<!DOCTYPE html>
   <html>
     <head>
@@ -143,7 +140,7 @@ const window2 = app.createBrowserWindow({
   },
 });
 
-window2.createWebview({
+const _webview2 = window2.createWebview({
   html: `<!DOCTYPE html>
   <html>
     <head>
@@ -189,7 +186,7 @@ const window3 = app.createBrowserWindow({
   show_menu: true, // Uses global menu
 });
 
-window3.createWebview({
+const _webview3 = window3.createWebview({
   html: `<!DOCTYPE html>
   <html>
     <head>

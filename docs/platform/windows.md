@@ -32,6 +32,15 @@ win.setSkipTaskbar(true);
 win.setProgressBar({ state: ProgressBarState.Normal, progress: 42 });
 ```
 
+The complete winit Windows extension surface is exposed on `BrowserWindow`,
+including taskbar icons, system backdrops, title and border colors, corner
+preferences, undecorated shadows, enabled state, and the any-thread native
+handle. See [Windows extensions](../api/browser-window.md#windows-extensions).
+
+The [acrylic example](../../examples/acrylic.mjs) uses
+`WindowsSystemBackdrop.TransientWindow` with a transparent native window and
+transparent webview. System backdrops require Windows 11 build 22523 or newer.
+
 ## Content protection
 
 Prevents the window contents from appearing in screenshots or screen-recording APIs:

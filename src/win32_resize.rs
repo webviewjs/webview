@@ -7,7 +7,7 @@ use windows_sys::Win32::{
 };
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-type SUBCLASSPROC = unsafe extern "system" fn(
+type SubclassProc = unsafe extern "system" fn(
   hwnd: HWND,
   umsg: u32,
   wparam: WPARAM,
@@ -20,7 +20,7 @@ type SUBCLASSPROC = unsafe extern "system" fn(
 extern "system" {
   fn SetWindowSubclass(
     hwnd: HWND,
-    pfn_subclass: SUBCLASSPROC,
+    pfn_subclass: SubclassProc,
     uid_subclass: usize,
     dw_ref_data: usize,
   ) -> BOOL;

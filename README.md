@@ -6,16 +6,24 @@ Robust cross-platform webview library for Node.js written in Rust. It is a nativ
 
 ## Highlights
 
-- Non-blocking application pumping. `app.run()` uses a Node timer, so ordinary Node timers and I/O continue running.
+- Promise-based application readiness with optional automatic event pumping.
+- Non-blocking application pumping, so ordinary Node timers and I/O continue running.
 - Browser windows, menus, dialogs, cookies, DevTools, and window controls.
+- Typed EventEmitter APIs for applications, windows, webviews, and system tray icons.
+- Shared browser contexts for profile, cookie, cache, and storage isolation.
+- Cross-platform system tray icons with menus and runtime updates.
+- Native Windows, macOS, X11, Wayland, iOS, and Android window extensions.
 - IPC through `window.ipc.postMessage()`, with an optional alias such as `window.bindings`.
-- Asynchronous custom protocols, including `app://` asset loading without a local server.
+- Fetch-compatible asynchronous custom protocols, including Hono routing without an HTTP server.
 - Promise-based `webview.expose()` namespaces for page-to-Node calls.
 
 ![preview](https://github.com/webviewjs/webview/raw/main/assets/preview.png)
 
 > [!CAUTION]
 > This library is still in development and not ready for production use. Feel free to experiment with it and report any issues you find.
+
+See the [full documentation](./docs/) for API references, guides, platform
+notes, and runnable examples.
 
 # Installation
 
@@ -50,23 +58,55 @@ import { Application } from '@webviewjs/webview';
 const { Application } = require('@webviewjs/webview');
 
 const app = new Application();
-const window = app.createBrowserWindow();
-const webview = window.createWebview();
+let mainWindow = null;
+let mainWebview = null;
 
-webview.loadUrl('https://nodejs.org');
-
-app.run();
+app.whenReady().then(() => {
+  mainWindow = app.createBrowserWindow();
+  mainWebview = mainWindow.createWebview({ url: 'https://nodejs.org' });
+});
 ```
 
 ## Event pumping
 
-`app.run()` does not block the Node.js thread. It pumps pending native events on a timer:
+`app.whenReady()` starts the non-blocking event pump by default:
 
 ```js
+await app.whenReady({ interval: 16, ref: true });
+```
+
+For manual startup, disable auto-run:
+
+```js
+const ready = app.whenReady({ autoRun: false });
 app.run({ interval: 16, ref: true });
+await ready;
 ```
 
 `interval` defaults to `16` milliseconds and `ref` defaults to `true`. Use `app.pumpEvents()` for manual pumping.
+
+## System tray
+
+Keep a strong JavaScript reference when you need to call tray methods or keep
+its listeners reachable:
+
+```js
+let tray = null;
+
+app.whenReady().then(() => {
+  tray = app.createTrayIcon({
+    id: 'main',
+    icon: { data: rgba, width: 16, height: 16 },
+    tooltip: 'My application',
+    menu: { items: [{ id: 'quit', label: 'Quit' }] },
+  });
+
+  tray.on('click', (event) => console.log(event));
+});
+```
+
+See the [system tray reference](./docs/api/tray.md) and
+[runnable tray example](./examples/tray.mjs).
 
 ## IPC and exposed functions
 
@@ -105,9 +145,14 @@ Register a protocol before creating its webview:
 window.registerProtocol('app', async (request) => {
   const filePath = join(process.cwd(), 'dist', new URL(request.url).pathname);
   try {
-    return { body: await readFile(filePath), mimeType: 'text/html; charset=utf-8' };
+    return new Response(await readFile(filePath), {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
   } catch {
-    return { statusCode: 404, body: Buffer.from('Not found'), mimeType: 'text/plain' };
+    return new Response('Not found', {
+      status: 404,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
   }
 });
 
@@ -159,29 +204,26 @@ app.run();
 ### Menu Event Handling
 
 ```js
-import { Application, WebviewApplicationEvent } from '@webviewjs/webview';
+import { Application } from '@webviewjs/webview';
 
 const app = new Application();
 
 // Handle menu events
-app.bind((event) => {
-  if (event.event === WebviewApplicationEvent.CustomMenuClick) {
-    const menuEvent = event.customMenuEvent;
-    console.log(`Menu item clicked: ${menuEvent.id}`);
-    console.log(`From window: ${menuEvent.windowId}`);
+app.on('custom-menu-click', ({ customMenuEvent: menuEvent }) => {
+  console.log(`Menu item clicked: ${menuEvent.id}`);
+  console.log(`From window: ${menuEvent.windowId}`);
 
-    // Handle specific menu items
-    switch (menuEvent.id) {
-      case 'new':
-        console.log('Creating new document...');
-        break;
-      case 'open':
-        console.log('Opening file...');
-        break;
-      case 'quit':
-        app.exit();
-        break;
-    }
+  // Handle specific menu items
+  switch (menuEvent.id) {
+    case 'new':
+      console.log('Creating new document...');
+      break;
+    case 'open':
+      console.log('Opening file...');
+      break;
+    case 'quit':
+      app.exit();
+      break;
   }
 });
 
@@ -281,18 +323,12 @@ const app = new Application();
 const window = app.createBrowserWindow();
 const webview = window.createWebview({ url: 'https://nodejs.org' });
 
-// Set up event handler for close events
-// You can use either onEvent() or bind() - they are equivalent
-app.bind((event) => {
-  if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
-    console.log('Application is closing, cleaning up resources...');
-    // Perform cleanup here: save data, close connections, etc.
-  }
+app.on('application-close-requested', () => {
+  console.log('Application is closing, cleaning up resources...');
+});
 
-  if (event.event === WebviewApplicationEvent.WindowCloseRequested) {
-    console.log('Window close requested');
-    // Perform window-specific cleanup
-  }
+app.on('window-close-requested', () => {
+  console.log('Window close requested');
 });
 
 // Close the application gracefully (cleans up temp folders)
@@ -307,6 +343,29 @@ webview.reload();
 ```
 
 For more details on closing applications and cleaning up resources, see the [Closing Guide](./docs/CLOSING_GUIDE.md).
+
+## Keep strong references
+
+Retain `BrowserWindow`, `Webview`, `WebContext`, and `TrayIcon` wrappers for as
+long as you need to call their methods or retain their JavaScript listeners.
+Avoid discarded temporary handles:
+
+```js
+const windows = [];
+
+app.whenReady().then(() => {
+  const window = app.createBrowserWindow();
+  const webview = window.createWebview({ url: 'https://example.com' });
+  windows.push({ window, webview });
+});
+```
+
+The root `Application` owns native resources created through it. `app.exit()`,
+`app[Symbol.dispose]()`, and application garbage collection dispose those
+resources in shutdown order. Retained wrappers then report `isDisposed() ===
+true`, and method calls fail with a disposed error. Individual windows,
+webviews, contexts, and tray icons also support `dispose()` and
+`Symbol.dispose`.
 
 Check out [examples](./examples) directory for more examples:
 

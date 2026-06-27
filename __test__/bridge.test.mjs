@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
-import { Application, BrowserWindow, SerializationError, Webview } from '../index.js';
+import { Application, BrowserWindow, SerializationError, TrayIcon, WebContext, Webview } from '../index.js';
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -67,6 +67,186 @@ test('Application EventEmitter methods are chainable and removable', () => {
   assert.equal(Application.prototype.on.call(app, 'window-close-requested', listener), app);
   assert.equal(Application.prototype.off.call(app, 'window-close-requested', listener), app);
   assert.equal(Application.prototype.listenerCount.call(app, 'window-close-requested'), 0);
+});
+
+test('Application whenReady starts the event pump by default', async () => {
+  const app = eventApplication();
+  app.isReady = () => false;
+  const runOptions = [];
+  app.run = (options) => runOptions.push(options);
+
+  const ready = Application.prototype.whenReady.call(app, { interval: 32, ref: false });
+
+  app.applicationEventCallback({ event: 3 });
+  await ready;
+
+  assert.deepEqual(runOptions, [{ interval: 32, ref: false }]);
+});
+
+test('Application whenReady resolves asynchronously when already ready', async () => {
+  const app = eventApplication();
+  app.isReady = () => true;
+  app.run = () => {};
+  let synchronous = true;
+
+  const ready = Application.prototype.whenReady.call(app).then(() => {
+    assert.equal(synchronous, false);
+  });
+  synchronous = false;
+  await ready;
+});
+
+test('Application whenReady supports manual pumping with autoRun false', async () => {
+  const app = eventApplication();
+  app.isReady = () => false;
+  app.run = () => assert.fail('run should not be called');
+
+  const ready = Application.prototype.whenReady.call(app, { autoRun: false });
+  app.applicationEventCallback({ event: 3 });
+
+  await ready;
+});
+
+test('Application whenReady rejects run options when autoRun is false', () => {
+  const app = eventApplication();
+  app.isReady = () => false;
+  app.run = () => {};
+
+  assert.throws(
+    () => Application.prototype.whenReady.call(app, { autoRun: false, interval: 10 }),
+    /interval.*autoRun/i,
+  );
+  assert.throws(() => Application.prototype.whenReady.call(app, { autoRun: false, ref: false }), /ref.*autoRun/i);
+});
+
+test('BrowserWindow exposes the complete Windows extension surface', () => {
+  for (const method of [
+    'setEnable',
+    'setTaskbarIcon',
+    'removeTaskbarIcon',
+    'setSkipTaskbar',
+    'setUndecoratedShadow',
+    'setSystemBackdrop',
+    'setBorderColor',
+    'setTitleBackgroundColor',
+    'setTitleTextColor',
+    'setCornerPreference',
+    'getNativeHandleAnyThread',
+  ]) {
+    assert.equal(typeof BrowserWindow.prototype[method], 'function', method);
+  }
+});
+
+test('BrowserWindow exposes cross-platform extension methods', () => {
+  for (const method of [
+    'simpleFullscreen',
+    'setSimpleFullscreen',
+    'hasShadow',
+    'setHasShadow',
+    'setTabbingIdentifier',
+    'tabbingIdentifier',
+    'selectNextTab',
+    'selectPreviousTab',
+    'selectTabAtIndex',
+    'numTabs',
+    'isDocumentEdited',
+    'setDocumentEdited',
+    'setOptionAsAlt',
+    'optionAsAlt',
+    'setBorderlessGame',
+    'isBorderlessGame',
+    'getWaylandXdgToplevel',
+    'setIosScaleFactor',
+    'setValidOrientations',
+    'setPrefersHomeIndicatorHidden',
+    'setPreferredScreenEdgesDeferringSystemGestures',
+    'setPrefersStatusBarHidden',
+    'setPreferredStatusBarStyle',
+    'recognizePinchGesture',
+    'recognizePanGesture',
+    'recognizeDoubletapGesture',
+    'recognizeRotationGesture',
+    'androidContentRect',
+    'androidConfig',
+  ]) {
+    assert.equal(typeof BrowserWindow.prototype[method], 'function', method);
+  }
+});
+
+test('generated BrowserWindowOptions include platform creation attributes', async () => {
+  const declarations = await readFile(new URL('../js-bindings.d.ts', import.meta.url), 'utf8');
+
+  for (const option of [
+    'windowsTaskbarIcon',
+    'windowsSystemBackdrop',
+    'macosMovableByWindowBackground',
+    'macosTitlebarTransparent',
+    'macosOptionAsAlt',
+    'x11VisualId',
+    'x11WindowTypes',
+    'waylandAppId',
+    'iosScaleFactor',
+    'iosValidOrientations',
+  ]) {
+    assert.match(declarations, new RegExp(`\\b${option}\\??:`), option);
+  }
+});
+
+test('acrylic example uses a transparent webview and native backdrop API', async () => {
+  const source = await readFile(new URL('../examples/acrylic.mjs', import.meta.url), 'utf8');
+
+  assert.match(source, /setSystemBackdrop\(WindowsSystemBackdrop\.TransientWindow\)/);
+  assert.match(source, /createWebview\(\{[\s\S]*transparent:\s*true/);
+  assert.doesNotMatch(source, /node:ffi|SetWindowCompositionAttribute/);
+});
+
+test('Application and TrayIcon expose the system tray API', () => {
+  assert.equal(typeof Application.prototype.createTrayIcon, 'function');
+  assert.equal(typeof TrayIcon, 'function');
+
+  for (const method of [
+    'setIcon',
+    'removeIcon',
+    'setMenu',
+    'setTooltip',
+    'setTitle',
+    'setVisible',
+    'setIconAsTemplate',
+    'setShowMenuOnLeftClick',
+    'setShowMenuOnRightClick',
+    'showMenu',
+    'rect',
+    'dispose',
+    'on',
+    'once',
+    'off',
+  ]) {
+    assert.equal(typeof TrayIcon.prototype[method], 'function', method);
+  }
+});
+
+test('root-created wrappers expose explicit disposal', () => {
+  for (const type of [BrowserWindow, Webview, WebContext, TrayIcon]) {
+    assert.equal(typeof type.prototype.dispose, 'function', `${type.name}.dispose`);
+  }
+});
+
+test('tray example retains its icon and relies on whenReady auto-run', async () => {
+  const source = await readFile(new URL('../examples/tray.mjs', import.meta.url), 'utf8');
+
+  assert.match(source, /let tray = null/);
+  assert.match(source, /app\.whenReady\(\)\.then\(\(\) => \{[\s\S]*tray = app\.createTrayIcon/);
+  assert.doesNotMatch(source, /app\.run\(/);
+});
+
+test('README uses standard responses, EventEmitter events, and strong-reference guidance', async () => {
+  const source = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+
+  assert.match(source, /return new Response\(/);
+  assert.match(source, /app\.on\('custom-menu-click'/);
+  assert.match(source, /Keep strong references/);
+  assert.match(source, /BrowserWindow.*Webview.*TrayIcon/s);
+  assert.doesNotMatch(source, /app\.(?:bind|onEvent)\(/);
 });
 
 test('registerProtocol completes an asynchronous handler response', async () => {
@@ -158,7 +338,7 @@ test('Hono custom protocol example forwards Fetch requests to dynamic routes', a
 
   assert.match(source, /import\s+\{\s*Hono\s*\}\s+from\s+'hono'/);
   assert.match(source, /router\.get\(['"]\/\*['"]/);
-  assert.match(source, /router\.fetch\(request\)/);
+  assert.match(source, /registerProtocol\(['"]app['"],\s*(?:router\.fetch|[\s\S]*router\.fetch\(request\))/);
   assert.match(source, /href="\/"/);
   assert.match(source, /href="\/about"/);
   assert.match(source, /href="\/products"/);

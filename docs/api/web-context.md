@@ -59,3 +59,9 @@ context.setAllowsAutomation(enabled: boolean): void
 
 Automation is currently enforced only on Linux, where only one context can
 allow automation at a time. Enable it only for controlled testing.
+
+## Disposal
+
+Call `context.dispose()` for early cleanup, or use `Symbol.dispose`. Disposal
+is idempotent. `context.isDisposed()` reports its state. `app.exit()` disposes
+every context created through that application.

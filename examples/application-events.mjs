@@ -7,7 +7,7 @@ const window = app.createBrowserWindow({
   height: 600,
 });
 
-window.createWebview({
+const _webview = window.createWebview({
   html: `
     <main>
       <h1>Application and window events</h1>
