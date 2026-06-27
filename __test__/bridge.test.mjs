@@ -263,7 +263,10 @@ test('created webviews take ownership of their pending event handlers', async ()
     source,
     /let event_handler = Rc::new\(RefCell::new\(\s*self\.pending_webview_event_handler\.borrow_mut\(\)\.take\(\),?\s*\)\)/,
   );
-  assert.match(source, /let nav_handler = Rc::new\(RefCell::new\(self\.pending_nav_handler\.borrow_mut\(\)\.take\(\)\)\)/);
+  assert.match(
+    source,
+    /let nav_handler = Rc::new\(RefCell::new\(self\.pending_nav_handler\.borrow_mut\(\)\.take\(\)\)\)/,
+  );
 });
 
 test('registerProtocol completes an asynchronous handler response', async () => {
