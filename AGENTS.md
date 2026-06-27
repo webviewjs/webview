@@ -29,14 +29,14 @@ js-bindings.js / js-bindings.d.ts  Lower-level generated bindings
 
 ## Tech stack
 
-| Layer | Tool |
-| ----- | ---- |
-| Rust bindings | NAPI-RS (`@napi-rs/cli`) |
-| Package manager | Bun (use `bun` for all JS tasks) |
-| JS runtime for tests | Node.js >= 24 (`node --test`) |
-| Linter | oxlint |
-| Formatter | Prettier |
-| Rust formatter | `cargo fmt` |
+| Layer                | Tool                             |
+| -------------------- | -------------------------------- |
+| Rust bindings        | NAPI-RS (`@napi-rs/cli`)         |
+| Package manager      | Bun (use `bun` for all JS tasks) |
+| JS runtime for tests | Node.js >= 24 (`node --test`)    |
+| Linter               | oxlint                           |
+| Formatter            | Prettier                         |
+| Rust formatter       | `cargo fmt`                      |
 
 ## Common commands
 
@@ -68,11 +68,11 @@ The CLI compiles a user's app into a standalone executable. The runtime is **aut
 
 Override with `--runtime <node|deno|bun>`. Each runtime uses a different compiler:
 
-| Runtime | Mechanism |
-| ------- | --------- |
-| `node` | Node.js SEA (Single Executable Application) via `--experimental-sea-config` + `postject` |
-| `deno` | `deno compile --allow-all --no-check` |
-| `bun` | `bun build --compile` |
+| Runtime | Mechanism                                                                                |
+| ------- | ---------------------------------------------------------------------------------------- |
+| `node`  | Node.js SEA (Single Executable Application) via `--experimental-sea-config` + `postject` |
+| `deno`  | `deno compile --allow-all --no-check`                                                    |
+| `bun`   | `bun build --compile`                                                                    |
 
 The `--resources` flag (JSON asset map) is **node-only** — it maps to the SEA `assets` field.
 

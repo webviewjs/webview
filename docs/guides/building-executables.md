@@ -20,11 +20,11 @@ The executable is written to `dist/` by default. On Windows it gets a `.exe` ext
 
 Use `--runtime` (short: `-R`) to select how the executable is compiled:
 
-| Runtime | Flag              | Tool used                |
-| ------- | ----------------- | ------------------------ |
-| Node.js | `--runtime node`  | Node.js SEA (default)    |
-| Deno    | `--runtime deno`  | `deno compile`           |
-| Bun     | `--runtime bun`   | `bun build --compile`    |
+| Runtime | Flag             | Tool used             |
+| ------- | ---------------- | --------------------- |
+| Node.js | `--runtime node` | Node.js SEA (default) |
+| Deno    | `--runtime deno` | `deno compile`        |
+| Bun     | `--runtime bun`  | `bun build --compile` |
 
 ### Node.js (default)
 
@@ -140,11 +140,11 @@ webview --build --runtime node --input src/main.js --name myapp --dry-run
 
 ## Platform notes
 
-| Platform | Node SEA | Deno compile | Bun compile |
-| -------- | -------- | ------------ | ----------- |
+| Platform | Node SEA             | Deno compile         | Bun compile          |
+| -------- | -------------------- | -------------------- | -------------------- |
 | Windows  | ✅ `.exe` auto-added | ✅ `.exe` auto-added | ✅ `.exe` auto-added |
-| macOS    | ✅ codesign applied  | ✅ ad-hoc signed     | ✅           |
-| Linux    | ✅                   | ✅                   | ✅           |
+| macOS    | ✅ codesign applied  | ✅ ad-hoc signed     | ✅                   |
+| Linux    | ✅                   | ✅                   | ✅                   |
 
 ### Code signing
 

@@ -394,13 +394,13 @@ webview --build --runtime deno --input ./src/index.ts --name my-app
 webview --build --runtime bun  --input ./src/index.ts --name my-app
 ```
 
-| Flag | Default | Description |
-| ---- | ------- | ----------- |
-| `--runtime` / `-R` | auto-detected | `node`, `deno`, or `bun` |
-| `--input` / `-i` | `./index.js` | Entry file |
-| `--output` / `-o` | `./dist` | Output directory |
-| `--name` / `-n` | `webviewjs` | Executable name |
-| `--resources` / `-r` | — | JSON asset map (node only) |
+| Flag                 | Default       | Description                |
+| -------------------- | ------------- | -------------------------- |
+| `--runtime` / `-R`   | auto-detected | `node`, `deno`, or `bun`   |
+| `--input` / `-i`     | `./index.js`  | Entry file                 |
+| `--output` / `-o`    | `./dist`      | Output directory           |
+| `--name` / `-n`      | `webviewjs`   | Executable name            |
+| `--resources` / `-r` | —             | JSON asset map (node only) |
 
 For the full compilation guide including cross-compilation and code signing, see [Building Executables](./docs/guides/building-executables.md).
 
@@ -408,44 +408,44 @@ For the full compilation guide including cross-compilation and code signing, see
 
 ## Getting started
 
-|                                                              |                                 |
-| ------------------------------------------------------------ | ------------------------------- |
-| [Installation](./docs/getting-started/installation.md)       | System requirements and setup   |
-| [Quick Start](./docs/getting-started/quick-start.md)         | Your first window in minutes    |
-| [Event Loop](./docs/getting-started/event-loop.md)           | How the non-blocking pump works |
+|                                                        |                                 |
+| ------------------------------------------------------ | ------------------------------- |
+| [Installation](./docs/getting-started/installation.md) | System requirements and setup   |
+| [Quick Start](./docs/getting-started/quick-start.md)   | Your first window in minutes    |
+| [Event Loop](./docs/getting-started/event-loop.md)     | How the non-blocking pump works |
 
 ## API reference
 
-|                                                    |                                                        |
-| -------------------------------------------------- | ------------------------------------------------------ |
-| [Application](./docs/api/application.md)           | Root object — event loop, windows, menus               |
-| [BrowserWindow](./docs/api/browser-window.md)      | OS window, size, position, cursor, decorations         |
-| [Webview](./docs/api/webview.md)                   | Embedded browser — navigation, cookies, script, bounds |
-| [WebContext](./docs/api/web-context.md)            | Shared browser data, profiles, and automation          |
-| [System Tray](./docs/api/tray.md)                  | Tray icons, menus, updates, and pointer events         |
-| [Menu](./docs/api/menu.md)                         | Native menu bar construction                           |
-| [Types](./docs/api/types.md)                       | Shared interfaces and enums                            |
+|                                               |                                                        |
+| --------------------------------------------- | ------------------------------------------------------ |
+| [Application](./docs/api/application.md)      | Root object — event loop, windows, menus               |
+| [BrowserWindow](./docs/api/browser-window.md) | OS window, size, position, cursor, decorations         |
+| [Webview](./docs/api/webview.md)              | Embedded browser — navigation, cookies, script, bounds |
+| [WebContext](./docs/api/web-context.md)       | Shared browser data, profiles, and automation          |
+| [System Tray](./docs/api/tray.md)             | Tray icons, menus, updates, and pointer events         |
+| [Menu](./docs/api/menu.md)                    | Native menu bar construction                           |
+| [Types](./docs/api/types.md)                  | Shared interfaces and enums                            |
 
 ## Guides
 
-|                                                                          |                                                |
-| ------------------------------------------------------------------------ | ---------------------------------------------- |
-| [Building Executables](./docs/guides/building-executables.md)            | Compile to `.exe` / binary with node, deno, bun |
-| [IPC Messaging](./docs/guides/ipc-messaging.md)                          | Page ↔ Node communication                      |
-| [Menus](./docs/guides/menus.md)                                          | Building menu bars with roles and accelerators |
-| [Multiple Windows](./docs/guides/multiple-windows.md)                    | Managing several windows                       |
-| [Cookies & Storage](./docs/guides/cookies-and-storage.md)                | Reading, writing, and clearing cookies         |
-| [Custom Protocols](./docs/guides/custom-protocols.md)                    | Serving local content to the webview           |
+|                                                               |                                                 |
+| ------------------------------------------------------------- | ----------------------------------------------- |
+| [Building Executables](./docs/guides/building-executables.md) | Compile to `.exe` / binary with node, deno, bun |
+| [IPC Messaging](./docs/guides/ipc-messaging.md)               | Page ↔ Node communication                       |
+| [Menus](./docs/guides/menus.md)                               | Building menu bars with roles and accelerators  |
+| [Multiple Windows](./docs/guides/multiple-windows.md)         | Managing several windows                        |
+| [Cookies & Storage](./docs/guides/cookies-and-storage.md)     | Reading, writing, and clearing cookies          |
+| [Custom Protocols](./docs/guides/custom-protocols.md)         | Serving local content to the webview            |
 
 ## Platform notes
 
-|                                          |                                           |
-| ---------------------------------------- | ----------------------------------------- |
-| [Windows](./docs/platform/windows.md)    | WebView2, taskbar, DPI                    |
-| [macOS](./docs/platform/macos.md)        | WebKit, main-thread requirement, app menu |
-| [Linux](./docs/platform/linux.md)        | WebKitGTK, Wayland/X11, menu limitations  |
-| [iOS](./docs/platform/ios.md)            | Orientation, status bar, and gestures     |
-| [Android](./docs/platform/android.md)   | Content rectangle and configuration       |
+|                                       |                                           |
+| ------------------------------------- | ----------------------------------------- |
+| [Windows](./docs/platform/windows.md) | WebView2, taskbar, DPI                    |
+| [macOS](./docs/platform/macos.md)     | WebKit, main-thread requirement, app menu |
+| [Linux](./docs/platform/linux.md)     | WebKitGTK, Wayland/X11, menu limitations  |
+| [iOS](./docs/platform/ios.md)         | Orientation, status bar, and gestures     |
+| [Android](./docs/platform/android.md) | Content rectangle and configuration       |
 
 # Development
 
