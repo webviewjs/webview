@@ -49,6 +49,8 @@ export declare class BrowserWindow {
   setMinimizable(minimizable: boolean): void
   setResizable(resizable: boolean): void
   /** Sets the window inner size (width and height). */
+  setSize(width: number, height: number, logical?: boolean | undefined |null): void
+  /** Sets the min window inner size (width and height). */
   setMinSize(width: number, height: number, logical?: boolean | undefined | null): void
   /** Gets the window inner size. */
   getInnerSize(logical?: boolean | undefined | null): Dimensions

@@ -512,6 +512,20 @@ impl BrowserWindow {
 
   #[napi]
   /// Sets the window inner size (width and height).
+  pub fn set_size(&self, width: u32, height: u32, logical: Option<bool>) {
+    if let Some(logical) = logical {
+      if logical {
+        self.window.request_inner_size(LogicalSize::new(width as f64, height as f64));
+      } else {
+        self.window.request_inner_size(PhysicalSize::new(width, height));
+      }
+    } else {
+      self.window.request_inner_size(PhysicalSize::new(width, height));
+    }
+  }
+
+  #[napi]
+  /// Sets the min window inner size (width and height).
   pub fn set_min_size(&self, width: u32, height: u32, logical: Option<bool>) {
     if width == 0 && height == 0 {
       self.window.set_min_inner_size(None::<Size>);
