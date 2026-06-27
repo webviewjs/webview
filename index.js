@@ -347,7 +347,8 @@ nativeBinding.BrowserWindow.prototype.createWebview = function createWebview(opt
 
   // Always pre-register the event dispatch; the wry handlers call it for every
   // page-load / title / download / navigation event.
-  this._setPendingWebviewEventCallback(function (payload) {
+  this._setPendingWebviewEventCallback(function (error, payload) {
+    if (error) throw error;
     const name = _webviewEventNames[payload.event];
     if (name !== undefined) emitter.emit(name, payload);
   });

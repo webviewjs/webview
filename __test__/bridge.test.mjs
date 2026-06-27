@@ -249,6 +249,23 @@ test('README uses standard responses, EventEmitter events, and strong-reference 
   assert.doesNotMatch(source, /app\.(?:bind|onEvent)\(/);
 });
 
+test('webview event callback handles the ThreadsafeFunction error-first signature', async () => {
+  const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
+
+  assert.match(source, /_setPendingWebviewEventCallback\(function \(error, payload\)/);
+  assert.match(source, /if \(error\) throw error;/);
+});
+
+test('created webviews take ownership of their pending event handlers', async () => {
+  const source = await readFile(new URL('../src/browser_window.rs', import.meta.url), 'utf8');
+
+  assert.match(
+    source,
+    /let event_handler = Rc::new\(RefCell::new\(\s*self\.pending_webview_event_handler\.borrow_mut\(\)\.take\(\),?\s*\)\)/,
+  );
+  assert.match(source, /let nav_handler = Rc::new\(RefCell::new\(self\.pending_nav_handler\.borrow_mut\(\)\.take\(\)\)\)/);
+});
+
 test('registerProtocol completes an asynchronous handler response', async () => {
   const win = protocolWindow();
 

@@ -602,14 +602,20 @@ impl BrowserWindow {
         "BrowserWindow has been disposed",
       ));
     }
+    // Move the pending handlers into per-webview storage. Reusing the pending
+    // Rc here would let `_clearPendingWebviewHandlers` disable live handlers.
+    let event_handler = Rc::new(RefCell::new(
+      self.pending_webview_event_handler.borrow_mut().take(),
+    ));
+    let nav_handler = Rc::new(RefCell::new(self.pending_nav_handler.borrow_mut().take()));
     let webview = JsWebview::create(
       &env,
       &self.window,
       options.unwrap_or_default(),
       web_context,
       &self.pending_protocols,
-      Rc::clone(&self.pending_webview_event_handler),
-      Rc::clone(&self.pending_nav_handler),
+      event_handler,
+      nav_handler,
     )?;
     // Keep an Rc clone so the WebView survives JS GC of the returned handle,
     // and so AppState can resize it on WM_SIZE.
