@@ -645,6 +645,9 @@ export interface TrayRect {
   height: number;
 }
 
+/** The current version of the `@webviewjs/webview` package */
+export const VERSION: string;
+
 export interface VideoMode {
   size: Dimensions;
   bitDepth: number;

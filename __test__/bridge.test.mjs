@@ -119,6 +119,14 @@ test('Application whenReady rejects run options when autoRun is false', () => {
   assert.throws(() => Application.prototype.whenReady.call(app, { autoRun: false, ref: false }), /ref.*autoRun/i);
 });
 
+test('closing the final window runs the same native resource cleanup as app.exit()', async () => {
+  const source = await readFile(new URL('../src/app.rs', import.meta.url), 'utf8');
+
+  assert.match(source, /impl AppState \{[\s\S]*?fn shutdown\(&mut self\)/);
+  assert.match(source, /if state\.windows\.is_empty\(\) \{[\s\S]*?state\.shutdown\(\);[\s\S]*?\}/);
+  assert.match(source, /pub fn exit\(&mut self\) \{[\s\S]*?self\.state\.shutdown\(\);/);
+});
+
 test('BrowserWindow exposes the complete Windows extension surface', () => {
   for (const method of [
     'setEnable',

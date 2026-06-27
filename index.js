@@ -485,6 +485,7 @@ module.exports.MacosOptionAsAlt = nativeBinding.MacosOptionAsAlt;
 module.exports.ProgressBarState = nativeBinding.ProgressBarState;
 module.exports.JsProgressBarState = nativeBinding.JsProgressBarState;
 module.exports.Theme = nativeBinding.Theme;
+module.exports.VERSION = nativeBinding.VERSION;
 module.exports.WebviewApplicationEvent = nativeBinding.WebviewApplicationEvent;
 module.exports.WebviewEventType = nativeBinding.WebviewEventType;
 module.exports.WindowCommand = nativeBinding.WindowCommand;

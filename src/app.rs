@@ -83,6 +83,56 @@ struct AppState {
 }
 
 impl AppState {
+  fn shutdown(&mut self) {
+    if self.should_exit {
+      return;
+    }
+    #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+    {
+      for resource in self.tray_resources.drain(..) {
+        resource.borrow_mut().take();
+      }
+      self.tray_handlers.clear();
+    }
+    for views in self.webviews.values() {
+      for resource in views.borrow().iter() {
+        if let Some(view) = resource.borrow_mut().take() {
+          let _ = view.set_visible(false);
+        }
+      }
+    }
+    for win in self.windows.values() {
+      win.set_visible(false);
+    }
+    self.windows.clear();
+    self.webviews.clear();
+    for handler in self.window_handlers.values() {
+      handler.borrow_mut().take();
+    }
+    self.window_handlers.clear();
+    for lifecycle in self.window_lifecycles.values() {
+      lifecycle.set(true);
+    }
+    self.window_lifecycles.clear();
+    for lifecycles in self.webview_lifecycles.values() {
+      for lifecycle in lifecycles.borrow().iter() {
+        lifecycle.set(true);
+      }
+      lifecycles.borrow_mut().clear();
+    }
+    self.webview_lifecycles.clear();
+    self.cursor_positions.clear();
+    for context in self.web_contexts.drain(..) {
+      context.borrow_mut().take();
+    }
+    self.handler.borrow_mut().take();
+    #[cfg(not(target_os = "android"))]
+    {
+      self.menu_event_receiver = None;
+    }
+    self.should_exit = true;
+  }
+
   fn fire(&self, event: ApplicationEvent) {
     dispatch_reentrant(
       &self.handler,
@@ -309,7 +359,7 @@ impl ApplicationHandler for AppHandler<'_> {
             event: WebviewApplicationEvent::ApplicationCloseRequested,
             custom_menu_event: None,
           });
-          state.should_exit = true;
+          state.shutdown();
         }
       }
       WindowEvent::Focused(focused) => {
@@ -856,58 +906,12 @@ impl Application {
 
   #[napi]
   pub fn exit(&mut self) {
-    if self.state.should_exit {
-      return;
-    }
-    #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
-    {
-      for resource in self.state.tray_resources.drain(..) {
-        resource.borrow_mut().take();
-      }
-      self.state.tray_handlers.clear();
-    }
-    for views in self.state.webviews.values() {
-      for resource in views.borrow().iter() {
-        if let Some(view) = resource.borrow_mut().take() {
-          let _ = view.set_visible(false);
-        }
-      }
-    }
-    // Hide all managed windows so they don't become zombie frames.
-    for win in self.state.windows.values() {
-      win.set_visible(false);
-    }
-    self.state.windows.clear();
-    self.state.webviews.clear();
-    for handler in self.state.window_handlers.values() {
-      handler.borrow_mut().take();
-    }
-    self.state.window_handlers.clear();
-    for lifecycle in self.state.window_lifecycles.values() {
-      lifecycle.set(true);
-    }
-    self.state.window_lifecycles.clear();
-    for lifecycles in self.state.webview_lifecycles.values() {
-      for lifecycle in lifecycles.borrow().iter() {
-        lifecycle.set(true);
-      }
-      lifecycles.borrow_mut().clear();
-    }
-    self.state.webview_lifecycles.clear();
-    self.state.cursor_positions.clear();
-    for context in self.state.web_contexts.drain(..) {
-      context.borrow_mut().take();
-    }
-    self.state.handler.borrow_mut().take();
+    self.state.shutdown();
     #[cfg(not(target_os = "android"))]
-    {
-      self.state.menu_event_receiver = None;
-      self.global_menu.borrow_mut().take();
-    }
+    self.global_menu.borrow_mut().take();
     if let Ok(mut ids) = self.window_ids.lock() {
       ids.clear();
     }
-    self.state.should_exit = true;
   }
 
   #[napi]
