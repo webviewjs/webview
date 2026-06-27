@@ -54,7 +54,39 @@ Process one batch of OS events without blocking. Returns `true` while alive, `fa
 app.pumpEvents(): boolean
 ```
 
-### `onEvent(handler)` / `bind(handler)`
+## Application events
+
+`Application` implements the standard Node.js `EventEmitter` API. Prefer this
+interface for new Node.js code:
+
+```js
+app.on('window-close-requested', (event) => {
+  console.log('window close requested', event);
+});
+
+app.on('application-close-requested', () => {
+  app.exit();
+});
+
+app.on('custom-menu-click', ({ customMenuEvent }) => {
+  console.log(customMenuEvent.id, customMenuEvent.windowId);
+});
+```
+
+| Event                         | Fired when                              |
+| ----------------------------- | --------------------------------------- |
+| `window-close-requested`      | A user requests that a window be closed |
+| `application-close-requested` | The last window has been closed         |
+| `custom-menu-click`           | A custom menu item is selected          |
+
+The usual `on`, `once`, `off`, `addListener`, `removeListener`,
+`removeAllListeners`, `listenerCount`, `listeners`, `rawListeners`, `emit`, and
+`eventNames` methods are available. Listener-registration and removal methods
+are chainable.
+
+See the runnable [application events example](../../examples/application-events.mjs).
+
+### Legacy `onEvent(handler)` / `bind(handler)`
 
 Register a callback for application-level events. Both names are equivalent aliases.
 
@@ -95,6 +127,17 @@ Create a child/popup window. The webview fills a precise region inside the paren
 app.createChildBrowserWindow(options?: BrowserWindowOptions): BrowserWindow
 ```
 
+### `createWebContext(options?)`
+
+Create an isolated browser-data context that can be shared by multiple webviews.
+
+```ts
+app.createWebContext(options?: WebContextOptions): WebContext
+```
+
+Create contexts through the application rather than with `new WebContext()`.
+See the [WebContext reference](./web-context.md).
+
 ### `setMenu(options?)`
 
 Set the global application menu. Pass `null` to remove it.
@@ -104,6 +147,17 @@ app.setMenu(options?: MenuOptions): void
 ```
 
 See [Menus guide](../guides/menus.md) for the full options shape.
+
+This API remains supported. Compare its numeric event value with the exported
+enum:
+
+```js
+app.onEvent((event) => {
+  if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
+    app.exit();
+  }
+});
+```
 
 ### `Symbol.dispose`
 

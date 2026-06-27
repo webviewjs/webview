@@ -36,6 +36,48 @@ nativeBinding.Application.prototype[Symbol.dispose] = function dispose() {
   this.exit();
 };
 
+// ── Application EventEmitter ─────────────────────────────────────────────────
+// Maps WebviewApplicationEvent numeric values (from Rust enum order) to names.
+const _applicationEventNames = [
+  'window-close-requested', // 0 WindowCloseRequested
+  'application-close-requested', // 1 ApplicationCloseRequested
+  'custom-menu-click', // 2 CustomMenuClick
+];
+
+const _applicationEmitters = new WeakMap();
+
+function _getApplicationEmitter(app) {
+  if (!_applicationEmitters.has(app)) {
+    const emitter = new EventEmitter();
+    _applicationEmitters.set(app, emitter);
+    app.onEvent(function (payload) {
+      const name = _applicationEventNames[payload.event];
+      if (name !== undefined) emitter.emit(name, payload);
+    });
+  }
+  return _applicationEmitters.get(app);
+}
+
+[
+  'on',
+  'once',
+  'off',
+  'addListener',
+  'removeListener',
+  'removeAllListeners',
+  'listenerCount',
+  'listeners',
+  'rawListeners',
+  'emit',
+  'eventNames',
+].forEach((method) => {
+  nativeBinding.Application.prototype[method] = function (...args) {
+    const emitter = _getApplicationEmitter(this);
+    const result = emitter[method](...args);
+    return result === emitter ? this : result;
+  };
+});
+
 // ── BrowserWindow EventEmitter ────────────────────────────────────────────────
 // Maps WindowEventType numeric values (from Rust enum order) to event names.
 const _windowEventNames = [
@@ -97,7 +139,11 @@ function _getWindowEmitter(win) {
 
 // ── BrowserWindow.registerProtocol ───────────────────────────────────────────
 // Wraps the low-level `_registerProtocol(name, (payloadJson) => void)` native
-// API with a clean async handler: `(request) => Promise<response>`.
+// API with a clean async handler: `(request: Request) => Promise<Response>`.
+// The handler receives a global `Request` object and should return a global
+// `Response` (or a legacy `CustomProtocolResponse` plain object for compat).
+// This allows frameworks like Hono to be used directly:
+//   win.registerProtocol('app', (req) => honoApp.fetch(req));
 nativeBinding.BrowserWindow.prototype.registerProtocol = function registerProtocol(name, asyncHandler) {
   const win = this;
   win._registerProtocol(name, function (payloadJson) {
@@ -107,15 +153,42 @@ nativeBinding.BrowserWindow.prototype.registerProtocol = function registerProtoc
     } catch {
       return;
     }
-    const { id, url, method, headers, body: bodyArr } = parsed;
-    const request = {
-      url,
-      method,
-      headers: headers ?? [],
-      body: Array.isArray(bodyArr) ? Buffer.from(bodyArr) : undefined,
-    };
+    const { id, url, method, headers: rawHeaders, body: bodyArr } = parsed;
+
+    // Build a global Headers object
+    const headersObj = new Headers();
+    for (const { key, value } of rawHeaders ?? []) {
+      if (value != null) headersObj.set(key, value);
+    }
+
+    // Build a global Request — GET/HEAD cannot carry a body
+    const canHaveBody = !['GET', 'HEAD'].includes(method.toUpperCase());
+    const reqInit = { method, headers: headersObj };
+    if (canHaveBody && Array.isArray(bodyArr) && bodyArr.length > 0) {
+      reqInit.body = Buffer.from(bodyArr);
+    }
+    const request = new Request(url, reqInit);
+
     Promise.resolve(asyncHandler(request))
-      .then((resp) => win._completeProtocol(id, resp))
+      .then(async (resp) => {
+        // Accept a global Response object (from Hono / fetch-compatible handlers)
+        if (typeof Response !== 'undefined' && resp instanceof Response) {
+          const bodyBuf = Buffer.from(await resp.arrayBuffer());
+          const contentType = resp.headers.get('content-type') ?? 'application/octet-stream';
+          const extraHeaders = [];
+          resp.headers.forEach((value, key) => {
+            if (key.toLowerCase() !== 'content-type') extraHeaders.push({ key, value });
+          });
+          return win._completeProtocol(id, {
+            statusCode: resp.status,
+            body: bodyBuf,
+            mimeType: contentType,
+            headers: extraHeaders,
+          });
+        }
+        // Legacy CustomProtocolResponse plain object
+        return win._completeProtocol(id, resp);
+      })
       .catch((err) =>
         win._completeProtocol(id, {
           statusCode: 500,
@@ -124,6 +197,74 @@ nativeBinding.BrowserWindow.prototype.registerProtocol = function registerProtoc
         }),
       );
   });
+};
+
+// ── Webview EventEmitter ──────────────────────────────────────────────────────
+// Maps WebviewEventType numeric values (Rust enum order) to JS event names.
+const _webviewEventNames = [
+  'page-load-started', // 0  PageLoadStarted
+  'page-load-finished', // 1  PageLoadFinished
+  'title-changed', // 2  TitleChanged
+  'download-started', // 3  DownloadStarted
+  'download-completed', // 4  DownloadCompleted
+  'navigation', // 5  NavigationStarted
+  'new-window', // 6  NewWindowRequested
+];
+
+const _webviewEmitters = new WeakMap();
+
+function _attachWebviewEmitter(webview, emitter) {
+  [
+    'on',
+    'once',
+    'off',
+    'addListener',
+    'removeListener',
+    'removeAllListeners',
+    'listenerCount',
+    'listeners',
+    'rawListeners',
+    'emit',
+    'eventNames',
+  ].forEach((method) => {
+    webview[method] = function (...args) {
+      const result = emitter[method](...args);
+      return result === emitter ? webview : result;
+    };
+  });
+  _webviewEmitters.set(webview, emitter);
+}
+
+// ── BrowserWindow.createWebview wrapper ──────────────────────────────────────
+// Intercepts `createWebview(options)` to:
+//  - Extract `webContext` and `navigationHandler` from options
+//  - Pre-register event dispatch and sync guard callbacks before the native build
+//  - Attach an EventEmitter to the returned Webview
+const _nativeCreateWebview = nativeBinding.BrowserWindow.prototype.createWebview;
+
+nativeBinding.BrowserWindow.prototype.createWebview = function createWebview(opts) {
+  const { webContext = null, navigationHandler = null, ...rustOpts } = opts ?? {};
+
+  const emitter = new EventEmitter();
+
+  // Always pre-register the event dispatch; the wry handlers call it for every
+  // page-load / title / download / navigation event.
+  this._setPendingWebviewEventCallback(function (payload) {
+    const name = _webviewEventNames[payload.event];
+    if (name !== undefined) emitter.emit(name, payload);
+  });
+
+  if (typeof navigationHandler === 'function') {
+    this._setPendingWebviewNavigationHandler(navigationHandler);
+  }
+
+  const webview = _nativeCreateWebview.call(this, rustOpts, webContext);
+
+  // Clear so subsequent createWebview calls start with a clean slate.
+  this._clearPendingWebviewHandlers();
+
+  _attachWebviewEmitter(webview, emitter);
+  return webview;
 };
 
 // ── Webview.expose ────────────────────────────────────────────────────────────
@@ -228,6 +369,8 @@ module.exports.SerializationError = SerializationError;
 // Auto-generated exports by postbuild.js. Do not edit directly.
 module.exports.Application = nativeBinding.Application;
 module.exports.BrowserWindow = nativeBinding.BrowserWindow;
+module.exports.WebContext = nativeBinding.WebContext;
+module.exports.JsWebContext = nativeBinding.JsWebContext;
 module.exports.Webview = nativeBinding.Webview;
 module.exports.JsWebview = nativeBinding.JsWebview;
 module.exports.ControlFlow = nativeBinding.ControlFlow;
@@ -239,5 +382,6 @@ module.exports.ProgressBarState = nativeBinding.ProgressBarState;
 module.exports.JsProgressBarState = nativeBinding.JsProgressBarState;
 module.exports.Theme = nativeBinding.Theme;
 module.exports.WebviewApplicationEvent = nativeBinding.WebviewApplicationEvent;
+module.exports.WebviewEventType = nativeBinding.WebviewEventType;
 module.exports.WindowCommand = nativeBinding.WindowCommand;
 module.exports.WindowEventType = nativeBinding.WindowEventType;

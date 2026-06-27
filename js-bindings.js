@@ -747,6 +747,8 @@ if (!nativeBinding) {
 module.exports = nativeBinding;
 module.exports.Application = nativeBinding.Application;
 module.exports.BrowserWindow = nativeBinding.BrowserWindow;
+module.exports.WebContext = nativeBinding.WebContext;
+module.exports.JsWebContext = nativeBinding.JsWebContext;
 module.exports.Webview = nativeBinding.Webview;
 module.exports.JsWebview = nativeBinding.JsWebview;
 module.exports.ControlFlow = nativeBinding.ControlFlow;
@@ -758,5 +760,6 @@ module.exports.ProgressBarState = nativeBinding.ProgressBarState;
 module.exports.JsProgressBarState = nativeBinding.JsProgressBarState;
 module.exports.Theme = nativeBinding.Theme;
 module.exports.WebviewApplicationEvent = nativeBinding.WebviewApplicationEvent;
+module.exports.WebviewEventType = nativeBinding.WebviewEventType;
 module.exports.WindowCommand = nativeBinding.WindowCommand;
 module.exports.WindowEventType = nativeBinding.WindowEventType;

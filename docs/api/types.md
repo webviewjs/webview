@@ -58,6 +58,10 @@ interface HeaderData {
 
 ## `CustomProtocolRequest`
 
+This is the legacy native plain-object shape. The public
+`BrowserWindow.registerProtocol()` callback receives a standard global
+Fetch API `Request`.
+
 ```ts
 interface CustomProtocolRequest {
   url: string; // full URL, e.g. "app://localhost/index.html"
@@ -75,6 +79,50 @@ interface CustomProtocolResponse {
   mimeType?: string; // default: "application/octet-stream"
   statusCode?: number; // default: 200
   headers?: HeaderData[]; // extra response headers
+}
+```
+
+Public protocol handlers may return this legacy shape or a standard global
+Fetch API `Response`.
+
+## `WebContextOptions`
+
+```ts
+interface WebContextOptions {
+  dataDirectory?: string;
+  allowsAutomation?: boolean;
+}
+```
+
+See the [WebContext reference](./web-context.md).
+
+## Webview event payloads
+
+```ts
+interface WebviewPageLoadEvent {
+  event: number;
+  url?: string;
+}
+
+interface WebviewTitleChangedEvent {
+  event: number;
+  title?: string;
+}
+
+interface WebviewDownloadEvent {
+  event: number;
+  url?: string;
+  success?: boolean;
+}
+
+interface WebviewNavigationEvent {
+  event: number;
+  url?: string;
+}
+
+interface WebviewNewWindowEvent {
+  event: number;
+  url?: string;
 }
 ```
 

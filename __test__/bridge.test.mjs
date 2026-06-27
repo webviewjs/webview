@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
-import { BrowserWindow, SerializationError, Webview } from '../index.js';
+import { Application, BrowserWindow, SerializationError, Webview } from '../index.js';
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -29,6 +29,45 @@ function exposedWebview() {
     },
   };
 }
+
+function eventApplication() {
+  return {
+    onEvent(callback) {
+      this.applicationEventCallback = callback;
+    },
+  };
+}
+
+test('Application dispatches native events through named EventEmitter events', () => {
+  const app = eventApplication();
+  const received = [];
+
+  Application.prototype.on.call(app, 'window-close-requested', (event) => received.push(['window', event]));
+  Application.prototype.on.call(app, 'application-close-requested', (event) => received.push(['application', event]));
+  Application.prototype.on.call(app, 'custom-menu-click', (event) => received.push(['menu', event]));
+
+  const windowEvent = { event: 0 };
+  const applicationEvent = { event: 1 };
+  const menuEvent = { event: 2, customMenuEvent: { id: 'save', windowId: 7 } };
+  app.applicationEventCallback(windowEvent);
+  app.applicationEventCallback(applicationEvent);
+  app.applicationEventCallback(menuEvent);
+
+  assert.deepEqual(received, [
+    ['window', windowEvent],
+    ['application', applicationEvent],
+    ['menu', menuEvent],
+  ]);
+});
+
+test('Application EventEmitter methods are chainable and removable', () => {
+  const app = eventApplication();
+  const listener = () => {};
+
+  assert.equal(Application.prototype.on.call(app, 'window-close-requested', listener), app);
+  assert.equal(Application.prototype.off.call(app, 'window-close-requested', listener), app);
+  assert.equal(Application.prototype.listenerCount.call(app, 'window-close-requested'), 0);
+});
 
 test('registerProtocol completes an asynchronous handler response', async () => {
   const win = protocolWindow();
@@ -112,4 +151,17 @@ test('expose example uses an app protocol instead of a file origin for IPC', asy
   assert.match(source, /window\.registerProtocol\('app', async/);
   assert.match(source, /url:\s*'app:\/\/localhost\/index\.html'/);
   assert.doesNotMatch(source, /new URL\('\.\/assets\/expose\/index\.html'/);
+});
+
+test('Hono custom protocol example forwards Fetch requests to dynamic routes', async () => {
+  const source = await readFile(new URL('../examples/custom-protocol-hono.mjs', import.meta.url), 'utf8');
+
+  assert.match(source, /import\s+\{\s*Hono\s*\}\s+from\s+'hono'/);
+  assert.match(source, /router\.get\(['"]\/\*['"]/);
+  assert.match(source, /router\.fetch\(request\)/);
+  assert.match(source, /href="\/"/);
+  assert.match(source, /href="\/about"/);
+  assert.match(source, /href="\/products"/);
+  assert.match(source, /href="\/contact"/);
+  assert.doesNotMatch(source, /statusCode\s*:/);
 });

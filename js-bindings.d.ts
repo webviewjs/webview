@@ -5,6 +5,8 @@ export declare class Application {
   onEvent(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void;
   bind(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void;
   exit(): void;
+  /** Creates a new WebContext with the given options. */
+  createWebContext(options?: WebContextOptions | undefined | null): JsWebContext;
   createBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow;
   createChildBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow;
   setMenu(menuOptions?: MenuOptions | undefined | null): void;
@@ -31,8 +33,33 @@ export declare class BrowserWindow {
    * `_registerProtocol` handler.  `id` matches the value in the JSON payload.
    */
   _completeProtocol(id: number, response: CustomProtocolResponse): void;
-  createWebview(options?: WebviewOptions | undefined | null): JsWebview;
+  createWebview(options?: WebviewOptions | undefined | null, webContext?: JsWebContext | undefined | null): JsWebview;
+  /**
+   * Pre-register the webview event dispatch callback before `createWebview`.
+   * Called by the JS wrapper to wire page_load / title / download events into
+   * an EventEmitter on the returned Webview object.
+   */
+  _setPendingWebviewEventCallback(handler: (err: Error | null, arg: WebviewEventPayload) => any): void;
+  /**
+   * Pre-register a sync navigation guard before `createWebview`.
+   * The JS function receives the target URL and must return `true` (allow)
+   * or `false` (deny) synchronously.
+   */
+  _setPendingWebviewNavigationHandler(handler: (arg: string) => boolean): void;
+  /**
+   * Clear all pending per-webview handlers so they don't leak into the next
+   * `createWebview` call on the same window.  Called by the JS wrapper after
+   * each `createWebview`.
+   */
+  _clearPendingWebviewHandlers(): void;
   get isChild(): boolean;
+  /**
+   * Returns the platform-native window handle as a raw pointer value.
+   * On Windows this is the HWND, on macOS the NSWindow pointer,
+   * on Linux X11 the Window XID, on Linux Wayland the wl_surface pointer.
+   * Returns 0 if the handle cannot be retrieved.
+   */
+  getNativeHandle(): bigint;
   isFocused(): boolean;
   isVisible(): boolean;
   isDecorated(): boolean;
@@ -112,6 +139,14 @@ export declare class BrowserWindow {
    * monitor cannot be determined.
    */
   center(): void;
+  /** Inner width of the window in physical pixels. */
+  get width(): number;
+  /** Inner height of the window in physical pixels. */
+  get height(): number;
+  /** Outer x position of the window in physical pixels. */
+  get x(): number;
+  /** Outer y position of the window in physical pixels. */
+  get y(): number;
   /** Device-pixel ratio for the monitor the window is currently on. */
   scaleFactor(): number;
   setCursor(cursor: CursorType): void;
@@ -133,6 +168,21 @@ export declare class BrowserWindow {
   setSkipTaskbar(skip: boolean): void;
   requestRedraw(): void;
 }
+
+export declare class WebContext {
+  /** Not supported. Use `app.createWebContext(options)` instead. */
+  constructor();
+  /** A reference to the data directory the context was created with. */
+  get dataDirectory(): string | null;
+  /** Check if a custom protocol has been registered on this context. */
+  isCustomProtocolRegistered(scheme: string): boolean;
+  /**
+   * Set if this context allows automation.
+   * Note: this is currently only enforced on Linux, and has the stipulation that only 1 context allows automation at a time.
+   */
+  setAllowsAutomation(flag: boolean): void;
+}
+export type JsWebContext = WebContext;
 
 export declare class Webview {
   constructor();
@@ -165,8 +215,16 @@ export declare class Webview {
   evaluateScript(js: string): void;
   evaluateScriptWithCallback(js: string, callback: (err: Error | null, arg: string) => any): void;
   reload(): void;
-  /** Get the URL the webview is currently showing. */
+  /** The URL the webview is currently showing. */
   url(): string | null;
+  /** Webview width in logical pixels (same coordinate space as `set_bounds`). */
+  get width(): number | null;
+  /** Webview height in logical pixels (same coordinate space as `set_bounds`). */
+  get height(): number | null;
+  /** Webview x offset from the window's top-left corner, in logical pixels. */
+  get x(): number | null;
+  /** Webview y offset from the window's top-left corner, in logical pixels. */
+  get y(): number | null;
   /** Load `url` with additional HTTP request headers. */
   loadUrlWithHeaders(url: string, headers: Array<HeaderData>): void;
   /**
@@ -412,6 +470,19 @@ export interface VideoMode {
   refreshRate: number;
 }
 
+export interface WebContextOptions {
+  /**
+   * Whether the WebView window should have a custom user data path.
+   * This is useful in Windows when a bundled application can’t have the webview data inside Program Files.
+   */
+  dataDirectory?: string;
+  /**
+   * Whether the WebView window should allow automation (e.g. for testing).
+   * Note: this is currently only enforced on Linux, and has the stipulation that only 1 context allows automation at a time.
+   */
+  allowsAutomation?: boolean;
+}
+
 export declare enum WebviewApplicationEvent {
   WindowCloseRequested = 0,
   ApplicationCloseRequested = 1,
@@ -434,6 +505,32 @@ export interface WebviewCookie {
   secure?: boolean;
   /** `"strict"`, `"lax"`, or `"none"`. */
   sameSite?: string;
+}
+
+/** Payload delivered to the webview event dispatch callback. */
+export interface WebviewEventPayload {
+  event: WebviewEventType;
+  /** URL associated with the event (navigation, page load, download). */
+  url?: string;
+  /** Document title for `TitleChanged` events. */
+  title?: string;
+  /** Download success flag for `DownloadCompleted` events. */
+  success?: boolean;
+}
+
+/** Event types fired by a Webview and surfaced as EventEmitter events in JS. */
+export declare enum WebviewEventType {
+  PageLoadStarted = 0,
+  PageLoadFinished = 1,
+  TitleChanged = 2,
+  DownloadStarted = 3,
+  DownloadCompleted = 4,
+  NavigationStarted = 5,
+  /**
+   * Fired when a page attempts to open a new browser window
+   * (`window.open`, `target="_blank"`, etc.).
+   */
+  NewWindowRequested = 6,
 }
 
 export interface WebviewOptions {

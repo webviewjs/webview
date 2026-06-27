@@ -8,6 +8,54 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 
 export type ExposedTarget = Record<string, JsonValue | ((...args: any[]) => unknown | Promise<unknown>)>;
 
+export interface ApplicationEventMap {
+  'window-close-requested': import('./js-bindings').ApplicationEvent;
+  'application-close-requested': import('./js-bindings').ApplicationEvent;
+  'custom-menu-click': import('./js-bindings').ApplicationEvent;
+}
+
+// ── Webview events ────────────────────────────────────────────────────────────
+
+export interface WebviewPageLoadEvent {
+  event: number;
+  url?: string;
+}
+
+export interface WebviewTitleChangedEvent {
+  event: number;
+  title?: string;
+}
+
+export interface WebviewDownloadEvent {
+  event: number;
+  url?: string;
+  /** Only set for `download-completed` events. */
+  success?: boolean;
+}
+
+export interface WebviewNavigationEvent {
+  event: number;
+  url?: string;
+}
+
+export interface WebviewNewWindowEvent {
+  event: number;
+  url?: string;
+}
+
+/** Maps Webview event names to their typed payloads. */
+export interface WebviewEventMap {
+  'page-load-started': WebviewPageLoadEvent;
+  'page-load-finished': WebviewPageLoadEvent;
+  'title-changed': WebviewTitleChangedEvent;
+  'download-started': WebviewDownloadEvent;
+  'download-completed': WebviewDownloadEvent;
+  /** Fired for every navigation attempt.  Use `navigationHandler` option to allow/deny. */
+  navigation: WebviewNavigationEvent;
+  /** Fired when the page attempts to open a new browser window (`window.open`, `target="_blank"`, etc.). */
+  'new-window': WebviewNewWindowEvent;
+}
+
 export interface WindowMoveEvent {
   event: number;
   x: number;
@@ -99,10 +147,69 @@ export interface BrowserWindowEventMap {
 }
 
 declare module './js-bindings' {
+  interface Application {
+    on<K extends keyof ApplicationEventMap>(event: K, listener: (payload: ApplicationEventMap[K]) => void): this;
+    on(event: string, listener: (...args: any[]) => void): this;
+    once<K extends keyof ApplicationEventMap>(event: K, listener: (payload: ApplicationEventMap[K]) => void): this;
+    once(event: string, listener: (...args: any[]) => void): this;
+    off<K extends keyof ApplicationEventMap>(event: K, listener: (payload: ApplicationEventMap[K]) => void): this;
+    off(event: string, listener: (...args: any[]) => void): this;
+    addListener<K extends keyof ApplicationEventMap>(
+      event: K,
+      listener: (payload: ApplicationEventMap[K]) => void,
+    ): this;
+    addListener(event: string, listener: (...args: any[]) => void): this;
+    removeListener<K extends keyof ApplicationEventMap>(
+      event: K,
+      listener: (payload: ApplicationEventMap[K]) => void,
+    ): this;
+    removeListener(event: string, listener: (...args: any[]) => void): this;
+    removeAllListeners(event?: string): this;
+    listenerCount(event: string): number;
+    listeners(event: string): Function[];
+    rawListeners(event: string): Function[];
+    emit(event: string, ...args: any[]): boolean;
+    eventNames(): (string | symbol)[];
+  }
+
+  interface WebviewOptions {
+    /**
+     * Shared `WebContext` for cookie/data isolation across webviews.
+     * Create one with `app.createWebContext({ dataDirectory })` and pass it here.
+     */
+    webContext?: import('./js-bindings').WebContext | null;
+    /**
+     * Synchronous navigation guard.  Called with the target URL before every
+     * navigation; return `true` to allow, `false` to cancel.
+     *
+     * A `navigation` event is **always** emitted regardless of this handler.
+     */
+    navigationHandler?: (url: string) => boolean;
+  }
+
   interface BrowserWindow {
+    /**
+     * Register a custom protocol handler.
+     *
+     * The handler receives a global `Request` object and should return a
+     * global `Response` (compatible with Hono, itty-router, and any other
+     * Fetch-API framework), or a legacy `CustomProtocolResponse` plain object.
+     *
+     * @example
+     * ```ts
+     * // With Hono:
+     * win.registerProtocol('app', (req) => honoApp.fetch(req));
+     *
+     * // With a plain Response:
+     * win.registerProtocol('app', async (req) => {
+     *   const body = await readFile('./index.html');
+     *   return new Response(body, { headers: { 'Content-Type': 'text/html' } });
+     * });
+     * ```
+     */
     registerProtocol(
       name: string,
-      handler: (request: CustomProtocolRequest) => CustomProtocolResponse | Promise<CustomProtocolResponse>,
+      handler: (request: Request) => Response | CustomProtocolResponse | Promise<Response | CustomProtocolResponse>,
     ): void;
 
     on<K extends keyof BrowserWindowEventMap>(event: K, listener: (payload: BrowserWindowEventMap[K]) => void): this;
@@ -131,5 +238,23 @@ declare module './js-bindings' {
 
   interface Webview {
     expose(name: string, target: ExposedTarget): void;
+
+    // EventEmitter — mirrors BrowserWindow events but for webview-level events.
+    on<K extends keyof WebviewEventMap>(event: K, listener: (payload: WebviewEventMap[K]) => void): this;
+    on(event: string, listener: (...args: any[]) => void): this;
+    once<K extends keyof WebviewEventMap>(event: K, listener: (payload: WebviewEventMap[K]) => void): this;
+    once(event: string, listener: (...args: any[]) => void): this;
+    off<K extends keyof WebviewEventMap>(event: K, listener: (payload: WebviewEventMap[K]) => void): this;
+    off(event: string, listener: (...args: any[]) => void): this;
+    addListener<K extends keyof WebviewEventMap>(event: K, listener: (payload: WebviewEventMap[K]) => void): this;
+    addListener(event: string, listener: (...args: any[]) => void): this;
+    removeListener<K extends keyof WebviewEventMap>(event: K, listener: (payload: WebviewEventMap[K]) => void): this;
+    removeListener(event: string, listener: (...args: any[]) => void): this;
+    removeAllListeners(event?: string): this;
+    listenerCount(event: string): number;
+    listeners(event: string): Function[];
+    rawListeners(event: string): Function[];
+    emit(event: string, ...args: any[]): boolean;
+    eventNames(): (string | symbol)[];
   }
 }

@@ -17,6 +17,7 @@ WebviewJS is a Node.js binding for creating native desktop windows with an embed
 | [Application](./api/application.md)      | Root object — event loop, windows, menus               |
 | [BrowserWindow](./api/browser-window.md) | OS window, size, position, cursor, decorations         |
 | [Webview](./api/webview.md)              | Embedded browser — navigation, cookies, script, bounds |
+| [WebContext](./api/web-context.md)       | Shared browser data, profiles, and automation          |
 | [Menu](./api/menu.md)                    | Native menu bar construction                           |
 | [Types](./api/types.md)                  | Shared interfaces and enums                            |
 
@@ -30,7 +31,17 @@ WebviewJS is a Node.js binding for creating native desktop windows with an embed
 | [Cookies & Storage](./guides/cookies-and-storage.md) | Reading, writing, and clearing cookies         |
 | [Custom Protocols](./guides/custom-protocols.md)     | Serving local content to the webview           |
 
-Runnable examples are available in [`examples/custom-protocol.mjs`](../examples/custom-protocol.mjs) and [`examples/expose.mjs`](../examples/expose.mjs).
+## Runnable examples
+
+| Example                                                      | Demonstrates                                        |
+| ------------------------------------------------------------ | --------------------------------------------------- |
+| [Application events](../examples/application-events.mjs)     | Application lifecycle and native window events      |
+| [Webview events](../examples/webview-events.mjs)             | Page, title, download, navigation, and popup events |
+| [Navigation handler](../examples/navigation-handler.mjs)     | Allowing or cancelling navigation                   |
+| [Web context](../examples/web-context.mjs)                   | Sharing browser data between webviews               |
+| [Custom protocol](../examples/custom-protocol.mjs)           | Serving local content through a custom scheme       |
+| [Hono custom protocol](../examples/custom-protocol-hono.mjs) | Routing Fetch requests and responses through Hono   |
+| [Expose](../examples/expose.mjs)                             | Calling Node functions from page JavaScript         |
 
 ## Platform notes
 

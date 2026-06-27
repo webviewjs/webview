@@ -10,10 +10,41 @@ use napi::{
 use napi_derive::*;
 use std::sync::Arc;
 use winit::window::Window;
-use wry::{http::Request, Rect, WebViewBuilder};
+use wry::{
+  http::Request, NewWindowFeatures, NewWindowResponse, PageLoadEvent, Rect, WebViewBuilder,
+};
 
 use crate::browser_window::next_protocol_id;
 use crate::types::*;
+
+/// Shared reference to the webview event dispatch callback.
+/// The `Arc<ThreadsafeFunction>` wrapper lets us cheaply clone the pointer into
+/// `Send + Sync` closures (e.g. `with_new_window_req_handler`).
+pub(crate) type WebviewEventHandlerRef =
+  Rc<RefCell<Option<Arc<ThreadsafeFunction<WebviewEventPayload>>>>>;
+
+/// Shared reference to a sync bool-returning JS function (navigation guard).
+/// `with_navigation_handler` doesn't require `Send`, so `FunctionRef` is fine.
+pub(crate) type WebviewBoolHandlerRef = Rc<RefCell<Option<FunctionRef<String, bool>>>>;
+
+/// Fire a `WebviewEventPayload` via the TSF event dispatch.  Non-blocking: the
+/// call is queued to libuv and executed on the JS thread.
+fn dispatch_event(handler: &WebviewEventHandlerRef, payload: WebviewEventPayload) {
+  let borrowed = handler.borrow();
+  if let Some(tsf) = borrowed.as_ref() {
+    let _ = tsf.call(Ok(payload), ThreadsafeFunctionCallMode::NonBlocking);
+  }
+}
+
+/// Call a sync bool JS handler; returns `true` (allow) on missing handler or error.
+fn call_bool_handler(handler: &WebviewBoolHandlerRef, env: Env, url: String) -> bool {
+  let borrowed = handler.borrow();
+  borrowed
+    .as_ref()
+    .and_then(|func_ref| func_ref.borrow_back(&env).ok())
+    .and_then(|func| func.call(url).ok())
+    .unwrap_or(true)
+}
 
 /// Internal type alias for async protocol pending-responder maps.
 pub(crate) type ProtocolPendingMap =
@@ -64,6 +95,7 @@ impl JsWebview {
     env: &Env,
     window: &Arc<Window>,
     options: WebviewOptions,
+    web_context: Option<&mut crate::web_context::JsWebContext>,
     // (scheme, js_handler_ref, pending_responders, id_counter)
     protocols: &[(
       String,
@@ -71,8 +103,14 @@ impl JsWebview {
       ProtocolPendingMap,
       ProtocolCounterRef,
     )],
+    event_handler: WebviewEventHandlerRef,
+    nav_handler: WebviewBoolHandlerRef,
   ) -> Result<Self> {
-    let mut webview = WebViewBuilder::new();
+    let mut webview = if let Some(ctx) = web_context {
+      WebViewBuilder::new_with_web_context(ctx.inner())
+    } else {
+      WebViewBuilder::new()
+    };
 
     if let Some(devtools) = options.enable_devtools {
       webview = webview.with_devtools(devtools);
@@ -221,6 +259,118 @@ impl JsWebview {
     } else {
       None
     };
+
+    // ── Navigation handler ────────────────────────────────────────────────────
+    {
+      let nav_rc = Rc::clone(&nav_handler);
+      let ev_rc = Rc::clone(&event_handler);
+      let env_c = *env;
+      webview = webview.with_navigation_handler(move |url: String| -> bool {
+        dispatch_event(
+          &ev_rc,
+          WebviewEventPayload {
+            event: WebviewEventType::NavigationStarted,
+            url: Some(url.clone()),
+            ..Default::default()
+          },
+        );
+        call_bool_handler(&nav_rc, env_c, url)
+      });
+    }
+
+    // ── Page-load handler ─────────────────────────────────────────────────────
+    {
+      let ev_rc = Rc::clone(&event_handler);
+      webview = webview.with_on_page_load_handler(move |event: PageLoadEvent, url: String| {
+        let ev_type = match event {
+          PageLoadEvent::Started => WebviewEventType::PageLoadStarted,
+          PageLoadEvent::Finished => WebviewEventType::PageLoadFinished,
+        };
+        dispatch_event(
+          &ev_rc,
+          WebviewEventPayload {
+            event: ev_type,
+            url: Some(url),
+            ..Default::default()
+          },
+        );
+      });
+    }
+
+    // ── Document title changed handler ────────────────────────────────────────
+    {
+      let ev_rc = Rc::clone(&event_handler);
+      webview = webview.with_document_title_changed_handler(move |title: String| {
+        dispatch_event(
+          &ev_rc,
+          WebviewEventPayload {
+            event: WebviewEventType::TitleChanged,
+            title: Some(title),
+            ..Default::default()
+          },
+        );
+      });
+    }
+
+    // ── Download started handler ──────────────────────────────────────────────
+    {
+      let ev_rc = Rc::clone(&event_handler);
+      webview = webview.with_download_started_handler(
+        move |url: String, _dest: &mut std::path::PathBuf| -> bool {
+          dispatch_event(
+            &ev_rc,
+            WebviewEventPayload {
+              event: WebviewEventType::DownloadStarted,
+              url: Some(url),
+              ..Default::default()
+            },
+          );
+          true // always allow; users control via event listener
+        },
+      );
+    }
+
+    // ── Download completed handler ────────────────────────────────────────────
+    {
+      let ev_rc = Rc::clone(&event_handler);
+      webview = webview.with_download_completed_handler(
+        move |url: String, _path: Option<std::path::PathBuf>, success: bool| {
+          dispatch_event(
+            &ev_rc,
+            WebviewEventPayload {
+              event: WebviewEventType::DownloadCompleted,
+              url: Some(url),
+              success: Some(success),
+              ..Default::default()
+            },
+          );
+        },
+      );
+    }
+
+    // ── New window request handler ────────────────────────────────────────────
+    // wry requires `Send + Sync` here because WebView2 on Windows invokes this
+    // from a COM event thread.  `ThreadsafeFunction` satisfies the `Send + Sync`
+    // requirement, while `Arc` provides an owned, cheaply cloned handle.
+    // We always return `Allow`; callers observe the URL via the `new-window` event.
+    {
+      let tsf_clone = event_handler.borrow().as_ref().map(Arc::clone);
+      if let Some(tsf) = tsf_clone {
+        webview = webview.with_new_window_req_handler(
+          move |url: String, _features: NewWindowFeatures| -> NewWindowResponse {
+            let _ = tsf.call(
+              Ok(WebviewEventPayload {
+                event: WebviewEventType::NewWindowRequested,
+                url: Some(url),
+                ..Default::default()
+              }),
+              ThreadsafeFunctionCallMode::NonBlocking,
+            );
+            NewWindowResponse::Allow
+          },
+        );
+      }
+    }
 
     // ── Custom protocols (async) ──────────────────────────────────────────────
     // wry's with_asynchronous_custom_protocol closure is NOT required to be
@@ -606,10 +756,50 @@ impl JsWebview {
 
   // ── Navigation ───────────────────────────────────────────────────────────────
 
-  /// Get the URL the webview is currently showing.
+  /// The URL the webview is currently showing.
   #[napi]
   pub fn url(&self) -> Option<String> {
     self.webview_inner.url().ok()
+  }
+
+  /// Webview width in logical pixels (same coordinate space as `set_bounds`).
+  #[napi(getter)]
+  pub fn width(&self) -> Option<f64> {
+    self
+      .webview_inner
+      .bounds()
+      .ok()
+      .map(|r| r.size.to_logical::<f64>(1.0).width)
+  }
+
+  /// Webview height in logical pixels (same coordinate space as `set_bounds`).
+  #[napi(getter)]
+  pub fn height(&self) -> Option<f64> {
+    self
+      .webview_inner
+      .bounds()
+      .ok()
+      .map(|r| r.size.to_logical::<f64>(1.0).height)
+  }
+
+  /// Webview x offset from the window's top-left corner, in logical pixels.
+  #[napi(getter)]
+  pub fn x(&self) -> Option<f64> {
+    self
+      .webview_inner
+      .bounds()
+      .ok()
+      .map(|r| r.position.to_logical::<f64>(1.0).x)
+  }
+
+  /// Webview y offset from the window's top-left corner, in logical pixels.
+  #[napi(getter)]
+  pub fn y(&self) -> Option<f64> {
+    self
+      .webview_inner
+      .bounds()
+      .ok()
+      .map(|r| r.position.to_logical::<f64>(1.0).y)
   }
 
   /// Load `url` with additional HTTP request headers.

@@ -19,6 +19,8 @@ interface WebviewOptions {
   userAgent?: string; // Custom user-agent string
   preload?: string; // JS injected before any page script runs
   ipcName?: string; // Alias for window.ipc, for example window.bindings
+  webContext?: WebContext; // Shared browser data context
+  navigationHandler?: (url: string) => boolean; // allow or cancel navigation
 }
 ```
 
@@ -33,6 +35,33 @@ webview.loadUrlWithHeaders(url: string, headers: HeaderData[]): void
 webview.reload(): void
 webview.url(): string | null          // currently displayed URL
 ```
+
+`navigationHandler` runs synchronously before each navigation. Return `false`
+to cancel it. Keep the callback fast and do not return a Promise. A
+`navigation` event is emitted whether the navigation is allowed or cancelled.
+
+See the runnable [navigation handler example](../../examples/navigation-handler.mjs).
+
+## Events
+
+`Webview` implements standard Node.js `EventEmitter` methods, including `on`,
+`once`, `off`, `addListener`, `removeListener`, and `removeAllListeners`.
+
+```js
+webview.on('page-load-started', ({ url }) => {});
+webview.on('page-load-finished', ({ url }) => {});
+webview.on('title-changed', ({ title }) => {});
+webview.on('download-started', ({ url }) => {});
+webview.on('download-completed', ({ url, success }) => {});
+webview.on('navigation', ({ url }) => {});
+webview.on('new-window', ({ url }) => {});
+```
+
+The `new-window` event observes attempts from `window.open`,
+`target="_blank"`, and equivalent browser actions. The request is allowed
+after dispatch. Download events are observational and do not cancel downloads.
+
+See the runnable [webview events example](../../examples/webview-events.mjs).
 
 `HeaderData`:
 
@@ -86,6 +115,10 @@ For child webviews you can reposition or resize the view at runtime:
 ```ts
 webview.getBounds(): WebviewBounds | null
 webview.setBounds(bounds: WebviewBounds): void
+webview.width: number | null
+webview.height: number | null
+webview.x: number | null
+webview.y: number | null
 ```
 
 ```ts

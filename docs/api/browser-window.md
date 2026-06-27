@@ -39,6 +39,10 @@ Attach a webview to the window. Returns a [`Webview`](./webview.md).
 win.createWebview(options?: WebviewOptions): Webview
 ```
 
+Pass `options.webContext` to share browser data with other webviews. Pass
+`options.navigationHandler` to synchronously allow or reject navigation. See
+the [Webview reference](./webview.md).
+
 ### Window state
 
 ```ts
@@ -188,6 +192,32 @@ interface Monitor {
 ```ts
 win.id(): number          // stable numeric id within this process
 win.isChildWindow(): boolean
+win.getNativeHandle(): bigint
+```
+
+`getNativeHandle()` returns the platform-native handle as a bigint pointer
+value: HWND on Windows, NSView on macOS, XID on X11, or `wl_surface` on
+Wayland. It returns `0` when no supported handle is available. Treat this as a
+borrowed value and do not destroy it.
+
+### State and geometry properties
+
+```ts
+win.width: number   // inner width in physical pixels
+win.height: number  // inner height in physical pixels
+win.x: number       // outer x position in physical pixels
+win.y: number       // outer y position in physical pixels
+win.getTitle: string
+
+win.isFocused(): boolean
+win.isVisible(): boolean
+win.isDecorated(): boolean
+win.isClosable(): boolean
+win.isMaximizable(): boolean
+win.isMinimizable(): boolean
+win.isMaximized(): boolean
+win.isMinimized(): boolean
+win.isResizable(): boolean
 ```
 
 ## Window events (EventEmitter)
@@ -207,6 +237,15 @@ win.on('mouse-move',  ({ x, y })          => { … })
 win.on('mouse-down',  ({ x, y, button })  => { … })  // button: 0=left 1=middle 2=right
 win.on('mouse-up',    ({ x, y, button })  => { … })
 win.on('scroll',      ({ deltaX, deltaY })=> { … })
+win.on('key-down',    ({ key, code, modifiers, isRepeat }) => { … })
+win.on('key-up',      ({ key, code, modifiers, isRepeat }) => { … })
+win.on('file-drop',   ({ files }) => { … })
+win.on('file-hover',  ({ files }) => { … })
+win.on('file-hover-cancelled', () => { … })
+win.on('scale-factor-changed', ({ scaleFactor }) => { … })
+win.on('theme-changed', ({ text }) => { … })
+win.on('ime',         ({ text, phase }) => { … })
+win.on('touch',       ({ x, y, touchId, phase }) => { … })
 ```
 
 All positional values (`x`, `y`, `width`, `height`, `deltaX`, `deltaY`) are in
@@ -216,6 +255,11 @@ convert to logical (CSS) pixels.
 Scroll deltas from a pixel-precise input device (trackpad) are passed through
 as-is; line-scroll deltas (mouse wheel) are multiplied by 20 to produce an
 equivalent pixel distance.
+
+IME phases are `enabled`, `preedit`, `commit`, or `disabled`. Touch phases are
+`started`, `moved`, `ended`, or `cancelled`.
+
+See the runnable [application events example](../../examples/application-events.mjs).
 
 ### Undecorated-window resize
 

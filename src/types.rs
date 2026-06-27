@@ -336,6 +336,39 @@ pub struct WebviewBounds {
   pub height: f64,
 }
 
+/// Event types fired by a Webview and surfaced as EventEmitter events in JS.
+#[napi]
+pub enum WebviewEventType {
+  PageLoadStarted,
+  PageLoadFinished,
+  TitleChanged,
+  DownloadStarted,
+  DownloadCompleted,
+  NavigationStarted,
+  /// Fired when a page attempts to open a new browser window
+  /// (`window.open`, `target="_blank"`, etc.).
+  NewWindowRequested,
+}
+
+/// Payload delivered to the webview event dispatch callback.
+#[napi(object)]
+#[derive(Default)]
+pub struct WebviewEventPayload {
+  pub event: WebviewEventType,
+  /// URL associated with the event (navigation, page load, download).
+  pub url: Option<String>,
+  /// Document title for `TitleChanged` events.
+  pub title: Option<String>,
+  /// Download success flag for `DownloadCompleted` events.
+  pub success: Option<bool>,
+}
+
+impl Default for WebviewEventType {
+  fn default() -> Self {
+    WebviewEventType::PageLoadStarted
+  }
+}
+
 #[napi(object)]
 pub struct WebviewOptions {
   pub url: Option<String>,

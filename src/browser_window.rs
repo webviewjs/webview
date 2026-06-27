@@ -4,7 +4,7 @@ use image::GenericImageView;
 #[cfg(not(target_os = "android"))]
 use muda::Menu;
 use napi::Either;
-use napi::{bindgen_prelude::FunctionRef, Env, Result};
+use napi::{bindgen_prelude::FunctionRef, threadsafe_function::ThreadsafeFunction, Env, Result};
 use napi_derive::*;
 #[cfg(not(target_os = "android"))]
 use rfd::FileDialog;
@@ -23,7 +23,10 @@ use winit::{
 
 #[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
-use crate::webview::{JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap};
+use crate::webview::{
+  JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap, WebviewBoolHandlerRef,
+  WebviewEventHandlerRef,
+};
 
 impl Default for BrowserWindowOptions {
   fn default() -> Self {
@@ -70,6 +73,11 @@ pub struct BrowserWindow {
   /// so we use Rc<RefCell<>> instead of Arc<Mutex<>>.
   pending_protocols: Vec<PendingProtocol>,
   protocol_next_id: ProtocolCounterRef,
+  /// Pending webview event dispatch callback (page_load, title, download, etc.).
+  /// Set by `_setPendingWebviewEventCallback` before `createWebview`.
+  pending_webview_event_handler: WebviewEventHandlerRef,
+  /// Pending sync navigation-guard (allow/deny navigation by URL).
+  pending_nav_handler: WebviewBoolHandlerRef,
 }
 
 type PendingProtocol = (
@@ -230,6 +238,8 @@ impl BrowserWindow {
       event_handler: Rc::new(RefCell::new(None)),
       pending_protocols: Vec::new(), // populated by _registerProtocol
       protocol_next_id: Rc::new(RefCell::new(0)),
+      pending_webview_event_handler: Rc::new(RefCell::new(None)),
+      pending_nav_handler: Rc::new(RefCell::new(None)),
     })
   }
 
@@ -271,12 +281,20 @@ impl BrowserWindow {
   }
 
   #[napi]
-  pub fn create_webview(&mut self, env: Env, options: Option<WebviewOptions>) -> Result<JsWebview> {
+  pub fn create_webview(
+    &mut self,
+    env: Env,
+    options: Option<WebviewOptions>,
+    web_context: Option<&mut crate::web_context::JsWebContext>,
+  ) -> Result<JsWebview> {
     let webview = JsWebview::create(
       &env,
-      &self.window, // Arc<Window> — create() now takes &Arc<Window>
+      &self.window,
       options.unwrap_or_default(),
+      web_context,
       &self.pending_protocols,
+      Rc::clone(&self.pending_webview_event_handler),
+      Rc::clone(&self.pending_nav_handler),
     )?;
     // Keep an Rc clone so the WebView survives JS GC of the returned handle,
     // and so AppState can resize it on WM_SIZE.
@@ -287,9 +305,56 @@ impl BrowserWindow {
     Ok(webview)
   }
 
+  /// Pre-register the webview event dispatch callback before `createWebview`.
+  /// Called by the JS wrapper to wire page_load / title / download events into
+  /// an EventEmitter on the returned Webview object.
+  #[napi(js_name = "_setPendingWebviewEventCallback")]
+  pub fn set_pending_webview_event_callback(
+    &mut self,
+    handler: ThreadsafeFunction<WebviewEventPayload>,
+  ) {
+    *self.pending_webview_event_handler.borrow_mut() = Some(Arc::new(handler));
+  }
+
+  /// Pre-register a sync navigation guard before `createWebview`.
+  /// The JS function receives the target URL and must return `true` (allow)
+  /// or `false` (deny) synchronously.
+  #[napi(js_name = "_setPendingWebviewNavigationHandler")]
+  pub fn set_pending_webview_navigation_handler(&mut self, handler: FunctionRef<String, bool>) {
+    *self.pending_nav_handler.borrow_mut() = Some(handler);
+  }
+
+  /// Clear all pending per-webview handlers so they don't leak into the next
+  /// `createWebview` call on the same window.  Called by the JS wrapper after
+  /// each `createWebview`.
+  #[napi(js_name = "_clearPendingWebviewHandlers")]
+  pub fn clear_pending_webview_handlers(&mut self) {
+    *self.pending_webview_event_handler.borrow_mut() = None;
+    *self.pending_nav_handler.borrow_mut() = None;
+  }
+
   #[napi(getter)]
   pub fn is_child(&self) -> bool {
     self.is_child_window
+  }
+
+  /// Returns the platform-native window handle as a raw pointer value.
+  /// On Windows this is the HWND, on macOS the NSWindow pointer,
+  /// on Linux X11 the Window XID, on Linux Wayland the wl_surface pointer.
+  /// Returns 0 if the handle cannot be retrieved.
+  #[napi]
+  pub fn get_native_handle(&self) -> u64 {
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    let Ok(handle) = self.window.window_handle() else {
+      return 0;
+    };
+    match handle.as_raw() {
+      RawWindowHandle::Win32(h) => h.hwnd.get() as u64,
+      RawWindowHandle::AppKit(h) => h.ns_view.as_ptr() as u64,
+      RawWindowHandle::Xlib(h) => h.window as u64,
+      RawWindowHandle::Wayland(h) => h.surface.as_ptr() as u64,
+      _ => 0,
+    }
   }
 
   #[napi]
@@ -829,6 +894,38 @@ impl BrowserWindow {
   }
 
   // ── DPI ─────────────────────────────────────────────────────────────────────
+
+  /// Inner width of the window in physical pixels.
+  #[napi(getter)]
+  pub fn width(&self) -> u32 {
+    self.window.inner_size().width
+  }
+
+  /// Inner height of the window in physical pixels.
+  #[napi(getter)]
+  pub fn height(&self) -> u32 {
+    self.window.inner_size().height
+  }
+
+  /// Outer x position of the window in physical pixels.
+  #[napi(getter)]
+  pub fn x(&self) -> i32 {
+    self
+      .window
+      .outer_position()
+      .unwrap_or(PhysicalPosition::new(0, 0))
+      .x
+  }
+
+  /// Outer y position of the window in physical pixels.
+  #[napi(getter)]
+  pub fn y(&self) -> i32 {
+    self
+      .window
+      .outer_position()
+      .unwrap_or(PhysicalPosition::new(0, 0))
+      .y
+  }
 
   /// Device-pixel ratio for the monitor the window is currently on.
   #[napi]

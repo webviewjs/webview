@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::browser_window::BrowserWindow;
 use crate::types::*;
+use crate::web_context::{JsWebContext, WebContextOptions};
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))]
 use muda::Menu;
 use napi::bindgen_prelude::*;
@@ -799,6 +800,12 @@ impl Application {
     }
     self.state.windows.clear();
     self.state.should_exit = true;
+  }
+
+  #[napi]
+  /// Creates a new WebContext with the given options.
+  pub fn create_web_context(&mut self, options: Option<WebContextOptions>) -> JsWebContext {
+    JsWebContext::create(options)
   }
 
   #[napi]
