@@ -2,11 +2,11 @@
 
 ## Requirements
 
-| Platform | Requirement |
-|---|---|
-| Windows | WebView2 runtime (ships with Windows 11 and Edge; auto-installed on Windows 10) |
-| macOS | macOS 10.15 Catalina or later (WebKit is built-in) |
-| Linux | `libwebkit2gtk-4.1` and `libxdo` |
+| Platform | Requirement                                                                     |
+| -------- | ------------------------------------------------------------------------------- |
+| Windows  | WebView2 runtime (ships with Windows 11 and Edge; auto-installed on Windows 10) |
+| macOS    | macOS 10.15 Catalina or later (WebKit is built-in)                              |
+| Linux    | `libwebkit2gtk-4.1` and `libxdo`                                                |
 
 ### Linux dependency install
 

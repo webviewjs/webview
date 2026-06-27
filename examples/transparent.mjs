@@ -1,4 +1,4 @@
-import { Application } from "../index.js";
+import { Application } from '../index.js';
 
 const app = new Application();
 const window = app.createBrowserWindow({
@@ -7,14 +7,14 @@ const window = app.createBrowserWindow({
 });
 
 const webview = window.createWebview({
-    html: /* html */ `
+  html: /* html */ `
       <html>
         <body style="background-color:rgba(87,87,87,0.5);">
           <h1>Hello, transparent!</h1>
         </body>
       </html>`,
-    transparent: true,
-    enableDevtools: true,
+  transparent: true,
+  enableDevtools: true,
 });
 
 app.run();

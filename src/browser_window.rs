@@ -23,9 +23,7 @@ use winit::{
 
 #[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
-use crate::webview::{
-  JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap,
-};
+use crate::webview::{JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap};
 
 impl Default for BrowserWindowOptions {
   fn default() -> Self {

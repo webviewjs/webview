@@ -7,7 +7,7 @@ app.bind((event) => {
   if (event.event === WebviewApplicationEvent.CustomMenuClick) {
     const menuEvent = event.customMenuEvent;
     console.log(`Menu "${menuEvent.id}" clicked on window ${menuEvent.windowId}`);
-    
+
     switch (menuEvent.id) {
       case 'close-window':
         console.log('Closing window...');
@@ -34,16 +34,16 @@ app.bind((event) => {
 app.setMenu({
   items: [
     {
-      label: "App",
+      label: 'App',
       submenu: {
         items: [
-          { id: "global-action", label: "Global Action", accelerator: "CmdOrCtrl+G" },
-          { role: "separator" },
-          { id: "quit", label: "Quit", accelerator: "CmdOrCtrl+Q" }
-        ]
-      }
-    }
-  ]
+          { id: 'global-action', label: 'Global Action', accelerator: 'CmdOrCtrl+G' },
+          { role: 'separator' },
+          { id: 'quit', label: 'Quit', accelerator: 'CmdOrCtrl+Q' },
+        ],
+      },
+    },
+  ],
 });
 
 console.log('🪟 Window-Specific Menu Example');
@@ -51,7 +51,7 @@ console.log('Creating two windows with different menus...\n');
 
 // Create first window with custom menu
 const window1 = app.createBrowserWindow({
-  title: "Window 1 - Custom Menu",
+  title: 'Window 1 - Custom Menu',
   width: 400,
   height: 300,
   x: 100,
@@ -59,26 +59,23 @@ const window1 = app.createBrowserWindow({
   menu: {
     items: [
       {
-        label: "Window 1",
+        label: 'Window 1',
         submenu: {
           items: [
-            { id: "window-1-action", label: "Window 1 Action", accelerator: "Ctrl+1" },
-            { role: "separator" },
-            { id: "close-window", label: "Close Window", accelerator: "Ctrl+W" }
-          ]
-        }
+            { id: 'window-1-action', label: 'Window 1 Action', accelerator: 'Ctrl+1' },
+            { role: 'separator' },
+            { id: 'close-window', label: 'Close Window', accelerator: 'Ctrl+W' },
+          ],
+        },
       },
       {
-        label: "Edit",
+        label: 'Edit',
         submenu: {
-          items: [
-            { role: "copy" },
-            { role: "paste" }
-          ]
-        }
-      }
-    ]
-  }
+          items: [{ role: 'copy' }, { role: 'paste' }],
+        },
+      },
+    ],
+  },
 });
 
 window1.createWebview({
@@ -114,12 +111,12 @@ window1.createWebview({
         <p>Try the menu items above 👆</p>
       </div>
     </body>
-  </html>`
+  </html>`,
 });
 
 // Create second window with different custom menu
 const window2 = app.createBrowserWindow({
-  title: "Window 2 - Different Menu",
+  title: 'Window 2 - Different Menu',
   width: 400,
   height: 300,
   x: 520,
@@ -127,27 +124,23 @@ const window2 = app.createBrowserWindow({
   menu: {
     items: [
       {
-        label: "Window 2",
+        label: 'Window 2',
         submenu: {
           items: [
-            { id: "window-2-action", label: "Window 2 Action", accelerator: "Ctrl+2" },
-            { role: "separator" },
-            { id: "close-window", label: "Close Window", accelerator: "Ctrl+W" }
-          ]
-        }
+            { id: 'window-2-action', label: 'Window 2 Action', accelerator: 'Ctrl+2' },
+            { role: 'separator' },
+            { id: 'close-window', label: 'Close Window', accelerator: 'Ctrl+W' },
+          ],
+        },
       },
       {
-        label: "Tools",
+        label: 'Tools',
         submenu: {
-          items: [
-            { role: "selectall" },
-            { role: "separator" },
-            { id: "tool-action", label: "Special Tool" }
-          ]
-        }
-      }
-    ]
-  }
+          items: [{ role: 'selectall' }, { role: 'separator' }, { id: 'tool-action', label: 'Special Tool' }],
+        },
+      },
+    ],
+  },
 });
 
 window2.createWebview({
@@ -183,17 +176,17 @@ window2.createWebview({
         <p>Compare with Window 1 👈</p>
       </div>
     </body>
-  </html>`
+  </html>`,
 });
 
 // Create third window that uses the global menu (no custom menu specified)
 const window3 = app.createBrowserWindow({
-  title: "Window 3 - Global Menu",
+  title: 'Window 3 - Global Menu',
   width: 400,
   height: 300,
   x: 310,
   y: 420,
-  show_menu: true // Uses global menu
+  show_menu: true, // Uses global menu
 });
 
 window3.createWebview({
@@ -228,7 +221,7 @@ window3.createWebview({
         <p>Set with <code>app.setMenu()</code></p>
       </div>
     </body>
-  </html>`
+  </html>`,
 });
 
 // Log menu status for each window

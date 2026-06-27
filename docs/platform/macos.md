@@ -13,7 +13,11 @@ macOS enforces that all GUI operations happen on the main thread. WebviewJS hand
 On macOS the menu bar spans the top of the entire screen and belongs to the application, not any individual window.
 
 ```js
-app.setMenu({ items: [ /* … */ ] });
+app.setMenu({
+  items: [
+    /* … */
+  ],
+});
 ```
 
 `init_for_nsapp()` is called automatically when `Application` is created.
@@ -35,7 +39,7 @@ All predefined roles work on macOS, including:
 ## Fullscreen
 
 ```js
-win.setFullscreen(FullscreenType.Borderless);  // uses native macOS fullscreen
+win.setFullscreen(FullscreenType.Borderless); // uses native macOS fullscreen
 ```
 
 ## Transparent window

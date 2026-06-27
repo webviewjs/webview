@@ -11,7 +11,7 @@ app.setMenu({
       label: 'File',
       submenu: {
         items: [
-          { label: 'New',  id: 'file-new',  accelerator: 'CmdOrCtrl+N' },
+          { label: 'New', id: 'file-new', accelerator: 'CmdOrCtrl+N' },
           { label: 'Open', id: 'file-open', accelerator: 'CmdOrCtrl+O' },
           { role: 'separator' },
           { role: 'quit' },
@@ -42,7 +42,9 @@ app.setMenu({
 
 ```js
 win.setMenu({
-  items: [/* … */],
+  items: [
+    /* … */
+  ],
 });
 ```
 
@@ -63,11 +65,11 @@ app.onEvent((ev) => {
 
 ```ts
 interface MenuItemOptions {
-  id?: string;          // unique ID emitted in CustomMenuClick events
-  label?: string;       // display text
-  enabled?: boolean;    // default: true
+  id?: string; // unique ID emitted in CustomMenuClick events
+  label?: string; // display text
+  enabled?: boolean; // default: true
   accelerator?: string; // e.g. "CmdOrCtrl+S", "Alt+F4"
-  role?: string;        // predefined system action (see below)
+  role?: string; // predefined system action (see below)
   submenu?: MenuOptions;
 }
 ```
@@ -76,25 +78,25 @@ interface MenuItemOptions {
 
 Roles map to native platform actions and are localised automatically.
 
-| Role | Action |
-|---|---|
-| `copy` | Copy selection |
-| `paste` | Paste |
-| `cut` | Cut |
-| `undo` | Undo |
-| `redo` | Redo |
-| `selectall` / `select-all` | Select all |
-| `separator` / `-` | Horizontal separator line |
-| `minimize` | Minimise window |
-| `maximize` | Maximise window |
-| `fullscreen` | Toggle fullscreen |
-| `close` / `closewindow` / `close-window` | Close window |
-| `quit` | Quit application |
-| `about` | Show about dialog |
-| `hide` | Hide application (macOS) |
-| `hideothers` / `hide-others` | Hide other apps (macOS) |
-| `showall` / `show-all` | Show all apps (macOS) |
-| `services` | Services submenu (macOS) |
+| Role                                     | Action                             |
+| ---------------------------------------- | ---------------------------------- |
+| `copy`                                   | Copy selection                     |
+| `paste`                                  | Paste                              |
+| `cut`                                    | Cut                                |
+| `undo`                                   | Undo                               |
+| `redo`                                   | Redo                               |
+| `selectall` / `select-all`               | Select all                         |
+| `separator` / `-`                        | Horizontal separator line          |
+| `minimize`                               | Minimise window                    |
+| `maximize`                               | Maximise window                    |
+| `fullscreen`                             | Toggle fullscreen                  |
+| `close` / `closewindow` / `close-window` | Close window                       |
+| `quit`                                   | Quit application                   |
+| `about`                                  | Show about dialog                  |
+| `hide`                                   | Hide application (macOS)           |
+| `hideothers` / `hide-others`             | Hide other apps (macOS)            |
+| `showall` / `show-all`                   | Show all apps (macOS)              |
+| `services`                               | Services submenu (macOS)           |
 | `bringalltofront` / `bring-all-to-front` | Bring all windows to front (macOS) |
 
 ## Accelerator syntax
@@ -108,8 +110,8 @@ F5
 
 ## Platform notes
 
-| Platform | Behaviour |
-|---|---|
-| **Windows** | Menu bar attached to each window's title bar |
-| **macOS** | Single app-level menu bar at the top of the screen |
-| **Linux** | Menu events are not available — winit does not expose GTK handles needed by muda |
+| Platform    | Behaviour                                                                        |
+| ----------- | -------------------------------------------------------------------------------- |
+| **Windows** | Menu bar attached to each window's title bar                                     |
+| **macOS**   | Single app-level menu bar at the top of the screen                               |
+| **Linux**   | Menu events are not available — winit does not expose GTK handles needed by muda |

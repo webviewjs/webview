@@ -8,7 +8,7 @@ const window = app.createBrowserWindow();
 let count = 0;
 
 const webview = window.createWebview({
-    html: `<!DOCTYPE html>
+  html: `<!DOCTYPE html>
     <html>
         <head>
             <title>Webview</title>
@@ -24,23 +24,23 @@ const webview = window.createWebview({
         </body>
     </html>
     `,
-    preload: `window.onIpcMessage = function(data) {
+  preload: `window.onIpcMessage = function(data) {
         const output = document.getElementById('output');
         output.innerText = \`\${data}\`;
         return \`The current count is: \${data}\`
-    }`
+    }`,
 });
 
 if (!webview.isDevtoolsOpen()) webview.openDevtools();
 
 webview.onIpcMessage(() => {
-    webview.evaluateScriptWithCallback(`onIpcMessage("${++count}")`, (err, result) => {
-        if (err) {
-            console.error('Error evaluating script:', err);
-        } else {
-            console.log("[webview] >>", result);
-        }
-    });
+  webview.evaluateScriptWithCallback(`onIpcMessage("${++count}")`, (err, result) => {
+    if (err) {
+      console.error('Error evaluating script:', err);
+    } else {
+      console.log('[webview] >>', result);
+    }
+  });
 });
 
 app.run();

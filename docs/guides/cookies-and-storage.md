@@ -16,15 +16,15 @@ for (const c of cookies) {
 
 `WebviewCookie` fields:
 
-| Field | Type | Description |
-|---|---|---|
-| `name` | `string` | Cookie name |
-| `value` | `string` | Cookie value |
-| `domain` | `string?` | Owning domain |
-| `path` | `string?` | URL path scope |
-| `httpOnly` | `boolean?` | Not accessible from JS |
-| `secure` | `boolean?` | HTTPS-only |
-| `sameSite` | `'strict' \| 'lax' \| 'none'?` | Cross-site policy |
+| Field      | Type                           | Description            |
+| ---------- | ------------------------------ | ---------------------- |
+| `name`     | `string`                       | Cookie name            |
+| `value`    | `string`                       | Cookie value           |
+| `domain`   | `string?`                      | Owning domain          |
+| `path`     | `string?`                      | URL path scope         |
+| `httpOnly` | `boolean?`                     | Not accessible from JS |
+| `secure`   | `boolean?`                     | HTTPS-only             |
+| `sameSite` | `'strict' \| 'lax' \| 'none'?` | Cross-site policy      |
 
 ## Writing a cookie
 

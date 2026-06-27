@@ -1,4 +1,4 @@
-import { Application } from '../index.js'
+import { Application } from '../index.js';
 
 const webview1 = new Application();
 

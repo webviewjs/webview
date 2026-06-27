@@ -8,8 +8,7 @@ window.createWebview({
   url: 'https://nodejs.org',
 });
 
-const iconRes = await fetch('https://nodejs.org/static/images/favicons/favicon.png')
-.then(res => res.arrayBuffer())
+const iconRes = await fetch('https://nodejs.org/static/images/favicons/favicon.png').then((res) => res.arrayBuffer());
 
 const icon = Buffer.from(iconRes);
 

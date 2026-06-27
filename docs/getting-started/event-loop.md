@@ -28,16 +28,16 @@ app.run({ interval: 33 });
 app.run({ ref: false });
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `interval` | `16` | Milliseconds between event pumps (~60 FPS) |
-| `ref` | `true` | If `false`, the timer is `unref()`'d so it won't keep the process alive |
+| Option     | Default | Description                                                             |
+| ---------- | ------- | ----------------------------------------------------------------------- |
+| `interval` | `16`    | Milliseconds between event pumps (~60 FPS)                              |
+| `ref`      | `true`  | If `false`, the timer is `unref()`'d so it won't keep the process alive |
 
 ## Stopping manually
 
 ```js
-app.stop();   // clears the interval but leaves windows open
-app.exit();   // stop() + hides all windows + marks app as exited
+app.stop(); // clears the interval but leaves windows open
+app.exit(); // stop() + hides all windows + marks app as exited
 ```
 
 `stop()` without `exit()` is useful if you want to take over the loop yourself:

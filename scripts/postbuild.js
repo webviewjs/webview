@@ -20,7 +20,9 @@ function collectNativeExportNames(jsBindings) {
 
 function buildIndexJs(nativeExportNames) {
   const originalSource = readFileSync('./index.js', 'utf-8');
-  const exportStatements = nativeExportNames.map((name) => `module.exports.${name} = nativeBinding.${name};`).join('\n');
+  const exportStatements = nativeExportNames
+    .map((name) => `module.exports.${name} = nativeBinding.${name};`)
+    .join('\n');
 
   return `${originalSource.split(EXPORT_MARKER)[0].trimEnd()}\n
 ${EXPORT_MARKER}

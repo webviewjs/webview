@@ -25,10 +25,10 @@ Start the event pump. Calls `pumpEvents()` on a `setInterval` and returns immedi
 app.run(options?: { interval?: number; ref?: boolean }): void
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `interval` | `16` | Pump interval in ms |
-| `ref` | `true` | If `false` the timer won't prevent process exit |
+| Option     | Default | Description                                     |
+| ---------- | ------- | ----------------------------------------------- |
+| `interval` | `16`    | Pump interval in ms                             |
+| `ref`      | `true`  | If `false` the timer won't prevent process exit |
 
 ### `stop()`
 
@@ -66,18 +66,18 @@ app.onEvent(handler: (event: ApplicationEvent) => void): void
 
 ```ts
 interface ApplicationEvent {
-  event: WebviewApplicationEvent;         // enum value
+  event: WebviewApplicationEvent; // enum value
   customMenuEvent?: { id: string; windowId: number };
 }
 ```
 
 `WebviewApplicationEvent` values:
 
-| Value | Fired when |
-|---|---|
-| `WindowCloseRequested` | User clicks the OS close button on a window |
-| `ApplicationCloseRequested` | The last window was closed |
-| `CustomMenuClick` | A custom menu item was clicked; see `customMenuEvent.id` |
+| Value                       | Fired when                                               |
+| --------------------------- | -------------------------------------------------------- |
+| `WindowCloseRequested`      | User clicks the OS close button on a window              |
+| `ApplicationCloseRequested` | The last window was closed                               |
+| `CustomMenuClick`           | A custom menu item was clicked; see `customMenuEvent.id` |
 
 ### `createBrowserWindow(options?)`
 

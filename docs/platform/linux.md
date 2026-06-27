@@ -43,9 +43,9 @@ This is a **no-op** on Linux; the behaviour depends on the window manager and ca
 
 ## Tested environments
 
-| Distribution | Display | Status |
-|---|---|---|
-| Ubuntu 22.04 | X11 / Wayland | Supported |
-| Fedora 40 | Wayland (GNOME) | Supported |
-| Arch Linux | X11 / Wayland | Supported |
-| Debian 12 | X11 | Supported |
+| Distribution | Display         | Status    |
+| ------------ | --------------- | --------- |
+| Ubuntu 22.04 | X11 / Wayland   | Supported |
+| Fedora 40    | Wayland (GNOME) | Supported |
+| Arch Linux   | X11 / Wayland   | Supported |
+| Debian 12    | X11             | Supported |

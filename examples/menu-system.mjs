@@ -7,7 +7,7 @@ app.bind((event) => {
   if (event.event === WebviewApplicationEvent.CustomMenuClick) {
     const menuEvent = event.customMenuEvent;
     console.log(`Menu item clicked: "${menuEvent.id}" from window ${menuEvent.windowId}`);
-    
+
     // Handle specific menu items
     switch (menuEvent.id) {
       case 'new':
@@ -15,8 +15,8 @@ app.bind((event) => {
         break;
       case 'open':
         console.log('📂 Opening file...');
-        const result = window.openFileDialog({title: 'Select a file to open'});
-        console.log({result})
+        const result = window.openFileDialog({ title: 'Select a file to open' });
+        console.log({ result });
         break;
       case 'save':
         console.log('💾 Saving file...');
@@ -55,120 +55,120 @@ app.setMenu({
   items: [
     // File menu
     {
-      label: "File",
+      label: 'File',
       submenu: {
         items: [
-          { 
-            id: "new", 
-            label: "New", 
-            accelerator: "CmdOrCtrl+N",
-            enabled: true 
+          {
+            id: 'new',
+            label: 'New',
+            accelerator: 'CmdOrCtrl+N',
+            enabled: true,
           },
-          { 
-            id: "open", 
-            label: "Open...", 
-            accelerator: "CmdOrCtrl+O" 
+          {
+            id: 'open',
+            label: 'Open...',
+            accelerator: 'CmdOrCtrl+O',
           },
-          { role: "separator" },
-          { 
-            id: "save", 
-            label: "Save", 
-            accelerator: "CmdOrCtrl+S" 
+          { role: 'separator' },
+          {
+            id: 'save',
+            label: 'Save',
+            accelerator: 'CmdOrCtrl+S',
           },
-          { 
-            id: "save-as", 
-            label: "Save As...", 
-            accelerator: "CmdOrCtrl+Shift+S" 
+          {
+            id: 'save-as',
+            label: 'Save As...',
+            accelerator: 'CmdOrCtrl+Shift+S',
           },
-          { role: "separator" },
-          { 
-            id: "quit", 
-            label: "Quit", 
-            accelerator: "CmdOrCtrl+Q" 
-          }
-        ]
-      }
+          { role: 'separator' },
+          {
+            id: 'quit',
+            label: 'Quit',
+            accelerator: 'CmdOrCtrl+Q',
+          },
+        ],
+      },
     },
-    
+
     // Edit menu with predefined roles
     {
-      label: "Edit",
+      label: 'Edit',
       submenu: {
         items: [
-          { role: "cut" },
-          { role: "copy" },
-          { role: "paste" },
-          { role: "selectall" },
-          { role: "separator" },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectall' },
+          { role: 'separator' },
           {
-            id: "preferences",
-            label: "Preferences...",
-            accelerator: "CmdOrCtrl+,"
-          }
-        ]
-      }
+            id: 'preferences',
+            label: 'Preferences...',
+            accelerator: 'CmdOrCtrl+,',
+          },
+        ],
+      },
     },
-    
+
     // View menu
     {
-      label: "View",
+      label: 'View',
       submenu: {
         items: [
           {
-            id: "reload",
-            label: "Reload",
-            accelerator: "CmdOrCtrl+R"
+            id: 'reload',
+            label: 'Reload',
+            accelerator: 'CmdOrCtrl+R',
           },
           {
-            id: "devtools",
-            label: "Developer Tools",
-            accelerator: "F12"
+            id: 'devtools',
+            label: 'Developer Tools',
+            accelerator: 'F12',
           },
-          { role: "separator" },
+          { role: 'separator' },
           {
-            label: "Zoom",
+            label: 'Zoom',
             submenu: {
               items: [
                 {
-                  id: "zoom-in",
-                  label: "Zoom In",
-                  accelerator: "CmdOrCtrl+Plus"
+                  id: 'zoom-in',
+                  label: 'Zoom In',
+                  accelerator: 'CmdOrCtrl+Plus',
                 },
                 {
-                  id: "zoom-out", 
-                  label: "Zoom Out",
-                  accelerator: "CmdOrCtrl+-"
+                  id: 'zoom-out',
+                  label: 'Zoom Out',
+                  accelerator: 'CmdOrCtrl+-',
                 },
                 {
-                  id: "zoom-reset",
-                  label: "Actual Size",
-                  accelerator: "CmdOrCtrl+0"
-                }
-              ]
-            }
-          }
-        ]
-      }
+                  id: 'zoom-reset',
+                  label: 'Actual Size',
+                  accelerator: 'CmdOrCtrl+0',
+                },
+              ],
+            },
+          },
+        ],
+      },
     },
-    
+
     // Help menu
     {
-      label: "Help",
+      label: 'Help',
       submenu: {
         items: [
           {
-            id: "about",
-            label: "About Menu Example"
+            id: 'about',
+            label: 'About Menu Example',
           },
           {
-            id: "docs",
-            label: "Documentation",
-            accelerator: "F1"
-          }
-        ]
-      }
-    }
-  ]
+            id: 'docs',
+            label: 'Documentation',
+            accelerator: 'F1',
+          },
+        ],
+      },
+    },
+  ],
 });
 
 console.log('🎯 Menu System Example');
@@ -181,9 +181,9 @@ console.log('');
 
 // Create main window
 const window = app.createBrowserWindow({
-  title: "Menu System Example",
+  title: 'Menu System Example',
   width: 800,
-  height: 600
+  height: 600,
 });
 
 // Create webview with example content
@@ -287,7 +287,7 @@ const webview = window.createWebview({
         </ul>
       </div>
     </body>
-  </html>`
+  </html>`,
 });
 
 // Run the application

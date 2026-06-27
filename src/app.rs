@@ -10,14 +10,14 @@ use muda::Menu;
 use napi::bindgen_prelude::*;
 use napi::Result;
 use napi_derive::napi;
+#[cfg(not(target_os = "windows"))]
+use winit::window::{Cursor, CursorIcon, ResizeDirection};
 use winit::{
   application::ApplicationHandler,
   event::{ElementState, Ime, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
   event_loop::{ActiveEventLoop, EventLoop},
   window::{Window, WindowId},
 };
-#[cfg(not(target_os = "windows"))]
-use winit::window::{Cursor, CursorIcon, ResizeDirection};
 
 #[napi]
 pub fn get_webview_version() -> Result<String> {
@@ -112,10 +112,18 @@ fn cursor_for_resize_dir(dir: &ResizeDirection) -> CursorIcon {
 fn modifiers_bits(mods: &winit::event::Modifiers) -> u32 {
   let s = mods.state();
   let mut bits = 0u32;
-  if s.shift_key()   { bits |= 1; }
-  if s.control_key() { bits |= 2; }
-  if s.alt_key()     { bits |= 4; }
-  if s.super_key()   { bits |= 8; }
+  if s.shift_key() {
+    bits |= 1;
+  }
+  if s.control_key() {
+    bits |= 2;
+  }
+  if s.alt_key() {
+    bits |= 4;
+  }
+  if s.super_key() {
+    bits |= 8;
+  }
   bits
 }
 
@@ -179,8 +187,15 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
-            key: None, code: None, modifiers: None, is_repeat: None,
-            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
+            key: None,
+            code: None,
+            modifiers: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
           },
         );
       }
@@ -196,8 +211,15 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
-            key: None, code: None, modifiers: None, is_repeat: None,
-            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
+            key: None,
+            code: None,
+            modifiers: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
           },
         );
       }
@@ -213,8 +235,15 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
-            key: None, code: None, modifiers: None, is_repeat: None,
-            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
+            key: None,
+            code: None,
+            modifiers: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
           },
         );
         if let Some(win) = state.windows.remove(&window_id) {
@@ -249,8 +278,15 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
-            key: None, code: None, modifiers: None, is_repeat: None,
-            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
+            key: None,
+            code: None,
+            modifiers: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
           },
         );
       }
@@ -267,8 +303,15 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
-            key: None, code: None, modifiers: None, is_repeat: None,
-            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
+            key: None,
+            code: None,
+            modifiers: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
           },
         );
       }
@@ -284,8 +327,15 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
-            key: None, code: None, modifiers: None, is_repeat: None,
-            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
+            key: None,
+            code: None,
+            modifiers: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
           },
         );
       }
@@ -322,8 +372,15 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
-            key: None, code: None, modifiers: None, is_repeat: None,
-            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
+            key: None,
+            code: None,
+            modifiers: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
           },
         );
       }
@@ -377,8 +434,14 @@ impl ApplicationHandler for AppHandler<'_> {
             delta_x: None,
             delta_y: None,
             modifiers: Some(modifiers_bits(&state.current_modifiers)),
-            key: None, code: None, is_repeat: None, files: None,
-            scale_factor: None, text: None, touch_id: None, phase: None,
+            key: None,
+            code: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
           },
         );
       }
@@ -398,31 +461,52 @@ impl ApplicationHandler for AppHandler<'_> {
             width: None,
             height: None,
             button: None,
-            key: None, code: None, modifiers: None, is_repeat: None,
-            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
+            key: None,
+            code: None,
+            modifiers: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
           },
         );
       }
       WindowEvent::ModifiersChanged(mods) => {
         state.current_modifiers = mods;
       }
-      WindowEvent::KeyboardInput { event: ref key_event, .. } => {
+      WindowEvent::KeyboardInput {
+        event: ref key_event,
+        ..
+      } => {
         let mods = modifiers_bits(&state.current_modifiers);
-        state.fire_window_event(window_id, WindowEventPayload {
-          event: if key_event.state == ElementState::Pressed {
-            WindowEventType::KeyDown
-          } else {
-            WindowEventType::KeyUp
+        state.fire_window_event(
+          window_id,
+          WindowEventPayload {
+            event: if key_event.state == ElementState::Pressed {
+              WindowEventType::KeyDown
+            } else {
+              WindowEventType::KeyUp
+            },
+            key: logical_key_name(&key_event.logical_key),
+            code: physical_key_code(&key_event.physical_key),
+            modifiers: Some(mods),
+            is_repeat: Some(key_event.repeat),
+            x: None,
+            y: None,
+            width: None,
+            height: None,
+            button: None,
+            delta_x: None,
+            delta_y: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
           },
-          key: logical_key_name(&key_event.logical_key),
-          code: physical_key_code(&key_event.physical_key),
-          modifiers: Some(mods),
-          is_repeat: Some(key_event.repeat),
-          x: None, y: None, width: None, height: None,
-          button: None, delta_x: None, delta_y: None,
-          files: None, scale_factor: None, text: None,
-          touch_id: None, phase: None,
-        });
+        );
       }
       WindowEvent::Ime(ime) => {
         let (text, phase) = match &ime {
@@ -431,66 +515,151 @@ impl ApplicationHandler for AppHandler<'_> {
           Ime::Commit(t) => (Some(t.clone()), Some("commit".to_owned())),
           Ime::Disabled => (None, Some("disabled".to_owned())),
         };
-        state.fire_window_event(window_id, WindowEventPayload {
-          event: WindowEventType::Ime,
-          text, phase,
-          x: None, y: None, width: None, height: None,
-          button: None, delta_x: None, delta_y: None, modifiers: None,
-          key: None, code: None, is_repeat: None, files: None,
-          scale_factor: None, touch_id: None,
-        });
+        state.fire_window_event(
+          window_id,
+          WindowEventPayload {
+            event: WindowEventType::Ime,
+            text,
+            phase,
+            x: None,
+            y: None,
+            width: None,
+            height: None,
+            button: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: None,
+            key: None,
+            code: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            touch_id: None,
+          },
+        );
       }
       WindowEvent::DroppedFile(path) => {
-        state.fire_window_event(window_id, WindowEventPayload {
-          event: WindowEventType::FileDrop,
-          files: Some(vec![path.to_string_lossy().into_owned()]),
-          x: None, y: None, width: None, height: None,
-          button: None, delta_x: None, delta_y: None, modifiers: None,
-          key: None, code: None, is_repeat: None,
-          scale_factor: None, text: None, touch_id: None, phase: None,
-        });
+        state.fire_window_event(
+          window_id,
+          WindowEventPayload {
+            event: WindowEventType::FileDrop,
+            files: Some(vec![path.to_string_lossy().into_owned()]),
+            x: None,
+            y: None,
+            width: None,
+            height: None,
+            button: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: None,
+            key: None,
+            code: None,
+            is_repeat: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
+          },
+        );
       }
       WindowEvent::HoveredFile(path) => {
-        state.fire_window_event(window_id, WindowEventPayload {
-          event: WindowEventType::FileHover,
-          files: Some(vec![path.to_string_lossy().into_owned()]),
-          x: None, y: None, width: None, height: None,
-          button: None, delta_x: None, delta_y: None, modifiers: None,
-          key: None, code: None, is_repeat: None,
-          scale_factor: None, text: None, touch_id: None, phase: None,
-        });
+        state.fire_window_event(
+          window_id,
+          WindowEventPayload {
+            event: WindowEventType::FileHover,
+            files: Some(vec![path.to_string_lossy().into_owned()]),
+            x: None,
+            y: None,
+            width: None,
+            height: None,
+            button: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: None,
+            key: None,
+            code: None,
+            is_repeat: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
+          },
+        );
       }
       WindowEvent::HoveredFileCancelled => {
-        state.fire_window_event(window_id, WindowEventPayload {
-          event: WindowEventType::FileHoverCancelled,
-          x: None, y: None, width: None, height: None,
-          button: None, delta_x: None, delta_y: None, modifiers: None,
-          key: None, code: None, is_repeat: None, files: None,
-          scale_factor: None, text: None, touch_id: None, phase: None,
-        });
+        state.fire_window_event(
+          window_id,
+          WindowEventPayload {
+            event: WindowEventType::FileHoverCancelled,
+            x: None,
+            y: None,
+            width: None,
+            height: None,
+            button: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: None,
+            key: None,
+            code: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+            touch_id: None,
+            phase: None,
+          },
+        );
       }
       WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-        state.fire_window_event(window_id, WindowEventPayload {
-          event: WindowEventType::ScaleFactorChanged,
-          scale_factor: Some(scale_factor),
-          x: None, y: None, width: None, height: None,
-          button: None, delta_x: None, delta_y: None, modifiers: None,
-          key: None, code: None, is_repeat: None, files: None,
-          text: None, touch_id: None, phase: None,
-        });
+        state.fire_window_event(
+          window_id,
+          WindowEventPayload {
+            event: WindowEventType::ScaleFactorChanged,
+            scale_factor: Some(scale_factor),
+            x: None,
+            y: None,
+            width: None,
+            height: None,
+            button: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: None,
+            key: None,
+            code: None,
+            is_repeat: None,
+            files: None,
+            text: None,
+            touch_id: None,
+            phase: None,
+          },
+        );
       }
       WindowEvent::ThemeChanged(theme) => {
-        state.fire_window_event(window_id, WindowEventPayload {
-          event: WindowEventType::ThemeChanged,
-          text: Some(match theme {
-            winit::window::Theme::Light => "light".to_owned(),
-            winit::window::Theme::Dark => "dark".to_owned(),
-          }),
-          x: None, y: None, width: None, height: None,
-          button: None, delta_x: None, delta_y: None, modifiers: None,
-          key: None, code: None, is_repeat: None, files: None,
-          scale_factor: None, touch_id: None, phase: None,
-        });
+        state.fire_window_event(
+          window_id,
+          WindowEventPayload {
+            event: WindowEventType::ThemeChanged,
+            text: Some(match theme {
+              winit::window::Theme::Light => "light".to_owned(),
+              winit::window::Theme::Dark => "dark".to_owned(),
+            }),
+            x: None,
+            y: None,
+            width: None,
+            height: None,
+            button: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: None,
+            key: None,
+            code: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            touch_id: None,
+            phase: None,
+          },
+        );
       }
       WindowEvent::Touch(touch) => {
         let phase_str = match touch.phase {
@@ -499,17 +668,28 @@ impl ApplicationHandler for AppHandler<'_> {
           TouchPhase::Ended => "ended",
           TouchPhase::Cancelled => "cancelled",
         };
-        state.fire_window_event(window_id, WindowEventPayload {
-          event: WindowEventType::Touch,
-          x: Some(touch.location.x),
-          y: Some(touch.location.y),
-          touch_id: Some(touch.id as f64),
-          phase: Some(phase_str.to_owned()),
-          width: None, height: None,
-          button: None, delta_x: None, delta_y: None, modifiers: None,
-          key: None, code: None, is_repeat: None, files: None,
-          scale_factor: None, text: None,
-        });
+        state.fire_window_event(
+          window_id,
+          WindowEventPayload {
+            event: WindowEventType::Touch,
+            x: Some(touch.location.x),
+            y: Some(touch.location.y),
+            touch_id: Some(touch.id as f64),
+            phase: Some(phase_str.to_owned()),
+            width: None,
+            height: None,
+            button: None,
+            delta_x: None,
+            delta_y: None,
+            modifiers: None,
+            key: None,
+            code: None,
+            is_repeat: None,
+            files: None,
+            scale_factor: None,
+            text: None,
+          },
+        );
       }
       _ => {}
     }

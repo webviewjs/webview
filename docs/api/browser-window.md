@@ -192,7 +192,7 @@ win.isChildWindow(): boolean
 
 ## Window events (EventEmitter)
 
-`BrowserWindow` extends Node's `EventEmitter`.  Use the standard `.on()`,
+`BrowserWindow` extends Node's `EventEmitter`. Use the standard `.on()`,
 `.once()`, `.off()` / `.removeListener()`, `.removeAllListeners()` API.
 
 ```ts
@@ -210,7 +210,7 @@ win.on('scroll',      ({ deltaX, deltaY })=> { … })
 ```
 
 All positional values (`x`, `y`, `width`, `height`, `deltaX`, `deltaY`) are in
-**physical pixels** at the current DPI.  Divide by `win.scaleFactor()` to
+**physical pixels** at the current DPI. Divide by `win.scaleFactor()` to
 convert to logical (CSS) pixels.
 
 Scroll deltas from a pixel-precise input device (trackpad) are passed through
@@ -220,7 +220,7 @@ equivalent pixel distance.
 ### Undecorated-window resize
 
 When a window is created with `{ decorations: false, resizable: true }`, native
-OS resize handles are absent.  WebviewJS automatically handles this:
+OS resize handles are absent. WebviewJS automatically handles this:
 
 - **Cursor** — while the pointer is within 6 physical pixels of any edge or
   corner, the cursor updates to the appropriate directional resize icon.

@@ -22,7 +22,7 @@ Both windows share the same event loop driven by the single `setInterval` pump.
 ## Tracking windows yourself
 
 ```js
-const windows = new Map();  // id → BrowserWindow
+const windows = new Map(); // id → BrowserWindow
 
 function openWindow(id, url) {
   if (windows.has(id)) {

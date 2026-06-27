@@ -4,18 +4,9 @@ export class SerializationError extends Error {
   name: 'SerializationError';
 }
 
-export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
-export type ExposedTarget = Record<
-  string,
-  JsonValue | ((...args: any[]) => unknown | Promise<unknown>)
->;
+export type ExposedTarget = Record<string, JsonValue | ((...args: any[]) => unknown | Promise<unknown>)>;
 
 export interface WindowMoveEvent {
   event: number;
@@ -85,17 +76,17 @@ export interface WindowTouchEvent {
 }
 
 export interface BrowserWindowEventMap {
-  'move': WindowMoveEvent;
-  'resize': WindowResizeEvent;
-  'close': WindowBaseEvent;
-  'focus': WindowBaseEvent;
-  'blur': WindowBaseEvent;
+  move: WindowMoveEvent;
+  resize: WindowResizeEvent;
+  close: WindowBaseEvent;
+  focus: WindowBaseEvent;
+  blur: WindowBaseEvent;
   'mouse-enter': WindowMouseEvent;
   'mouse-leave': WindowBaseEvent;
   'mouse-move': WindowMouseEvent;
   'mouse-down': WindowMouseEvent;
   'mouse-up': WindowMouseEvent;
-  'scroll': WindowScrollEvent;
+  scroll: WindowScrollEvent;
   'key-down': WindowKeyEvent;
   'key-up': WindowKeyEvent;
   'file-drop': WindowFileEvent;
@@ -103,8 +94,8 @@ export interface BrowserWindowEventMap {
   'file-hover-cancelled': WindowBaseEvent;
   'scale-factor-changed': WindowScaleEvent;
   'theme-changed': WindowThemeEvent;
-  'ime': WindowImeEvent;
-  'touch': WindowTouchEvent;
+  ime: WindowImeEvent;
+  touch: WindowTouchEvent;
 }
 
 declare module './js-bindings' {
@@ -120,9 +111,15 @@ declare module './js-bindings' {
     once(event: string, listener: (...args: any[]) => void): this;
     off<K extends keyof BrowserWindowEventMap>(event: K, listener: (payload: BrowserWindowEventMap[K]) => void): this;
     off(event: string, listener: (...args: any[]) => void): this;
-    addListener<K extends keyof BrowserWindowEventMap>(event: K, listener: (payload: BrowserWindowEventMap[K]) => void): this;
+    addListener<K extends keyof BrowserWindowEventMap>(
+      event: K,
+      listener: (payload: BrowserWindowEventMap[K]) => void,
+    ): this;
     addListener(event: string, listener: (...args: any[]) => void): this;
-    removeListener<K extends keyof BrowserWindowEventMap>(event: K, listener: (payload: BrowserWindowEventMap[K]) => void): this;
+    removeListener<K extends keyof BrowserWindowEventMap>(
+      event: K,
+      listener: (payload: BrowserWindowEventMap[K]) => void,
+    ): this;
     removeListener(event: string, listener: (...args: any[]) => void): this;
     removeAllListeners(event?: string): this;
     listenerCount(event: string): number;

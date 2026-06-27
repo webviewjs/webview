@@ -191,9 +191,9 @@ impl JsWebview {
     // position near window edges and sends IPC messages, then call
     // winit's drag_resize_window() which posts WM_NCLBUTTONDOWN to the parent.
     #[cfg(target_os = "windows")]
-    let resize_window_arc: Option<Arc<Window>> =
-      if !window.is_decorated() && window.is_resizable() {
-        const RESIZE_JS: &str = r#"(function(){
+    let resize_window_arc: Option<Arc<Window>> = if !window.is_decorated() && window.is_resizable()
+    {
+      const RESIZE_JS: &str = r#"(function(){
   const B=5;
   function ht(x,y){
     const w=window.innerWidth,h=window.innerHeight;
@@ -216,11 +216,11 @@ impl JsWebview {
     if(r){e.preventDefault();window.ipc.postMessage('__resize:'+r);}
   },true);
 })();"#;
-        webview = webview.with_initialization_script(RESIZE_JS);
-        Some(Arc::clone(window))
-      } else {
-        None
-      };
+      webview = webview.with_initialization_script(RESIZE_JS);
+      Some(Arc::clone(window))
+    } else {
+      None
+    };
 
     // ── Custom protocols (async) ──────────────────────────────────────────────
     // wry's with_asynchronous_custom_protocol closure is NOT required to be
@@ -316,15 +316,15 @@ impl JsWebview {
         if let Some(dir_str) = body_str.strip_prefix("__resize:") {
           use winit::window::ResizeDirection;
           let dir = match dir_str {
-            "N"  => Some(ResizeDirection::North),
-            "S"  => Some(ResizeDirection::South),
-            "E"  => Some(ResizeDirection::East),
-            "W"  => Some(ResizeDirection::West),
+            "N" => Some(ResizeDirection::North),
+            "S" => Some(ResizeDirection::South),
+            "E" => Some(ResizeDirection::East),
+            "W" => Some(ResizeDirection::West),
             "NW" => Some(ResizeDirection::NorthWest),
             "NE" => Some(ResizeDirection::NorthEast),
             "SW" => Some(ResizeDirection::SouthWest),
             "SE" => Some(ResizeDirection::SouthEast),
-            _    => None,
+            _ => None,
           };
           if let Some(d) = dir {
             let _ = win.drag_resize_window(d);

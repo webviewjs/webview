@@ -1,4 +1,4 @@
-import { Application, WebviewApplicationEvent } from '../index.js'
+import { Application, WebviewApplicationEvent } from '../index.js';
 
 const app = new Application();
 
@@ -56,13 +56,13 @@ const webview = browserWindow.createWebview({
 // You can use either onEvent() or bind() - they are equivalent
 app.bind((event) => {
   console.log('Application event:', event.event);
-  
+
   if (event.event === WebviewApplicationEvent.WindowCloseRequested) {
     console.log('Window close requested');
     // You can perform cleanup here before the window closes
     // For example: save data, close connections, etc.
   }
-  
+
   if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
     console.log('Application close requested');
     // Perform final cleanup before the application exits

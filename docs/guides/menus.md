@@ -13,7 +13,7 @@ app.setMenu({
       label: 'File',
       submenu: {
         items: [
-          { id: 'new',  label: 'New',  accelerator: 'CmdOrCtrl+N' },
+          { id: 'new', label: 'New', accelerator: 'CmdOrCtrl+N' },
           { id: 'open', label: 'Open', accelerator: 'CmdOrCtrl+O' },
           { role: 'separator' },
           { role: 'quit' },
@@ -24,8 +24,12 @@ app.setMenu({
       label: 'Edit',
       submenu: {
         items: [
-          { role: 'undo' }, { role: 'redo' }, { role: 'separator' },
-          { role: 'cut' },  { role: 'copy' }, { role: 'paste' },
+          { role: 'undo' },
+          { role: 'redo' },
+          { role: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
         ],
       },
     },
@@ -35,8 +39,12 @@ app.setMenu({
 app.onEvent((ev) => {
   if (ev.event === WebviewApplicationEvent.CustomMenuClick) {
     switch (ev.customMenuEvent.id) {
-      case 'new':  createNewWindow(); break;
-      case 'open': openFilePicker();  break;
+      case 'new':
+        createNewWindow();
+        break;
+      case 'open':
+        openFilePicker();
+        break;
     }
   }
 });
@@ -60,11 +68,7 @@ Windows, child popups, and dialogs can have their own distinct menus:
 const win = app.createBrowserWindow({ title: 'Editor' });
 
 win.setMenu({
-  items: [
-    { label: 'Editor', submenu: { items: [
-      { id: 'editor-prefs', label: 'Preferences' },
-    ]}},
-  ],
+  items: [{ label: 'Editor', submenu: { items: [{ id: 'editor-prefs', label: 'Preferences' }] } }],
 });
 ```
 
@@ -104,9 +108,9 @@ F5, F11              → function keys
 
 ## Platform differences
 
-| Feature | Windows | macOS | Linux |
-|---|---|---|---|
-| Menu bar | Per-window, inside title bar | App-level, top of screen | Not supported |
-| Predefined roles | Most | All | N/A |
-| Accelerators | Yes | Yes | N/A |
-| `CustomMenuClick` events | Yes | Yes | Never fires |
+| Feature                  | Windows                      | macOS                    | Linux         |
+| ------------------------ | ---------------------------- | ------------------------ | ------------- |
+| Menu bar                 | Per-window, inside title bar | App-level, top of screen | Not supported |
+| Predefined roles         | Most                         | All                      | N/A           |
+| Accelerators             | Yes                          | Yes                      | N/A           |
+| `CustomMenuClick` events | Yes                          | Yes                      | Never fires   |

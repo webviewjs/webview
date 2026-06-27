@@ -1,11 +1,10 @@
 import { Application, getWebviewVersion } from '../../index.js';
 import { createServer } from './server.mjs';
 
-
 async function createWindow() {
   console.log('Initializing http server...');
   await createServer();
-  
+
   console.log(`Initializing webview (version: ${getWebviewVersion()})`);
 
   const app = new Application();

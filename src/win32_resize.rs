@@ -1,8 +1,8 @@
 use windows_sys::Win32::{
   Foundation::{BOOL, HWND, LPARAM, LRESULT, WPARAM},
   UI::WindowsAndMessaging::{
-    GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SWP_FRAMECHANGED,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, WM_NCCALCSIZE, WS_THICKFRAME,
+    GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SWP_FRAMECHANGED, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, WM_NCCALCSIZE, WS_THICKFRAME,
   },
 };
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -51,15 +51,27 @@ unsafe extern "system" fn subclass_proc(
 /// - Installs a subclass to return 0 from WM_NCCALCSIZE, keeping the window
 ///   visually borderless despite having WS_THICKFRAME.
 pub fn install_resize_border(window: &winit::window::Window) {
-  let Ok(handle) = window.window_handle() else { return };
-  let RawWindowHandle::Win32(h) = handle.as_raw() else { return };
+  let Ok(handle) = window.window_handle() else {
+    return;
+  };
+  let RawWindowHandle::Win32(h) = handle.as_raw() else {
+    return;
+  };
   let hwnd = h.hwnd.get() as HWND;
 
   unsafe {
     let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     SetWindowLongPtrW(hwnd, GWL_STYLE, style | WS_THICKFRAME as isize);
     // Force a frame recalculation so WS_THICKFRAME takes effect immediately.
-    SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    SetWindowPos(
+      hwnd,
+      0,
+      0,
+      0,
+      0,
+      0,
+      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+    );
     SetWindowSubclass(hwnd, subclass_proc, 1, 0);
   }
 }
