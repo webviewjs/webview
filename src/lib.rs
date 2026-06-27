@@ -17,3 +17,5 @@ pub mod browser_window;
 pub mod menu;
 #[cfg(not(target_os = "freebsd"))]
 pub mod webview;
+#[cfg(target_os = "windows")]
+mod win32_resize;

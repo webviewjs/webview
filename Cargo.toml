@@ -25,6 +25,13 @@ image = "0.25.10"
 rfd  = "0.15.4"
 muda = { version = "0.17", features = ["libxdo"] }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.52", features = [
+  "Win32_Foundation",
+  "Win32_UI_Controls",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
 [build-dependencies]
 napi-build = "2"
 
