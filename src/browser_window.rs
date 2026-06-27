@@ -5,6 +5,7 @@ use muda::Menu;
 use napi::Either;
 use napi::{bindgen_prelude::FunctionRef, Env, Result};
 use napi_derive::*;
+use crate::WindowEventPayload;
 #[cfg(not(target_os = "android"))]
 use rfd::FileDialog;
 use std::cell::RefCell;
@@ -195,6 +196,8 @@ pub struct BrowserWindow {
   /// Shared with AppState so resize events can trigger WebView2 resize.
   /// wry's own WM_SIZE subclass is bypassed by winit, so we do it manually.
   webviews: Rc<RefCell<Vec<Rc<wry::WebView>>>>,
+  /// Per-window event handler shared with AppState for dispatching window events.
+  event_handler: Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>>,
   /// Async protocol handlers: (scheme, js_handler_ref, responders, next_id).
   /// The closure is NOT required to be Send (wry guarantees main-thread call),
   /// so we use Rc<RefCell<>> instead of Arc<Mutex<>>.
@@ -347,6 +350,7 @@ impl BrowserWindow {
       #[cfg(not(target_os = "android"))]
       window_menu,
       webviews: Rc::new(RefCell::new(Vec::new())),
+      event_handler: Rc::new(RefCell::new(None)),
       pending_protocols: Vec::new(), // populated by _registerProtocol
       protocol_next_id: Rc::new(RefCell::new(0)),
     })
@@ -676,6 +680,19 @@ impl BrowserWindow {
   /// Returns the underlying winit WindowId (for internal tracking).
   pub fn winit_window_id(&self) -> WindowId {
     self.window.id()
+  }
+
+  /// Returns a clone of the shared event handler cell.  AppState holds this
+  /// Rc so it can dispatch window events to the registered JS callback.
+  pub(crate) fn event_handler_shared(&self) -> Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>> {
+    Rc::clone(&self.event_handler)
+  }
+
+  /// Register a raw callback to receive window events.  Used internally by the
+  /// JS EventEmitter wrapper; prefer `window.on(event, handler)` in user code.
+  #[napi(js_name = "_onWindowEvent")]
+  pub fn on_window_event(&self, handler: Option<FunctionRef<WindowEventPayload, ()>>) {
+    *self.event_handler.borrow_mut() = handler;
   }
 
   #[napi(getter)]

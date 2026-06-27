@@ -14,9 +14,9 @@ use napi::Result;
 use napi_derive::napi;
 use winit::{
   application::ApplicationHandler,
-  event::WindowEvent,
+  event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
   event_loop::{ActiveEventLoop, EventLoop},
-  window::{Window, WindowId},
+  window::{Cursor, CursorIcon, ResizeDirection, Window, WindowId},
 };
 
 pub mod browser_window;
@@ -35,6 +35,40 @@ pub enum WebviewApplicationEvent {
   WindowCloseRequested,
   ApplicationCloseRequested,
   CustomMenuClick,
+}
+
+#[napi]
+pub enum WindowEventType {
+  Moved,
+  Resized,
+  CloseRequested,
+  Focused,
+  Blurred,
+  MouseEnter,
+  MouseLeave,
+  MouseMove,
+  MouseDown,
+  MouseUp,
+  Scroll,
+}
+
+#[napi(object)]
+pub struct WindowEventPayload {
+  pub event: WindowEventType,
+  /// Physical x position (cursor or window).
+  pub x: Option<f64>,
+  /// Physical y position (cursor or window).
+  pub y: Option<f64>,
+  /// Physical width (resize event).
+  pub width: Option<u32>,
+  /// Physical height (resize event).
+  pub height: Option<u32>,
+  /// Mouse button index: 0=left, 1=middle, 2=right.
+  pub button: Option<u32>,
+  /// Horizontal scroll delta (pixels).
+  pub delta_x: Option<f64>,
+  /// Vertical scroll delta (pixels).
+  pub delta_y: Option<f64>,
 }
 
 #[napi(object)]
@@ -127,6 +161,10 @@ struct AppState {
   /// WM_SIZE without forwarding to wry's subclass proc, so we resize manually
   /// when WindowEvent::Resized arrives.
   webviews: HashMap<WindowId, Rc<RefCell<Vec<Rc<wry::WebView>>>>>,
+  /// Per-window event handlers shared with each BrowserWindow instance.
+  window_handlers: HashMap<WindowId, Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>>>,
+  /// Last known physical cursor position per window (for edge-resize hit testing).
+  cursor_positions: HashMap<WindowId, (f64, f64)>,
   #[cfg(not(target_os = "android"))]
   menu_event_receiver: Option<muda::MenuEventReceiver>,
 }
@@ -139,6 +177,45 @@ impl AppState {
         let _ = func.call(event);
       }
     }
+  }
+
+  fn fire_window_event(&self, window_id: WindowId, payload: WindowEventPayload) {
+    if let Some(cell) = self.window_handlers.get(&window_id) {
+      let cb = cell.borrow();
+      if let Some(f) = cb.as_ref() {
+        if let Ok(func) = f.borrow_back(&self.env) {
+          let _ = func.call(payload);
+        }
+      }
+    }
+  }
+}
+
+fn resize_direction(x: f64, y: f64, width: f64, height: f64, border: f64) -> Option<ResizeDirection> {
+  let left = x < border;
+  let right = x > width - border;
+  let top = y < border;
+  let bottom = y > height - border;
+
+  match (left, right, top, bottom) {
+    (true, _, true, _) => Some(ResizeDirection::NorthWest),
+    (_, true, true, _) => Some(ResizeDirection::NorthEast),
+    (true, _, _, true) => Some(ResizeDirection::SouthWest),
+    (_, true, _, true) => Some(ResizeDirection::SouthEast),
+    (true, _, _, _) => Some(ResizeDirection::West),
+    (_, true, _, _) => Some(ResizeDirection::East),
+    (_, _, true, _) => Some(ResizeDirection::North),
+    (_, _, _, true) => Some(ResizeDirection::South),
+    _ => None,
+  }
+}
+
+fn cursor_for_resize_dir(dir: &ResizeDirection) -> CursorIcon {
+  match dir {
+    ResizeDirection::North | ResizeDirection::South => CursorIcon::NsResize,
+    ResizeDirection::East | ResizeDirection::West => CursorIcon::EwResize,
+    ResizeDirection::NorthEast | ResizeDirection::SouthWest => CursorIcon::NeswResize,
+    ResizeDirection::NorthWest | ResizeDirection::SouthEast => CursorIcon::NwseResize,
   }
 }
 
@@ -171,11 +248,30 @@ impl ApplicationHandler for AppHandler<'_> {
             let _ = wv.set_bounds(rect);
           }
         }
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::Resized,
+          width: Some(new_size.width),
+          height: Some(new_size.height),
+          x: None, y: None, button: None, delta_x: None, delta_y: None,
+        });
+      }
+      WindowEvent::Moved(pos) => {
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::Moved,
+          x: Some(pos.x as f64),
+          y: Some(pos.y as f64),
+          width: None, height: None, button: None, delta_x: None, delta_y: None,
+        });
       }
       WindowEvent::CloseRequested => {
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::CloseRequested,
+          x: None, y: None, width: None, height: None, button: None, delta_x: None, delta_y: None,
+        });
         if let Some(win) = state.windows.remove(&window_id) {
           win.set_visible(false);
         }
+        state.cursor_positions.remove(&window_id);
         state.fire(ApplicationEvent {
           event: WebviewApplicationEvent::WindowCloseRequested,
           custom_menu_event: None,
@@ -187,6 +283,101 @@ impl ApplicationHandler for AppHandler<'_> {
           });
           state.should_exit = true;
         }
+      }
+      WindowEvent::Focused(focused) => {
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: if focused { WindowEventType::Focused } else { WindowEventType::Blurred },
+          x: None, y: None, width: None, height: None, button: None, delta_x: None, delta_y: None,
+        });
+      }
+      WindowEvent::CursorEntered { .. } => {
+        let pos = state.cursor_positions.get(&window_id).copied();
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::MouseEnter,
+          x: pos.map(|p| p.0),
+          y: pos.map(|p| p.1),
+          width: None, height: None, button: None, delta_x: None, delta_y: None,
+        });
+      }
+      WindowEvent::CursorLeft { .. } => {
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::MouseLeave,
+          x: None, y: None, width: None, height: None, button: None, delta_x: None, delta_y: None,
+        });
+      }
+      WindowEvent::CursorMoved { position, .. } => {
+        let (cx, cy) = (position.x, position.y);
+        state.cursor_positions.insert(window_id, (cx, cy));
+
+        // For undecorated+resizable windows, update cursor icon near edges.
+        if let Some(win) = state.windows.get(&window_id) {
+          if !win.is_decorated() && win.is_resizable() {
+            let size = win.inner_size();
+            let border = 6.0 * win.scale_factor();
+            if let Some(dir) = resize_direction(cx, cy, size.width as f64, size.height as f64, border) {
+              win.set_cursor(Cursor::Icon(cursor_for_resize_dir(&dir)));
+            } else {
+              win.set_cursor(Cursor::Icon(CursorIcon::Default));
+            }
+          }
+        }
+
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::MouseMove,
+          x: Some(cx),
+          y: Some(cy),
+          width: None, height: None, button: None, delta_x: None, delta_y: None,
+        });
+      }
+      WindowEvent::MouseInput { state: btn_state, button, .. } => {
+        let btn_index = match button {
+          MouseButton::Left => 0u32,
+          MouseButton::Middle => 1u32,
+          MouseButton::Right => 2u32,
+          _ => 3u32,
+        };
+
+        // For undecorated+resizable windows, initiate drag-resize on left press near edges.
+        if btn_state == ElementState::Pressed && button == MouseButton::Left {
+          if let (Some(win), Some(&(cx, cy))) = (
+            state.windows.get(&window_id),
+            state.cursor_positions.get(&window_id),
+          ) {
+            if !win.is_decorated() && win.is_resizable() {
+              let size = win.inner_size();
+              let border = 6.0 * win.scale_factor();
+              if let Some(dir) = resize_direction(cx, cy, size.width as f64, size.height as f64, border) {
+                let _ = win.drag_resize_window(dir);
+                return;
+              }
+            }
+          }
+        }
+
+        let pos = state.cursor_positions.get(&window_id).copied();
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: if btn_state == ElementState::Pressed {
+            WindowEventType::MouseDown
+          } else {
+            WindowEventType::MouseUp
+          },
+          x: pos.map(|p| p.0),
+          y: pos.map(|p| p.1),
+          button: Some(btn_index),
+          width: None, height: None, delta_x: None, delta_y: None,
+        });
+      }
+      WindowEvent::MouseWheel { delta, .. } => {
+        let (dx, dy) = match delta {
+          MouseScrollDelta::LineDelta(x, y) => (x as f64 * 20.0, y as f64 * 20.0),
+          MouseScrollDelta::PixelDelta(pos) => (pos.x, pos.y),
+        };
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::Scroll,
+          delta_x: Some(dx),
+          delta_y: Some(dy),
+          x: None, y: None, width: None, height: None, button: None,
+        });
       }
       _ => {}
     }
@@ -255,6 +446,8 @@ impl Application {
         should_exit: false,
         windows: HashMap::new(),
         webviews: HashMap::new(),
+        window_handlers: HashMap::new(),
+        cursor_positions: HashMap::new(),
         #[cfg(not(target_os = "android"))]
         menu_event_receiver: {
           // On macOS we always have a menu from startup so start receiving events
@@ -338,6 +531,7 @@ impl Application {
     let wid = window.winit_window_id();
     self.state.windows.insert(wid, Arc::clone(&window.window));
     self.state.webviews.insert(wid, window.webviews_shared());
+    self.state.window_handlers.insert(wid, window.event_handler_shared());
 
     Ok(window)
   }
@@ -362,6 +556,7 @@ impl Application {
     let wid = window.winit_window_id();
     self.state.windows.insert(wid, Arc::clone(&window.window));
     self.state.webviews.insert(wid, window.webviews_shared());
+    self.state.window_handlers.insert(wid, window.event_handler_shared());
 
     Ok(window)
   }
