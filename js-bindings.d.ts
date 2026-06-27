@@ -49,7 +49,7 @@ export declare class BrowserWindow {
   setMinimizable(minimizable: boolean): void
   setResizable(resizable: boolean): void
   /** Sets the window inner size (width and height). */
-  setSize(width: number, height: number, logical?: boolean | undefined |null): void
+  setSize(width: number, height: number, logical?: boolean | undefined | null): Dimensions | null
   /** Sets the min window inner size (width and height). */
   setMinSize(width: number, height: number, logical?: boolean | undefined | null): void
   /** Gets the window inner size. */
@@ -62,6 +62,11 @@ export declare class BrowserWindow {
   openFileDialog(options?: FileDialogOptions | undefined | null): Array<string>
   id(): number
   hasMenu(): boolean
+  /**
+   * Register a raw callback to receive window events.  Used internally by the
+   * JS EventEmitter wrapper; prefer `window.on(event, handler)` in user code.
+   */
+  _onWindowEvent(handler?: ((arg: WindowEventPayload) => void) | undefined | null): void
   get theme(): Theme
   setTheme(theme: Theme): void
   /**
@@ -453,4 +458,36 @@ export declare enum WindowCommand {
   Close = 0,
   Show = 1,
   Hide = 2
+}
+
+export interface WindowEventPayload {
+  event: WindowEventType
+  /** Physical x position (cursor or window). */
+  x?: number
+  /** Physical y position (cursor or window). */
+  y?: number
+  /** Physical width (resize event). */
+  width?: number
+  /** Physical height (resize event). */
+  height?: number
+  /** Mouse button index: 0=left, 1=middle, 2=right. */
+  button?: number
+  /** Horizontal scroll delta (pixels). */
+  deltaX?: number
+  /** Vertical scroll delta (pixels). */
+  deltaY?: number
+}
+
+export declare enum WindowEventType {
+  Moved = 0,
+  Resized = 1,
+  CloseRequested = 2,
+  Focused = 3,
+  Blurred = 4,
+  MouseEnter = 5,
+  MouseLeave = 6,
+  MouseMove = 7,
+  MouseDown = 8,
+  MouseUp = 9,
+  Scroll = 10
 }

@@ -114,6 +114,7 @@ jobs:
             target: armv7-linux-androideabi
 
     runs-on: ${{ matrix.settings.os }}
+
     
     steps:
       - name: Checkout repository
@@ -224,54 +225,50 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # build-freebsd:
-  #   runs-on: ubuntu-latest
-  #   name: Build FreeBSD
-  #   timeout-minutes: 90
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Build
-  #       id: build
-  #       uses: cross-platform-actions/action@v0.25.0
-  #       env:
-  #         DEBUG: napi:*
-  #         RUSTUP_IO_THREADS: 1
-  #       with:
-  #         operating_system: freebsd
-  #         version: '14.0'
-  #         memory: 8G
-  #         cpu_count: 3
-  #         environment_variables: 'DEBUG RUSTUP_IO_THREADS'
-  #         shell: bash
-  #         run: |
-  #           sudo pkg install -y -f curl node libnghttp2 npm pkg-config
-  #           sudo npm install -g bun --ignore-scripts
-  #           curl https://sh.rustup.rs -sSf --output rustup.sh
-  #           sh rustup.sh -y --profile minimal --default-toolchain beta
-  #           source "$HOME/.cargo/env"
-  #           echo "~~~~ rustc --version ~~~~"
-  #           rustc --version
-  #           echo "~~~~ node -v ~~~~"
-  #           node -v
-  #           echo "~~~~ bun --version ~~~~"
-  #           bun --version
-  #           pwd
-  #           ls -lah
-  #           whoami
-  #           env
-  #           freebsd-version
-  #           bun install
-  #           bun run build
-  #           rm -rf node_modules
-  #           rm -rf target
-  #           rm -rf .bun/cache
-  #     - name: Upload artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: bindings-freebsd
-  #         path: ${{ env.APP_NAME }}.*.node
-  #         if-no-files-found: error
-  #         retention-days: 7
+  # FreeBSD x64 — stub-only build.  The addon throws at runtime; it exists only
+  # to satisfy package managers that resolve the freebsd-x64 optional package.
+  # The full wry/winit GUI stack is NOT compiled (see Cargo.toml cfg guards).
+  build-freebsd:
+    runs-on: ubuntu-latest
+    name: FreeBSD x64 (stub)
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build FreeBSD stub via cross-platform VM
+        id: build
+        uses: cross-platform-actions/action@v0.25.0
+        env:
+          DEBUG: napi:*
+          RUSTUP_IO_THREADS: 1
+        with:
+          operating_system: freebsd
+          version: "14.2"
+          memory: 8G
+          cpu_count: 3
+          environment_variables: "DEBUG RUSTUP_IO_THREADS"
+          shell: bash
+          run: |
+            set -e
+            sudo pkg install -y -f curl node npm
+            sudo npm install -g bun --ignore-scripts
+            curl https://sh.rustup.rs -sSf --output rustup.sh
+            sh rustup.sh -y --profile minimal --default-toolchain stable
+            source "$HOME/.cargo/env"
+            rustc --version
+            node -v
+            bun --version
+            bun install --frozen-lockfile
+            bun run build
+            rm -rf node_modules target .bun/cache
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-x86_64-unknown-freebsd
+          path: ${{ env.APP_NAME }}.*.node
+          if-no-files-found: error
+          retention-days: 7
 
   publish:
     name: Publish to npm
@@ -279,7 +276,7 @@ jobs:
     timeout-minutes: 30
     needs:
       - build
-      # - build-freebsd
+      - build-freebsd
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:

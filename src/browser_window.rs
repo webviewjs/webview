@@ -1,3 +1,4 @@
+use crate::app::WindowEventPayload;
 use dpi::Size;
 use image::GenericImageView;
 #[cfg(not(target_os = "android"))]
@@ -5,7 +6,6 @@ use muda::Menu;
 use napi::Either;
 use napi::{bindgen_prelude::FunctionRef, Env, Result};
 use napi_derive::*;
-use crate::WindowEventPayload;
 #[cfg(not(target_os = "android"))]
 use rfd::FileDialog;
 use std::cell::RefCell;
@@ -21,13 +21,14 @@ use winit::{
   },
 };
 
+use crate::app::MenuOptions;
+
 #[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
 use crate::webview::{
   CustomProtocolResponse, JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap,
   Theme, WebviewOptions,
 };
-use crate::MenuOptions;
 
 #[napi]
 pub enum FullscreenType {
@@ -516,16 +517,27 @@ impl BrowserWindow {
 
   #[napi]
   /// Sets the window inner size (width and height).
-  pub fn set_size(&self, width: u32, height: u32, logical: Option<bool>) {
-    if let Some(logical) = logical {
+  pub fn set_size(&self, width: u32, height: u32, logical: Option<bool>) -> Option<Dimensions> {
+    let size = if let Some(logical) = logical {
       if logical {
-        self.window.request_inner_size(LogicalSize::new(width as f64, height as f64));
+        self
+          .window
+          .request_inner_size(LogicalSize::new(width as f64, height as f64))
       } else {
-        self.window.request_inner_size(PhysicalSize::new(width, height));
+        self
+          .window
+          .request_inner_size(PhysicalSize::new(width, height))
       }
     } else {
-      self.window.request_inner_size(PhysicalSize::new(width, height));
-    }
+      self
+        .window
+        .request_inner_size(PhysicalSize::new(width, height))
+    };
+
+    size.map(|s| Dimensions {
+      width: s.width,
+      height: s.height,
+    })
   }
 
   #[napi]
@@ -684,7 +696,9 @@ impl BrowserWindow {
 
   /// Returns a clone of the shared event handler cell.  AppState holds this
   /// Rc so it can dispatch window events to the registered JS callback.
-  pub(crate) fn event_handler_shared(&self) -> Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>> {
+  pub(crate) fn event_handler_shared(
+    &self,
+  ) -> Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>> {
     Rc::clone(&self.event_handler)
   }
 

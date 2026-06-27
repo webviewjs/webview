@@ -6,11 +6,11 @@
 //!  - **Android**: menu system is completely disabled.
 
 #[cfg(not(target_os = "android"))]
+use crate::app::{MenuItemOptions, MenuOptions};
+#[cfg(not(target_os = "android"))]
 use muda::{accelerator::Accelerator, Menu, MenuItem, PredefinedMenuItem, Submenu};
 #[cfg(not(target_os = "android"))]
 use napi::Result;
-#[cfg(not(target_os = "android"))]
-use crate::{MenuItemOptions, MenuOptions};
 
 /// Build a minimal macOS-style app menu (App > About/Hide/Quit) and install it
 /// as the NSApp main menu.  Returns the `Menu` so the caller can keep it alive.

@@ -11,7 +11,8 @@ use napi_derive::*;
 use winit::window::Window;
 use wry::{http::Request, Rect, WebViewBuilder};
 
-use crate::{browser_window::next_protocol_id, HeaderData, IpcMessage};
+use crate::app::{HeaderData, IpcMessage};
+use crate::browser_window::next_protocol_id;
 
 // ── Custom protocol types ─────────────────────────────────────────────────────
 
