@@ -61,7 +61,9 @@ pub fn install_resize_border(window: &winit::window::Window) {
 
   unsafe {
     let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-    SetWindowLongPtrW(hwnd, GWL_STYLE, style | WS_THICKFRAME as isize);
+    // LONG_PTR is i32 on 32-bit and isize on 64-bit; use usize as a
+    // common intermediary for the bit-OR, then let `as _` coerce back.
+    SetWindowLongPtrW(hwnd, GWL_STYLE, (style as usize | WS_THICKFRAME as usize) as _);
     // Force a frame recalculation so WS_THICKFRAME takes effect immediately.
     SetWindowPos(
       hwnd,
