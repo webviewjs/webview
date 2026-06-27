@@ -193,6 +193,16 @@ impl BrowserWindow {
       )
     })?;
 
+    // On Windows, WebView2 is a child HWND that consumes all mouse events, so
+    // winit's CursorMoved/MouseInput never fire for the border strip.  Install a
+    // WM_NCHITTEST subclass on the parent HWND instead — Windows routes that
+    // message to the topmost window before child dispatch, giving us native
+    // cursor and drag-resize without any JS involvement.
+    #[cfg(target_os = "windows")]
+    if options.decorations == Some(false) && options.resizable != Some(false) {
+      crate::win32_resize::install_resize_border(&window);
+    }
+
     let mut hasher = DefaultHasher::new();
     window.id().hash(&mut hasher);
     let window_id = hasher.finish() as u32;
@@ -266,7 +276,7 @@ impl BrowserWindow {
   pub fn create_webview(&mut self, env: Env, options: Option<WebviewOptions>) -> Result<JsWebview> {
     let webview = JsWebview::create(
       &env,
-      &self.window,
+      &self.window, // Arc<Window> — create() now takes &Arc<Window>
       options.unwrap_or_default(),
       &self.pending_protocols,
     )?;

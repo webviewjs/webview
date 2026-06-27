@@ -8,6 +8,7 @@ use napi::{
   Env, Result,
 };
 use napi_derive::*;
+use std::sync::Arc;
 use winit::window::Window;
 use wry::{http::Request, Rect, WebViewBuilder};
 
@@ -61,7 +62,7 @@ pub struct JsWebview {
 impl JsWebview {
   pub fn create(
     env: &Env,
-    window: &Window,
+    window: &Arc<Window>,
     options: WebviewOptions,
     // (scheme, js_handler_ref, pending_responders, id_counter)
     protocols: &[(
@@ -184,6 +185,43 @@ impl JsWebview {
       }
     }
 
+    // ── Undecorated resize (Windows only) ────────────────────────────────────
+    // WebView2 is a child HWND that consumes all mouse events, so WM_NCHITTEST
+    // never reaches the parent.  Instead we inject JS that detects mouse
+    // position near window edges and sends IPC messages, then call
+    // winit's drag_resize_window() which posts WM_NCLBUTTONDOWN to the parent.
+    #[cfg(target_os = "windows")]
+    let resize_window_arc: Option<Arc<Window>> =
+      if !window.is_decorated() && window.is_resizable() {
+        const RESIZE_JS: &str = r#"(function(){
+  const B=5;
+  function ht(x,y){
+    const w=window.innerWidth,h=window.innerHeight;
+    const l=x<B,r=x>=w-B,t=y<B,b=y>=h-B;
+    if(l&&t)return'NW';if(r&&t)return'NE';
+    if(l&&b)return'SW';if(r&&b)return'SE';
+    if(l)return'W';if(r)return'E';
+    if(t)return'N';if(b)return'S';
+    return null;
+  }
+  const C={N:'n-resize',S:'s-resize',E:'e-resize',W:'w-resize',
+           NW:'nw-resize',NE:'ne-resize',SW:'sw-resize',SE:'se-resize'};
+  document.addEventListener('mousemove',e=>{
+    const r=ht(e.clientX,e.clientY);
+    document.documentElement.style.cursor=r?C[r]:'';
+  },true);
+  document.addEventListener('mousedown',e=>{
+    if(e.button!==0)return;
+    const r=ht(e.clientX,e.clientY);
+    if(r){e.preventDefault();window.ipc.postMessage('__resize:'+r);}
+  },true);
+})();"#;
+        webview = webview.with_initialization_script(RESIZE_JS);
+        Some(Arc::clone(window))
+      } else {
+        None
+      };
+
     // ── Custom protocols (async) ──────────────────────────────────────────────
     // wry's with_asynchronous_custom_protocol closure is NOT required to be
     // Send, so Rc<RefCell<>> is safe — everything runs on the main thread.
@@ -266,8 +304,34 @@ impl JsWebview {
     let expose_handlers_clone = Rc::clone(&expose_handlers);
     let env_copy = *env;
 
+    #[cfg(target_os = "windows")]
+    let resize_arc_for_ipc = resize_window_arc.clone();
+
     let ipc_handler = move |req: Request<String>| {
       let body_str = req.body().as_str();
+
+      // Intercept resize messages from the injected undecorated-resize script.
+      #[cfg(target_os = "windows")]
+      if let Some(ref win) = resize_arc_for_ipc {
+        if let Some(dir_str) = body_str.strip_prefix("__resize:") {
+          use winit::window::ResizeDirection;
+          let dir = match dir_str {
+            "N"  => Some(ResizeDirection::North),
+            "S"  => Some(ResizeDirection::South),
+            "E"  => Some(ResizeDirection::East),
+            "W"  => Some(ResizeDirection::West),
+            "NW" => Some(ResizeDirection::NorthWest),
+            "NE" => Some(ResizeDirection::NorthEast),
+            "SW" => Some(ResizeDirection::SouthWest),
+            "SE" => Some(ResizeDirection::SouthEast),
+            _    => None,
+          };
+          if let Some(d) = dir {
+            let _ = win.drag_resize_window(d);
+          }
+          return;
+        }
+      }
 
       // Check for expose() proxy calls before forwarding to user handler.
       // The page-side script always sets __e:true for these messages.

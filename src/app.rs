@@ -14,8 +14,10 @@ use winit::{
   application::ApplicationHandler,
   event::{ElementState, Ime, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
   event_loop::{ActiveEventLoop, EventLoop},
-  window::{Cursor, CursorIcon, ResizeDirection, Window, WindowId},
+  window::{Window, WindowId},
 };
+#[cfg(not(target_os = "windows"))]
+use winit::window::{Cursor, CursorIcon, ResizeDirection};
 
 #[napi]
 pub fn get_webview_version() -> Result<String> {
@@ -71,6 +73,7 @@ impl AppState {
   }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn resize_direction(
   x: f64,
   y: f64,
@@ -96,6 +99,7 @@ fn resize_direction(
   }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn cursor_for_resize_dir(dir: &ResizeDirection) -> CursorIcon {
   match dir {
     ResizeDirection::North | ResizeDirection::South => CursorIcon::NsResize,
@@ -290,6 +294,9 @@ impl ApplicationHandler for AppHandler<'_> {
         state.cursor_positions.insert(window_id, (cx, cy));
 
         // For undecorated+resizable windows, update cursor icon near edges.
+        // On Windows this is handled by the WM_NCHITTEST subclass instead
+        // (WebView2 consumes mouse events before winit sees them).
+        #[cfg(not(target_os = "windows"))]
         if let Some(win) = state.windows.get(&window_id) {
           if !win.is_decorated() && win.is_resizable() {
             let size = win.inner_size();
@@ -333,6 +340,8 @@ impl ApplicationHandler for AppHandler<'_> {
         };
 
         // For undecorated+resizable windows, initiate drag-resize on left press near edges.
+        // On Windows this is handled by the WM_NCHITTEST subclass instead.
+        #[cfg(not(target_os = "windows"))]
         if btn_state == ElementState::Pressed && button == MouseButton::Left {
           if let (Some(win), Some(&(cx, cy))) = (
             state.windows.get(&window_id),
