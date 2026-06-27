@@ -445,12 +445,7 @@ export interface WebviewOptions {
   clipboard?: boolean
   autoplay?: boolean
   backForwardNavigationGestures?: boolean
-  /**
-   * Custom name for the IPC global injected by wry (default: `"ipc"`).
-   * The page will access it as `window.<ipcName>.postMessage(...)`.
-   * wry always injects `window.ipc`; this option creates an alias via an
-   * initialization script.  The original `window.ipc` remains available.
-   */
+  /** Custom name for the IPC global injected by wry (default: `"ipc"`). */
   ipcName?: string
 }
 
@@ -476,6 +471,30 @@ export interface WindowEventPayload {
   deltaX?: number
   /** Vertical scroll delta (pixels). */
   deltaY?: number
+  /** Logical key name (DOM KeyboardEvent.key, e.g. "a", "Enter", "ArrowLeft"). */
+  key?: string
+  /** Physical key code (DOM KeyboardEvent.code, e.g. "KeyA", "ArrowLeft"). */
+  code?: string
+  /** Modifier bitmask: 1=Shift, 2=Ctrl, 4=Alt, 8=Meta/Super/Command. */
+  modifiers?: number
+  /** Whether this key event is a repeat from holding the key down. */
+  isRepeat?: boolean
+  /** File paths for FileDrop / FileHover events. */
+  files?: Array<string>
+  /** DPI scale factor for ScaleFactorChanged events. */
+  scaleFactor?: number
+  /**
+   * Text for Ime events (preedit string or committed text);
+   * "light" or "dark" for ThemeChanged events.
+   */
+  text?: string
+  /** Touch point identifier (cast from u64) for Touch events. */
+  touchId?: number
+  /**
+   * Phase string: "started"/"moved"/"ended"/"cancelled" for Touch;
+   * "enabled"/"preedit"/"commit"/"disabled" for Ime events.
+   */
+  phase?: string
 }
 
 export declare enum WindowEventType {
@@ -489,5 +508,14 @@ export declare enum WindowEventType {
   MouseMove = 7,
   MouseDown = 8,
   MouseUp = 9,
-  Scroll = 10
+  Scroll = 10,
+  KeyDown = 11,
+  KeyUp = 12,
+  FileDrop = 13,
+  FileHover = 14,
+  FileHoverCancelled = 15,
+  ScaleFactorChanged = 16,
+  ThemeChanged = 17,
+  Ime = 18,
+  Touch = 19
 }
