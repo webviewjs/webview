@@ -10,4 +10,4 @@ enable pinch, pan, double-tap, and rotation events in winit.
 Screen-edge values are a bitmask: top `1`, left `2`, bottom `4`, and right
 `8`.
 
-See [BrowserWindow platform APIs](../api/browser-window.md#ios-options-and-runtime-extensions).
+See [BrowserWindow platform APIs](../api/browser-window#ios-options-and-runtime-extensions).

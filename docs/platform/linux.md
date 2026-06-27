@@ -10,7 +10,7 @@ Wayland creation options expose the application ID and instance name.
 `getWaylandXdgToplevel()` returns the native `xdg_toplevel` pointer for
 interoperability, or `0n` when the window uses X11.
 
-See [BrowserWindow platform APIs](../api/browser-window.md#linux-creation-options).
+See [BrowserWindow platform APIs](../api/browser-window#linux-creation-options).
 
 ## WebKitGTK
 
