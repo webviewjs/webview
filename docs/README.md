@@ -2,7 +2,7 @@
 
 ![https://github.com/webviewjs/webview/actions](https://github.com/webviewjs/webview/workflows/CI/badge.svg)
 
-Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [winit](https://github.com/rust-windowing/winit) and [wry](https://github.com/tauri-apps/wry) allowing you to easily manage cross platform windowing and webview.
+Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [winit](https://github.com/rust-windowing/winit) and [wry](https://github.com/tauri-apps/wry) allowing you to create native desktop windows from JavaScript and TypeScript.
 
 ## Highlights
 
@@ -105,8 +105,8 @@ app.whenReady().then(() => {
 });
 ```
 
-See the [system tray reference](./docs/api/tray.md) and
-[runnable tray example](./examples/tray.mjs).
+See the [system tray reference](./api/tray.md) and
+[runnable tray example](../examples/tray.mjs).
 
 ## IPC and exposed functions
 
@@ -159,7 +159,7 @@ window.registerProtocol('app', async (request) => {
 window.createWebview({ url: 'app://localhost/index.html' });
 ```
 
-See [Custom Protocols](docs/guides/custom-protocols.md), [IPC](docs/guides/ipc-messaging.md), and the runnable [custom protocol](examples/custom-protocol.mjs) and [expose](examples/expose.mjs) examples.
+See [Custom Protocols](./guides/custom-protocols.md), [IPC](./guides/ipc-messaging.md), and the runnable [custom protocol](../examples/custom-protocol.mjs) and [expose](../examples/expose.mjs) examples for more details.
 
 ## Menu System
 
@@ -342,7 +342,7 @@ window.show(); // Show the window again
 webview.reload();
 ```
 
-For more details on closing applications and cleaning up resources, see the [Closing Guide](./docs/CLOSING_GUIDE.md).
+For more details on closing applications and cleaning up resources, see the [Closing Guide](./CLOSING_GUIDE.md).
 
 ## Keep strong references
 
@@ -367,13 +367,13 @@ true`, and method calls fail with a disposed error. Individual windows,
 webviews, contexts, and tray icons also support `dispose()` and
 `Symbol.dispose`.
 
-Check out [examples](./examples) directory for more examples:
+Check out [examples](../examples) directory for more examples:
 
-- **[menu-system.mjs](./examples/menu-system.mjs)** - Comprehensive menu system demonstration with all features
-- **[window-menus.mjs](./examples/window-menus.mjs)** - Window-specific vs global menu examples
-- **[http/](./examples/http/)** - Serving content from a web server to webview
-- **[transparent.mjs](./examples/transparent.mjs)** - Transparent window example
-- **[close-example.mjs](./examples/close-example.mjs)** - Graceful application closing
+- **[menu-system.mjs](../examples/menu-system.mjs)** - Comprehensive menu system demonstration with all features
+- **[window-menus.mjs](../examples/window-menus.mjs)** - Window-specific vs global menu examples
+- **[http/](../examples/http/)** - Serving content from a web server to webview
+- **[transparent.mjs](../examples/transparent.mjs)** - Transparent window example
+- **[close-example.mjs](../examples/close-example.mjs)** - Graceful application closing
 
 Run any example with: `node examples/menu-system.mjs` (after building the project)
 
@@ -402,7 +402,7 @@ webview --build --runtime bun  --input ./src/index.ts --name my-app
 | `--name` / `-n`      | `webviewjs`   | Executable name            |
 | `--resources` / `-r` | —             | JSON asset map (node only) |
 
-For the full compilation guide including cross-compilation and code signing, see [Building Executables](./docs/guides/building-executables.md).
+For the full compilation guide including cross-compilation and code signing, see [Building Executables](./guides/building-executables.md).
 
 # Documentation
 
@@ -410,42 +410,42 @@ For the full compilation guide including cross-compilation and code signing, see
 
 |                                                        |                                 |
 | ------------------------------------------------------ | ------------------------------- |
-| [Installation](./docs/getting-started/installation.md) | System requirements and setup   |
-| [Quick Start](./docs/getting-started/quick-start.md)   | Your first window in minutes    |
-| [Event Loop](./docs/getting-started/event-loop.md)     | How the non-blocking pump works |
+| [Installation](./getting-started/installation.md) | System requirements and setup   |
+| [Quick Start](./getting-started/quick-start.md)   | Your first window in minutes    |
+| [Event Loop](./getting-started/event-loop.md)     | How the non-blocking pump works |
 
 ## API reference
 
 |                                               |                                                        |
 | --------------------------------------------- | ------------------------------------------------------ |
-| [Application](./docs/api/application.md)      | Root object — event loop, windows, menus               |
-| [BrowserWindow](./docs/api/browser-window.md) | OS window, size, position, cursor, decorations         |
-| [Webview](./docs/api/webview.md)              | Embedded browser — navigation, cookies, script, bounds |
-| [WebContext](./docs/api/web-context.md)       | Shared browser data, profiles, and automation          |
-| [System Tray](./docs/api/tray.md)             | Tray icons, menus, updates, and pointer events         |
-| [Menu](./docs/api/menu.md)                    | Native menu bar construction                           |
-| [Types](./docs/api/types.md)                  | Shared interfaces and enums                            |
+| [Application](./api/application.md)      | Root object — event loop, windows, menus               |
+| [BrowserWindow](./api/browser-window.md) | OS window, size, position, cursor, decorations         |
+| [Webview](./api/webview.md)              | Embedded browser — navigation, cookies, script, bounds |
+| [WebContext](./api/web-context.md)       | Shared browser data, profiles, and automation          |
+| [System Tray](./api/tray.md)             | Tray icons, menus, updates, and pointer events         |
+| [Menu](./api/menu.md)                    | Native menu bar construction                           |
+| [Types](./api/types.md)                  | Shared interfaces and enums                            |
 
 ## Guides
 
 |                                                               |                                                 |
 | ------------------------------------------------------------- | ----------------------------------------------- |
-| [Building Executables](./docs/guides/building-executables.md) | Compile to `.exe` / binary with node, deno, bun |
-| [IPC Messaging](./docs/guides/ipc-messaging.md)               | Page ↔ Node communication                       |
-| [Menus](./docs/guides/menus.md)                               | Building menu bars with roles and accelerators  |
-| [Multiple Windows](./docs/guides/multiple-windows.md)         | Managing several windows                        |
-| [Cookies & Storage](./docs/guides/cookies-and-storage.md)     | Reading, writing, and clearing cookies          |
-| [Custom Protocols](./docs/guides/custom-protocols.md)         | Serving local content to the webview            |
+| [Building Executables](./guides/building-executables.md) | Compile to `.exe` / binary with node, deno, bun |
+| [IPC Messaging](./guides/ipc-messaging.md)               | Page ↔ Node communication                       |
+| [Menus](./guides/menus.md)                               | Building menu bars with roles and accelerators  |
+| [Multiple Windows](./guides/multiple-windows.md)         | Managing several windows                        |
+| [Cookies & Storage](./guides/cookies-and-storage.md)     | Reading, writing, and clearing cookies          |
+| [Custom Protocols](./guides/custom-protocols.md)         | Serving local content to the webview            |
 
 ## Platform notes
 
 |                                       |                                           |
 | ------------------------------------- | ----------------------------------------- |
-| [Windows](./docs/platform/windows.md) | WebView2, taskbar, DPI                    |
-| [macOS](./docs/platform/macos.md)     | WebKit, main-thread requirement, app menu |
-| [Linux](./docs/platform/linux.md)     | WebKitGTK, Wayland/X11, menu limitations  |
-| [iOS](./docs/platform/ios.md)         | Orientation, status bar, and gestures     |
-| [Android](./docs/platform/android.md) | Content rectangle and configuration       |
+| [Windows](./platform/windows.md) | WebView2, taskbar, DPI                    |
+| [macOS](./platform/macos.md)     | WebKit, main-thread requirement, app menu |
+| [Linux](./platform/linux.md)     | WebKitGTK, Wayland/X11, menu limitations  |
+| [iOS](./platform/ios.md)         | Orientation, status bar, and gestures     |
+| [Android](./platform/android.md) | Content rectangle and configuration       |
 
 # Development
 
