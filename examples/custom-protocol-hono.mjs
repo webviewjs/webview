@@ -59,11 +59,7 @@ const window = app.createBrowserWindow({
   height: 600,
 });
 
-window.registerProtocol('app', async (request) => {
-  const res = await router.fetch(request);
-  return res;
-});
+window.registerProtocol('app', router.fetch);
 window.createWebview({ url: 'app://localhost' });
 
-app.on('application-close-requested', () => app.exit());
 app.run();
