@@ -257,7 +257,7 @@ jobs:
           DEBUG: napi:*
           RUSTUP_IO_THREADS: 1
         run: |
-          source "$HOME/.cargo/env"
+          . "$HOME/.cargo/env"
           rustc --version
           node -v
           bun --version

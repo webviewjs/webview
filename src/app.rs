@@ -742,7 +742,7 @@ impl Application {
     let initial_global_menu: Option<Menu> = {
       #[cfg(target_os = "macos")]
       {
-        Some(menu::make_default_macos_menu())
+        Some(crate::menu::make_default_macos_menu())
       }
       #[cfg(not(target_os = "macos"))]
       {
