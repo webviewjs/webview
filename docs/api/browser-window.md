@@ -189,3 +189,46 @@ interface Monitor {
 win.id(): number          // stable numeric id within this process
 win.isChildWindow(): boolean
 ```
+
+## Window events (EventEmitter)
+
+`BrowserWindow` extends Node's `EventEmitter`.  Use the standard `.on()`,
+`.once()`, `.off()` / `.removeListener()`, `.removeAllListeners()` API.
+
+```ts
+win.on('resize',      ({ width, height }) => { … })
+win.on('move',        ({ x, y })          => { … })
+win.on('close',       ()                  => { … })
+win.on('focus',       ()                  => { … })
+win.on('blur',        ()                  => { … })
+win.on('mouse-enter', ({ x, y })          => { … })
+win.on('mouse-leave', ()                  => { … })
+win.on('mouse-move',  ({ x, y })          => { … })
+win.on('mouse-down',  ({ x, y, button })  => { … })  // button: 0=left 1=middle 2=right
+win.on('mouse-up',    ({ x, y, button })  => { … })
+win.on('scroll',      ({ deltaX, deltaY })=> { … })
+```
+
+All positional values (`x`, `y`, `width`, `height`, `deltaX`, `deltaY`) are in
+**physical pixels** at the current DPI.  Divide by `win.scaleFactor()` to
+convert to logical (CSS) pixels.
+
+Scroll deltas from a pixel-precise input device (trackpad) are passed through
+as-is; line-scroll deltas (mouse wheel) are multiplied by 20 to produce an
+equivalent pixel distance.
+
+### Undecorated-window resize
+
+When a window is created with `{ decorations: false, resizable: true }`, native
+OS resize handles are absent.  WebviewJS automatically handles this:
+
+- **Cursor** — while the pointer is within 6 physical pixels of any edge or
+  corner, the cursor updates to the appropriate directional resize icon.
+- **Drag** — a left-button press in that same border strip immediately calls
+  winit's `drag_resize_window()` so the OS takes over the resize gesture.
+  No `mouse-down` event is fired for border-strip presses (the drag consumes them).
+
+```ts
+const win = app.createBrowserWindow({ decorations: false, resizable: true });
+// Resize just works — no extra code needed.
+```

@@ -176,3 +176,42 @@ enum ProgressBarState {
 ### `CursorType`
 
 See [BrowserWindow cursor section](./browser-window.md#cursor) for the full list.
+
+### `WindowEventType`
+
+Numeric discriminant of the `event` field in each `BrowserWindowEventMap`
+payload.  Values correspond to the order declared in the Rust `WindowEventType`
+enum and are mapped to string event names by the JS layer — normal user code
+should key on the string name, not the integer.
+
+| Value | String name   | Payload fields                                  |
+|-------|---------------|-------------------------------------------------|
+| 0     | `move`        | `x`, `y` (physical px, outer window position)  |
+| 1     | `resize`      | `width`, `height` (physical px, inner size)     |
+| 2     | `close`       | —                                               |
+| 3     | `focus`       | —                                               |
+| 4     | `blur`        | —                                               |
+| 5     | `mouse-enter` | `x`, `y` (physical px, last cursor position)   |
+| 6     | `mouse-leave` | —                                               |
+| 7     | `mouse-move`  | `x`, `y` (physical px)                         |
+| 8     | `mouse-down`  | `x`, `y`, `button` (0=left 1=middle 2=right)   |
+| 9     | `mouse-up`    | `x`, `y`, `button`                             |
+| 10    | `scroll`      | `deltaX`, `deltaY` (physical px)               |
+
+### `BrowserWindowEventMap`
+
+```ts
+interface BrowserWindowEventMap {
+  'move':        { event: number; x: number; y: number }
+  'resize':      { event: number; width: number; height: number }
+  'close':       { event: number }
+  'focus':       { event: number }
+  'blur':        { event: number }
+  'mouse-enter': { event: number; x: number; y: number }
+  'mouse-leave': { event: number }
+  'mouse-move':  { event: number; x: number; y: number }
+  'mouse-down':  { event: number; x: number; y: number; button: number }
+  'mouse-up':    { event: number; x: number; y: number; button: number }
+  'scroll':      { event: number; deltaX: number; deltaY: number }
+}
+```
