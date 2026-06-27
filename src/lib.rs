@@ -1,6 +1,8 @@
 #![deny(clippy::all)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+pub mod types;
+
 // FreeBSD x64 is a stub-only target: the real GUI stack (wry/winit) is not
 // compiled.  Every exported API throws a clear runtime error on that platform.
 #[cfg(target_os = "freebsd")]

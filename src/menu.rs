@@ -6,7 +6,7 @@
 //!  - **Android**: menu system is completely disabled.
 
 #[cfg(not(target_os = "android"))]
-use crate::app::{MenuItemOptions, MenuOptions};
+use crate::types::{MenuItemOptions, MenuOptions};
 #[cfg(not(target_os = "android"))]
 use muda::{accelerator::Accelerator, Menu, MenuItem, PredefinedMenuItem, Submenu};
 #[cfg(not(target_os = "android"))]

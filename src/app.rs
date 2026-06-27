@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use crate::browser_window::{BrowserWindow, BrowserWindowOptions};
+use crate::browser_window::BrowserWindow;
+use crate::types::*;
 #[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))]
 use muda::Menu;
 use napi::bindgen_prelude::*;
@@ -11,95 +12,10 @@ use napi::Result;
 use napi_derive::napi;
 use winit::{
   application::ApplicationHandler,
-  event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
+  event::{ElementState, Ime, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
   event_loop::{ActiveEventLoop, EventLoop},
   window::{Cursor, CursorIcon, ResizeDirection, Window, WindowId},
 };
-
-#[napi]
-pub enum WindowCommand {
-  Close,
-  Show,
-  Hide,
-}
-
-#[napi]
-pub enum WebviewApplicationEvent {
-  WindowCloseRequested,
-  ApplicationCloseRequested,
-  CustomMenuClick,
-}
-
-#[napi]
-pub enum WindowEventType {
-  Moved,
-  Resized,
-  CloseRequested,
-  Focused,
-  Blurred,
-  MouseEnter,
-  MouseLeave,
-  MouseMove,
-  MouseDown,
-  MouseUp,
-  Scroll,
-}
-
-#[napi(object)]
-pub struct WindowEventPayload {
-  pub event: WindowEventType,
-  /// Physical x position (cursor or window).
-  pub x: Option<f64>,
-  /// Physical y position (cursor or window).
-  pub y: Option<f64>,
-  /// Physical width (resize event).
-  pub width: Option<u32>,
-  /// Physical height (resize event).
-  pub height: Option<u32>,
-  /// Mouse button index: 0=left, 1=middle, 2=right.
-  pub button: Option<u32>,
-  /// Horizontal scroll delta (pixels).
-  pub delta_x: Option<f64>,
-  /// Vertical scroll delta (pixels).
-  pub delta_y: Option<f64>,
-}
-
-#[napi(object)]
-pub struct CustomMenuEvent {
-  pub id: String,
-  pub window_id: u32,
-}
-
-#[napi(object)]
-#[derive(Clone)]
-pub struct MenuItemOptions {
-  pub id: Option<String>,
-  pub label: Option<String>,
-  pub enabled: Option<bool>,
-  pub accelerator: Option<String>,
-  pub submenu: Option<MenuOptions>,
-  pub role: Option<String>,
-}
-
-#[napi(object)]
-#[derive(Clone)]
-pub struct MenuOptions {
-  pub items: Vec<MenuItemOptions>,
-}
-
-#[napi(object)]
-pub struct HeaderData {
-  pub key: String,
-  pub value: Option<String>,
-}
-
-#[napi(object)]
-pub struct IpcMessage {
-  pub body: Buffer,
-  pub method: String,
-  pub headers: Vec<HeaderData>,
-  pub uri: String,
-}
 
 #[napi]
 pub fn get_webview_version() -> Result<String> {
@@ -109,37 +25,6 @@ pub fn get_webview_version() -> Result<String> {
       format!("Failed to get webview version: {}", e),
     )
   })
-}
-
-/// Kept for backward compat; no longer used internally.
-#[napi(js_name = "ControlFlow")]
-pub enum JsControlFlow {
-  Poll,
-  Wait,
-  WaitUntil,
-  Exit,
-  ExitWithCode,
-}
-
-#[napi(object)]
-pub struct ApplicationOptions {
-  pub control_flow: Option<JsControlFlow>,
-  pub wait_time: Option<i32>,
-  pub exit_code: Option<i32>,
-}
-
-#[napi(object)]
-pub struct ApplicationEvent {
-  pub event: WebviewApplicationEvent,
-  pub custom_menu_event: Option<CustomMenuEvent>,
-}
-
-#[napi(object)]
-pub struct ApplicationRunOptions {
-  /** The interval in milliseconds to pump events. Defaults to 16 (60 FPS). */
-  pub interval: Option<u32>,
-  /** Whether to keep the event loop alive. Defaults to true. */
-  pub ref_: Option<bool>,
 }
 
 // ── Internal state ────────────────────────────────────────────────────────────
@@ -158,6 +43,8 @@ struct AppState {
   window_handlers: HashMap<WindowId, Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>>>,
   /// Last known physical cursor position per window (for edge-resize hit testing).
   cursor_positions: HashMap<WindowId, (f64, f64)>,
+  /// Last known modifier state.
+  current_modifiers: winit::event::Modifiers,
   #[cfg(not(target_os = "android"))]
   menu_event_receiver: Option<muda::MenuEventReceiver>,
 }
@@ -218,6 +105,36 @@ fn cursor_for_resize_dir(dir: &ResizeDirection) -> CursorIcon {
   }
 }
 
+fn modifiers_bits(mods: &winit::event::Modifiers) -> u32 {
+  let s = mods.state();
+  let mut bits = 0u32;
+  if s.shift_key()   { bits |= 1; }
+  if s.control_key() { bits |= 2; }
+  if s.alt_key()     { bits |= 4; }
+  if s.super_key()   { bits |= 8; }
+  bits
+}
+
+fn logical_key_name(key: &winit::keyboard::Key) -> Option<String> {
+  match key {
+    winit::keyboard::Key::Character(c) => Some(c.as_str().to_owned()),
+    winit::keyboard::Key::Named(named) => Some(match named {
+      winit::keyboard::NamedKey::Space => " ".to_owned(),
+      winit::keyboard::NamedKey::Super => "Meta".to_owned(),
+      other => format!("{:?}", other),
+    }),
+    winit::keyboard::Key::Dead(Some(c)) => Some(format!("Dead({})", c)),
+    _ => None,
+  }
+}
+
+fn physical_key_code(key: &winit::keyboard::PhysicalKey) -> Option<String> {
+  match key {
+    winit::keyboard::PhysicalKey::Code(code) => Some(format!("{:?}", code)),
+    winit::keyboard::PhysicalKey::Unidentified(_) => None,
+  }
+}
+
 // ── ApplicationHandler ────────────────────────────────────────────────────────
 
 struct AppHandler<'a>(&'a mut AppState);
@@ -258,6 +175,8 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
+            key: None, code: None, modifiers: None, is_repeat: None,
+            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
           },
         );
       }
@@ -273,6 +192,8 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
+            key: None, code: None, modifiers: None, is_repeat: None,
+            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
           },
         );
       }
@@ -288,6 +209,8 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
+            key: None, code: None, modifiers: None, is_repeat: None,
+            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
           },
         );
         if let Some(win) = state.windows.remove(&window_id) {
@@ -322,6 +245,8 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
+            key: None, code: None, modifiers: None, is_repeat: None,
+            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
           },
         );
       }
@@ -338,6 +263,8 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
+            key: None, code: None, modifiers: None, is_repeat: None,
+            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
           },
         );
       }
@@ -353,6 +280,8 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
+            key: None, code: None, modifiers: None, is_repeat: None,
+            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
           },
         );
       }
@@ -386,6 +315,8 @@ impl ApplicationHandler for AppHandler<'_> {
             button: None,
             delta_x: None,
             delta_y: None,
+            key: None, code: None, modifiers: None, is_repeat: None,
+            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
           },
         );
       }
@@ -436,6 +367,9 @@ impl ApplicationHandler for AppHandler<'_> {
             height: None,
             delta_x: None,
             delta_y: None,
+            modifiers: Some(modifiers_bits(&state.current_modifiers)),
+            key: None, code: None, is_repeat: None, files: None,
+            scale_factor: None, text: None, touch_id: None, phase: None,
           },
         );
       }
@@ -455,8 +389,118 @@ impl ApplicationHandler for AppHandler<'_> {
             width: None,
             height: None,
             button: None,
+            key: None, code: None, modifiers: None, is_repeat: None,
+            files: None, scale_factor: None, text: None, touch_id: None, phase: None,
           },
         );
+      }
+      WindowEvent::ModifiersChanged(mods) => {
+        state.current_modifiers = mods;
+      }
+      WindowEvent::KeyboardInput { event: ref key_event, .. } => {
+        let mods = modifiers_bits(&state.current_modifiers);
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: if key_event.state == ElementState::Pressed {
+            WindowEventType::KeyDown
+          } else {
+            WindowEventType::KeyUp
+          },
+          key: logical_key_name(&key_event.logical_key),
+          code: physical_key_code(&key_event.physical_key),
+          modifiers: Some(mods),
+          is_repeat: Some(key_event.repeat),
+          x: None, y: None, width: None, height: None,
+          button: None, delta_x: None, delta_y: None,
+          files: None, scale_factor: None, text: None,
+          touch_id: None, phase: None,
+        });
+      }
+      WindowEvent::Ime(ime) => {
+        let (text, phase) = match &ime {
+          Ime::Enabled => (None, Some("enabled".to_owned())),
+          Ime::Preedit(t, _) => (Some(t.clone()), Some("preedit".to_owned())),
+          Ime::Commit(t) => (Some(t.clone()), Some("commit".to_owned())),
+          Ime::Disabled => (None, Some("disabled".to_owned())),
+        };
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::Ime,
+          text, phase,
+          x: None, y: None, width: None, height: None,
+          button: None, delta_x: None, delta_y: None, modifiers: None,
+          key: None, code: None, is_repeat: None, files: None,
+          scale_factor: None, touch_id: None,
+        });
+      }
+      WindowEvent::DroppedFile(path) => {
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::FileDrop,
+          files: Some(vec![path.to_string_lossy().into_owned()]),
+          x: None, y: None, width: None, height: None,
+          button: None, delta_x: None, delta_y: None, modifiers: None,
+          key: None, code: None, is_repeat: None,
+          scale_factor: None, text: None, touch_id: None, phase: None,
+        });
+      }
+      WindowEvent::HoveredFile(path) => {
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::FileHover,
+          files: Some(vec![path.to_string_lossy().into_owned()]),
+          x: None, y: None, width: None, height: None,
+          button: None, delta_x: None, delta_y: None, modifiers: None,
+          key: None, code: None, is_repeat: None,
+          scale_factor: None, text: None, touch_id: None, phase: None,
+        });
+      }
+      WindowEvent::HoveredFileCancelled => {
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::FileHoverCancelled,
+          x: None, y: None, width: None, height: None,
+          button: None, delta_x: None, delta_y: None, modifiers: None,
+          key: None, code: None, is_repeat: None, files: None,
+          scale_factor: None, text: None, touch_id: None, phase: None,
+        });
+      }
+      WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::ScaleFactorChanged,
+          scale_factor: Some(scale_factor),
+          x: None, y: None, width: None, height: None,
+          button: None, delta_x: None, delta_y: None, modifiers: None,
+          key: None, code: None, is_repeat: None, files: None,
+          text: None, touch_id: None, phase: None,
+        });
+      }
+      WindowEvent::ThemeChanged(theme) => {
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::ThemeChanged,
+          text: Some(match theme {
+            winit::window::Theme::Light => "light".to_owned(),
+            winit::window::Theme::Dark => "dark".to_owned(),
+          }),
+          x: None, y: None, width: None, height: None,
+          button: None, delta_x: None, delta_y: None, modifiers: None,
+          key: None, code: None, is_repeat: None, files: None,
+          scale_factor: None, touch_id: None, phase: None,
+        });
+      }
+      WindowEvent::Touch(touch) => {
+        let phase_str = match touch.phase {
+          TouchPhase::Started => "started",
+          TouchPhase::Moved => "moved",
+          TouchPhase::Ended => "ended",
+          TouchPhase::Cancelled => "cancelled",
+        };
+        state.fire_window_event(window_id, WindowEventPayload {
+          event: WindowEventType::Touch,
+          x: Some(touch.location.x),
+          y: Some(touch.location.y),
+          touch_id: Some(touch.id as f64),
+          phase: Some(phase_str.to_owned()),
+          width: None, height: None,
+          button: None, delta_x: None, delta_y: None, modifiers: None,
+          key: None, code: None, is_repeat: None, files: None,
+          scale_factor: None, text: None,
+        });
       }
       _ => {}
     }
@@ -527,6 +571,7 @@ impl Application {
         webviews: HashMap::new(),
         window_handlers: HashMap::new(),
         cursor_positions: HashMap::new(),
+        current_modifiers: winit::event::Modifiers::default(),
         #[cfg(not(target_os = "android"))]
         menu_event_receiver: {
           // On macOS we always have a menu from startup so start receiving events

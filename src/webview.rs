@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 // runs on the main thread.
 
 use napi::{
-  bindgen_prelude::{Buffer, FunctionRef},
+  bindgen_prelude::FunctionRef,
   threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
   Env, Result,
 };
@@ -11,32 +11,8 @@ use napi_derive::*;
 use winit::window::Window;
 use wry::{http::Request, Rect, WebViewBuilder};
 
-use crate::app::{HeaderData, IpcMessage};
 use crate::browser_window::next_protocol_id;
-
-// ── Custom protocol types ─────────────────────────────────────────────────────
-
-/// Incoming request delivered to a custom-protocol handler.
-#[napi(object)]
-pub struct CustomProtocolRequest {
-  pub url: String,
-  pub method: String,
-  pub headers: Vec<HeaderData>,
-  pub body: Option<Buffer>,
-}
-
-/// Response returned by a custom-protocol handler.
-#[napi(object)]
-pub struct CustomProtocolResponse {
-  /// HTTP status code.  Defaults to 200.
-  pub status_code: Option<u16>,
-  /// Extra response headers (e.g. `[{ key: "Cache-Control", value: "no-store" }]`).
-  pub headers: Option<Vec<HeaderData>>,
-  /// Response body bytes.
-  pub body: Buffer,
-  /// MIME type (e.g. `"text/html"`, `"application/javascript"`).
-  pub mime_type: Option<String>,
-}
+use crate::types::*;
 
 /// Internal type alias for async protocol pending-responder maps.
 pub(crate) type ProtocolPendingMap =
@@ -45,74 +21,6 @@ pub(crate) type ProtocolPendingMap =
 pub(crate) type ProtocolHandlerRef = Rc<RefCell<Option<FunctionRef<String, ()>>>>;
 /// Internal type alias for async protocol ID counter.
 pub(crate) type ProtocolCounterRef = Rc<RefCell<u64>>;
-
-// ── Expose types ──────────────────────────────────────────────────────────────
-
-/// Data sent to the expose handler when the page calls a proxied function.
-#[napi(object)]
-pub struct ExposeCallData {
-  pub ns: String,
-  pub method: String,
-  pub id: f64,
-  pub args_json: String,
-}
-
-// ── Cookie types ─────────────────────────────────────────────────────────────
-
-#[napi(object)]
-pub struct WebviewCookie {
-  pub name: String,
-  pub value: String,
-  pub domain: Option<String>,
-  pub path: Option<String>,
-  pub http_only: Option<bool>,
-  pub secure: Option<bool>,
-  /// `"strict"`, `"lax"`, or `"none"`.
-  pub same_site: Option<String>,
-}
-
-// ── Webview bounds ────────────────────────────────────────────────────────────
-
-#[napi(object)]
-pub struct WebviewBounds {
-  pub x: f64,
-  pub y: f64,
-  pub width: f64,
-  pub height: f64,
-}
-
-#[napi]
-pub enum Theme {
-  Light,
-  Dark,
-  System,
-}
-
-#[napi(object)]
-pub struct WebviewOptions {
-  pub url: Option<String>,
-  pub html: Option<String>,
-  pub width: Option<f64>,
-  pub height: Option<f64>,
-  pub x: Option<f64>,
-  pub y: Option<f64>,
-  pub enable_devtools: Option<bool>,
-  pub incognito: Option<bool>,
-  pub user_agent: Option<String>,
-  pub child: Option<bool>,
-  pub preload: Option<String>,
-  pub transparent: Option<bool>,
-  pub theme: Option<Theme>,
-  pub hotkeys_zoom: Option<bool>,
-  pub clipboard: Option<bool>,
-  pub autoplay: Option<bool>,
-  pub back_forward_navigation_gestures: Option<bool>,
-  /// Custom name for the IPC global injected by wry (default: `"ipc"`).
-  /// The page will access it as `window.<ipcName>.postMessage(...)`.
-  /// wry always injects `window.ipc`; this option creates an alias via an
-  /// initialization script.  The original `window.ipc` remains available.
-  pub ipc_name: Option<String>,
-}
 
 impl Default for WebviewOptions {
   fn default() -> Self {

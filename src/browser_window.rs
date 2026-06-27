@@ -1,4 +1,4 @@
-use crate::app::WindowEventPayload;
+use crate::types::*;
 use dpi::Size;
 use image::GenericImageView;
 #[cfg(not(target_os = "android"))]
@@ -21,143 +21,11 @@ use winit::{
   },
 };
 
-use crate::app::MenuOptions;
-
 #[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
 use crate::webview::{
-  CustomProtocolResponse, JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap,
-  Theme, WebviewOptions,
+  JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap,
 };
-
-#[napi]
-pub enum FullscreenType {
-  Exclusive,
-  Borderless,
-}
-
-#[napi(object)]
-pub struct Dimensions {
-  pub width: u32,
-  pub height: u32,
-}
-
-#[napi(object)]
-pub struct Position {
-  pub x: i32,
-  pub y: i32,
-}
-
-#[napi(object, js_name = "VideoMode")]
-pub struct JsVideoMode {
-  pub size: Dimensions,
-  pub bit_depth: u16,
-  pub refresh_rate: u16,
-}
-
-#[napi(object)]
-pub struct Monitor {
-  pub name: Option<String>,
-  pub scale_factor: f64,
-  pub size: Dimensions,
-  pub position: Position,
-  pub video_modes: Vec<JsVideoMode>,
-}
-
-#[napi(js_name = "ProgressBarState")]
-pub enum JsProgressBarState {
-  None,
-  Normal,
-  Indeterminate,
-  Paused,
-  Error,
-}
-
-#[napi(object)]
-pub struct JsProgressBar {
-  pub state: Option<JsProgressBarState>,
-  pub progress: Option<u32>,
-}
-
-/// Cursor shape passed to [`BrowserWindow::set_cursor`].
-#[napi]
-pub enum CursorType {
-  Default,
-  Crosshair,
-  Hand,
-  Arrow,
-  Move,
-  Text,
-  Wait,
-  Help,
-  Progress,
-  NotAllowed,
-  ContextMenu,
-  Cell,
-  VerticalText,
-  Alias,
-  Copy,
-  NoDrop,
-  Grab,
-  Grabbing,
-  ZoomIn,
-  ZoomOut,
-  ResizeEast,
-  ResizeNorth,
-  ResizeNorthEast,
-  ResizeNorthWest,
-  ResizeSouth,
-  ResizeSouthEast,
-  ResizeSouthWest,
-  ResizeWest,
-  ResizeEastWest,
-  ResizeNorthSouth,
-  ResizeNorthEastSouthWest,
-  ResizeNorthWestSouthEast,
-  ResizeColumn,
-  ResizeRow,
-  AllScroll,
-}
-
-#[napi(object)]
-pub struct BrowserWindowOptions {
-  pub menu: Option<MenuOptions>,
-  pub show_menu: Option<bool>,
-  pub resizable: Option<bool>,
-  pub title: Option<String>,
-  pub logical: Option<bool>,
-  pub width: Option<f64>,
-  pub height: Option<f64>,
-  pub x: Option<f64>,
-  pub y: Option<f64>,
-  pub content_protection: Option<bool>,
-  pub always_on_top: Option<bool>,
-  pub always_on_bottom: Option<bool>,
-  pub visible: Option<bool>,
-  pub decorations: Option<bool>,
-  pub visible_on_all_workspaces: Option<bool>,
-  pub maximized: Option<bool>,
-  pub maximizable: Option<bool>,
-  pub minimizable: Option<bool>,
-  pub focused: Option<bool>,
-  pub transparent: Option<bool>,
-  pub fullscreen: Option<FullscreenType>,
-}
-
-// This whole thing isnt supported/needed on android but we can just exclude the parts that arent supported from the build so it compiles.
-#[napi(object)]
-pub struct FileDialogOptions {
-  pub multiple: Option<bool>,
-  pub title: Option<String>,
-  pub default_path: Option<String>,
-  pub filters: Option<Vec<FileFilter>>,
-}
-
-#[napi(object)]
-pub struct FileFilter {
-  pub name: String,
-  pub extensions: Vec<String>,
-}
 
 impl Default for BrowserWindowOptions {
   fn default() -> Self {
