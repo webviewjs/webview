@@ -1,4 +1,5 @@
 const nativeBinding = require('./js-bindings.js');
+const { EventEmitter } = require('events');
 
 // Patch the native Application prototype with non-blocking run/stop.
 // A WeakMap stores each instance's timer so no extra class wrapper is needed.
@@ -34,6 +35,44 @@ nativeBinding.Application.prototype.exit = function exit() {
 nativeBinding.Application.prototype[Symbol.dispose] = function dispose() {
   this.exit();
 };
+
+// ── BrowserWindow EventEmitter ────────────────────────────────────────────────
+// Maps WindowEventType numeric values (from Rust enum order) to event names.
+const _windowEventNames = [
+  'move',        // 0  Moved
+  'resize',      // 1  Resized
+  'close',       // 2  CloseRequested
+  'focus',       // 3  Focused
+  'blur',        // 4  Blurred
+  'mouse-enter', // 5  MouseEnter
+  'mouse-leave', // 6  MouseLeave
+  'mouse-move',  // 7  MouseMove
+  'mouse-down',  // 8  MouseDown
+  'mouse-up',    // 9  MouseUp
+  'scroll',      // 10 Scroll
+];
+
+const _windowEmitters = new WeakMap();
+
+function _getWindowEmitter(win) {
+  if (!_windowEmitters.has(win)) {
+    const emitter = new EventEmitter();
+    _windowEmitters.set(win, emitter);
+    win._onWindowEvent(function (payload) {
+      const name = _windowEventNames[payload.event];
+      if (name !== undefined) emitter.emit(name, payload);
+    });
+  }
+  return _windowEmitters.get(win);
+}
+
+['on', 'once', 'off', 'addListener', 'removeListener', 'removeAllListeners', 'listenerCount', 'listeners', 'rawListeners', 'emit', 'eventNames'].forEach((method) => {
+  nativeBinding.BrowserWindow.prototype[method] = function (...args) {
+    const result = _getWindowEmitter(this)[method](...args);
+    // Return `this` for chainable methods, otherwise the emitter's return value.
+    return result === _getWindowEmitter(this) ? this : result;
+  };
+});
 
 // ── BrowserWindow.registerProtocol ───────────────────────────────────────────
 // Wraps the low-level `_registerProtocol(name, (payloadJson) => void)` native
