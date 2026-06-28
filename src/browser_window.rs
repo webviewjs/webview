@@ -779,6 +779,8 @@ impl BrowserWindow {
   #[napi]
   pub fn set_resizable(&self, resizable: bool) {
     self.window.set_resizable(resizable);
+    // Note: resize border installation is managed by decoration state only.
+    // The resizable flag controls whether the window actually responds to resize attempts.
   }
 
   #[napi]
@@ -1632,6 +1634,14 @@ impl BrowserWindow {
   #[napi]
   pub fn set_decorations(&self, enabled: bool) {
     self.window.set_decorations(enabled);
+    
+    // On Windows, when switching to undecorated mode with resizable window,
+    // install the resize border subclass for proper edge resizing support.
+    // This must be done AFTER set_decorations because it may remove WS_THICKFRAME.
+    #[cfg(target_os = "windows")]
+    if !enabled && self.window.is_resizable() {
+      crate::win32_resize::install_resize_border(&self.window);
+    }
   }
 
   #[napi(getter)]
