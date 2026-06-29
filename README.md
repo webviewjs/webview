@@ -12,6 +12,7 @@ Robust cross-platform webview library for Node.js written in Rust. It is a nativ
 - Typed EventEmitter APIs for applications, windows, webviews, and system tray icons.
 - Shared browser contexts for profile, cookie, cache, and storage isolation.
 - Cross-platform system tray icons with menus and runtime updates.
+- Native desktop notifications with a browser-familiar API.
 - Native Windows, macOS, X11, Wayland, iOS, and Android window extensions.
 - IPC through `window.ipc.postMessage()`, with an optional alias such as `window.bindings`.
 - Fetch-compatible asynchronous custom protocols, including Hono routing without an HTTP server.
@@ -44,6 +45,7 @@ notes, and runnable examples.
 | [Webview](./api/webview)              | Embedded browser — navigation, cookies, script, bounds |
 | [WebContext](./api/web-context)       | Shared browser data, profiles, and automation          |
 | [System Tray](./api/tray)             | Tray icons, menus, updates, and pointer events         |
+| [Notification](./api/notification)    | Native desktop notifications and lifecycle events      |
 | [Menu](./api/menu)                    | Native menu bar construction                           |
 | [Types](./api/types)                  | Shared interfaces and enums                            |
 
@@ -150,6 +152,23 @@ app.whenReady().then(() => {
 
 See the [system tray reference](./api/tray) and
 [runnable tray example](./examples/tray.mjs).
+
+## Notifications
+
+```js
+import { Notification } from '@webviewjs/webview';
+
+const notification = new Notification('Build complete', {
+  body: 'The release executable is ready.',
+});
+
+notification.on('click', () => console.log('notification clicked'));
+notification.on('error', ({ error }) => console.error(error));
+```
+
+Notification permission is always `"granted"` for native applications. See the
+[notification reference](./api/notification) and
+[runnable notification example](./examples/notification.mjs).
 
 ## IPC and exposed functions
 

@@ -16,6 +16,8 @@ pub mod app;
 pub mod browser_window;
 #[cfg(not(target_os = "freebsd"))]
 pub mod menu;
+#[cfg(not(target_os = "freebsd"))]
+pub mod notifications;
 #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
 pub mod tray;
 #[cfg(target_os = "android")]

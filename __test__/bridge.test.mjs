@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
-import { Application, BrowserWindow, SerializationError, TrayIcon, WebContext, Webview } from '../index.js';
+import webviewjs from '../index.js';
+
+const { Application, BrowserWindow, Notification, SerializationError, TrayIcon, WebContext, Webview } = webviewjs;
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -234,10 +236,7 @@ test('BrowserWindow delegates supported platform behavior to Tao and Muda', asyn
   assert.match(windowSource, /WindowExtIOS/);
   assert.match(windowSource, /WindowBuilderExtIOS/);
   assert.match(windowSource, /pub fn get_wayland_surface/);
-  assert.match(
-    menuSource,
-    /menu[\s\S]*?\.init_for_gtk_window\(window\.gtk_window\(\), window\.default_vbox\(\)\)/,
-  );
+  assert.match(menuSource, /menu[\s\S]*?\.init_for_gtk_window\(window\.gtk_window\(\), window\.default_vbox\(\)\)/);
 });
 
 test('Application and TrayIcon expose the system tray API', () => {
@@ -263,6 +262,89 @@ test('Application and TrayIcon expose the system tray API', () => {
   ]) {
     assert.equal(typeof TrayIcon.prototype[method], 'function', method);
   }
+});
+
+test('Notification exposes browser-compatible permission and EventEmitter APIs', async () => {
+  assert.equal(Notification.permission, 'granted');
+  assert.equal(await Notification.requestPermission(), 'granted');
+
+  for (const method of [
+    'close',
+    'on',
+    'once',
+    'off',
+    'addListener',
+    'removeListener',
+    'removeAllListeners',
+    'listenerCount',
+    'listeners',
+    'rawListeners',
+    'emit',
+    'eventNames',
+  ]) {
+    assert.equal(typeof Notification.prototype[method], 'function', method);
+  }
+
+  for (const property of [
+    'title',
+    'body',
+    'icon',
+    'image',
+    'badge',
+    'tag',
+    'data',
+    'dir',
+    'lang',
+    'renotify',
+    'requireInteraction',
+    'persistent',
+    'actions',
+    'silent',
+    'timestamp',
+    'vibrate',
+    'onclick',
+    'onclose',
+    'onerror',
+    'onshow',
+  ]) {
+    assert.ok(Object.getOwnPropertyDescriptor(Notification.prototype, property), property);
+  }
+
+  assert.throws(
+    () =>
+      new Notification('Invalid actions', {
+        actions: [{ action: 'open', title: 'Open' }],
+      }),
+    /persistent/i,
+  );
+});
+
+test('native notifications are isolated and mobile-safe', async () => {
+  const source = await readFile(new URL('../src/notifications.rs', import.meta.url), 'utf8');
+  const library = await readFile(new URL('../src/lib.rs', import.meta.url), 'utf8');
+  const wrapper = await readFile(new URL('../index.js', import.meta.url), 'utf8');
+  const wrapperTypes = await readFile(new URL('../index.d.ts', import.meta.url), 'utf8');
+
+  assert.match(library, /pub mod notifications;/);
+  assert.match(source, /notify_rust::Notification/);
+  assert.match(source, /target_os = "android"/);
+  assert.match(source, /target_os = "ios"/);
+  assert.match(source, /NotificationEventPayload/);
+  assert.match(source, /callback\.unref\(&env\)/);
+  assert.match(source, /windows_notifications_enabled/);
+  assert.match(source, /Windows notifications are disabled in system settings/);
+  assert.match(source, /NativeNotificationAction/);
+  assert.match(source, /if !options\.persistent/);
+  assert.match(source, /notification\.action\(&action\.action, &action\.title\)/);
+  assert.doesNotMatch(source, /\.action\("default", ""\)/);
+  assert.match(source, /Some\(String::new\(\)\)/);
+  assert.match(source, /image::load_from_memory/);
+  assert.match(source, /notification\.image_data/);
+  assert.match(source, /TemporaryNotificationImage/);
+  assert.match(wrapper, /Buffer\.isBuffer\(options\.image\)/);
+  assert.match(wrapper, /imageData:/);
+  assert.match(wrapperTypes, /image\?: string \| Buffer/);
+  assert.match(wrapper, /\(error, payload\) =>/);
 });
 
 test('root-created wrappers expose explicit disposal', () => {

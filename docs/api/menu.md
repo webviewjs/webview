@@ -107,8 +107,8 @@ F5
 
 ## Platform notes
 
-| Platform    | Behaviour                                                                        |
-| ----------- | -------------------------------------------------------------------------------- |
-| **Windows** | Menu bar attached to each window's title bar                                     |
-| **macOS**   | Single app-level menu bar at the top of the screen                               |
+| Platform    | Behaviour                                                                       |
+| ----------- | ------------------------------------------------------------------------------- |
+| **Windows** | Menu bar attached to each window's title bar                                    |
+| **macOS**   | Single app-level menu bar at the top of the screen                              |
 | **Linux**   | Per-window GTK menu bar attached through Tao's GTK window and default container |

@@ -8,6 +8,79 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 
 export type ExposedTarget = Record<string, JsonValue | ((...args: any[]) => unknown | Promise<unknown>)>;
 
+export type NotificationPermission = 'granted';
+export type NotificationDirection = 'auto' | 'ltr' | 'rtl';
+export type NotificationEventName = 'click' | 'close' | 'error' | 'show';
+
+export interface NotificationAction {
+  action: string;
+  title: string;
+  icon?: string;
+}
+
+export interface NotificationOptions {
+  body?: string;
+  icon?: string;
+  image?: string | Buffer;
+  badge?: string;
+  tag?: string;
+  data?: unknown;
+  dir?: NotificationDirection;
+  lang?: string;
+  renotify?: boolean;
+  requireInteraction?: boolean;
+  persistent?: boolean;
+  actions?: NotificationAction[];
+  silent?: boolean;
+  timestamp?: number;
+  vibrate?: number | number[];
+}
+
+export interface NotificationEvent {
+  type: NotificationEventName;
+  target: Notification;
+  action?: string;
+  error?: Error;
+}
+
+export class Notification {
+  constructor(title: string, options?: NotificationOptions);
+  static readonly permission: NotificationPermission;
+  static requestPermission(): Promise<NotificationPermission>;
+  readonly title: string;
+  readonly body: string;
+  readonly icon: string;
+  readonly image: string | Buffer;
+  readonly badge: string;
+  readonly tag: string;
+  readonly data: unknown;
+  readonly dir: NotificationDirection;
+  readonly lang: string;
+  readonly renotify: boolean;
+  readonly requireInteraction: boolean;
+  readonly persistent: boolean;
+  readonly actions: NotificationAction[];
+  readonly silent: boolean;
+  readonly timestamp: number;
+  readonly vibrate: number | number[];
+  onclick: ((event: NotificationEvent) => void) | null;
+  onclose: ((event: NotificationEvent) => void) | null;
+  onerror: ((event: NotificationEvent) => void) | null;
+  onshow: ((event: NotificationEvent) => void) | null;
+  close(): void;
+  on(event: NotificationEventName, listener: (event: NotificationEvent) => void): this;
+  once(event: NotificationEventName, listener: (event: NotificationEvent) => void): this;
+  off(event: NotificationEventName, listener: (event: NotificationEvent) => void): this;
+  addListener(event: NotificationEventName, listener: (event: NotificationEvent) => void): this;
+  removeListener(event: NotificationEventName, listener: (event: NotificationEvent) => void): this;
+  removeAllListeners(event?: NotificationEventName): this;
+  listenerCount(event: NotificationEventName, listener?: (event: NotificationEvent) => void): number;
+  listeners(event: NotificationEventName): Function[];
+  rawListeners(event: NotificationEventName): Function[];
+  emit(event: NotificationEventName, eventObject: NotificationEvent): boolean;
+  eventNames(): Array<string | symbol>;
+}
+
 export interface ApplicationEventMap {
   'window-close-requested': import('./js-bindings').ApplicationEvent;
   'application-close-requested': import('./js-bindings').ApplicationEvent;

@@ -1,6 +1,261 @@
 const nativeBinding = require('./js-bindings.js');
 const { EventEmitter } = require('events');
 
+// ── Notifications ───────────────────────────────────────────────────────────
+
+class Notification {
+  #emitter = new EventEmitter();
+  #native;
+  #handlers = new Map();
+  #options;
+  #title;
+
+  constructor(title, options = {}) {
+    if (options.image !== undefined && typeof options.image !== 'string' && !Buffer.isBuffer(options.image)) {
+      throw new TypeError('Notification image must be a file path string or Buffer');
+    }
+
+    if (options.actions !== undefined && !Array.isArray(options.actions)) {
+      throw new TypeError('Notification actions must be an array');
+    }
+
+    const persistent = options.persistent ?? false;
+    const actions = (options.actions ?? []).map((action) => ({
+      action: String(action.action),
+      title: String(action.title),
+      icon: action.icon === undefined ? '' : String(action.icon),
+    }));
+
+    if (actions.length > 0 && !persistent) {
+      throw new TypeError('Notification actions require persistent: true');
+    }
+
+    this.#title = String(title);
+    this.#options = {
+      body: options.body ?? '',
+      icon: options.icon ?? '',
+      image: options.image ?? '',
+      badge: options.badge ?? '',
+      tag: options.tag ?? '',
+      data: options.data,
+      dir: options.dir ?? 'auto',
+      lang: options.lang ?? '',
+      renotify: options.renotify ?? false,
+      requireInteraction: options.requireInteraction ?? false,
+      persistent,
+      actions,
+      silent: options.silent ?? false,
+      timestamp: options.timestamp ?? Date.now(),
+      vibrate: options.vibrate ?? [],
+    };
+
+    this.#native = new nativeBinding.NativeNotification(
+      {
+        title: this.#title,
+        body: this.#options.body || undefined,
+        icon: this.#options.icon || undefined,
+        imagePath: typeof this.#options.image === 'string' ? this.#options.image || undefined : undefined,
+        imageData: Buffer.isBuffer(this.#options.image) ? this.#options.image : undefined,
+        requireInteraction: this.#options.requireInteraction,
+        persistent: this.#options.persistent,
+        actions: this.#options.actions.map(({ action, title, icon }) => ({
+          action,
+          title,
+          icon: icon || undefined,
+        })),
+      },
+      (error, payload) => {
+        if (error) {
+          this.#dispatch({ event: 'error', error: error.message });
+        } else {
+          this.#dispatch(payload);
+        }
+      },
+    );
+  }
+
+  static get permission() {
+    return 'granted';
+  }
+
+  static requestPermission() {
+    return Promise.resolve('granted');
+  }
+
+  #dispatch(payload) {
+    const type = payload.event;
+    const event = {
+      type,
+      target: this,
+      action: payload.action,
+      error: payload.error === undefined ? undefined : new Error(payload.error),
+    };
+    this.#emitter.emit(type, event);
+    this.#handlers.get(type)?.call(this, event);
+  }
+
+  close() {
+    this.#native.close();
+  }
+
+  on(event, listener) {
+    this.#emitter.on(event, listener);
+    return this;
+  }
+
+  once(event, listener) {
+    this.#emitter.once(event, listener);
+    return this;
+  }
+
+  off(event, listener) {
+    this.#emitter.off(event, listener);
+    return this;
+  }
+
+  addListener(event, listener) {
+    this.#emitter.addListener(event, listener);
+    return this;
+  }
+
+  removeListener(event, listener) {
+    this.#emitter.removeListener(event, listener);
+    return this;
+  }
+
+  removeAllListeners(event) {
+    this.#emitter.removeAllListeners(event);
+    return this;
+  }
+
+  listenerCount(event, listener) {
+    return this.#emitter.listenerCount(event, listener);
+  }
+
+  listeners(event) {
+    return this.#emitter.listeners(event);
+  }
+
+  rawListeners(event) {
+    return this.#emitter.rawListeners(event);
+  }
+
+  emit(event, ...args) {
+    return this.#emitter.emit(event, ...args);
+  }
+
+  eventNames() {
+    return this.#emitter.eventNames();
+  }
+
+  get title() {
+    return this.#title;
+  }
+
+  get body() {
+    return this.#options.body;
+  }
+
+  get icon() {
+    return this.#options.icon;
+  }
+
+  get image() {
+    return this.#options.image;
+  }
+
+  get badge() {
+    return this.#options.badge;
+  }
+
+  get tag() {
+    return this.#options.tag;
+  }
+
+  get data() {
+    return this.#options.data;
+  }
+
+  get dir() {
+    return this.#options.dir;
+  }
+
+  get lang() {
+    return this.#options.lang;
+  }
+
+  get renotify() {
+    return this.#options.renotify;
+  }
+
+  get requireInteraction() {
+    return this.#options.requireInteraction;
+  }
+
+  get persistent() {
+    return this.#options.persistent;
+  }
+
+  get actions() {
+    return this.#options.actions;
+  }
+
+  get silent() {
+    return this.#options.silent;
+  }
+
+  get timestamp() {
+    return this.#options.timestamp;
+  }
+
+  get vibrate() {
+    return this.#options.vibrate;
+  }
+
+  get onclick() {
+    return this.#handlers.get('click') ?? null;
+  }
+
+  set onclick(listener) {
+    this.#setHandler('click', listener);
+  }
+
+  get onclose() {
+    return this.#handlers.get('close') ?? null;
+  }
+
+  set onclose(listener) {
+    this.#setHandler('close', listener);
+  }
+
+  get onerror() {
+    return this.#handlers.get('error') ?? null;
+  }
+
+  set onerror(listener) {
+    this.#setHandler('error', listener);
+  }
+
+  get onshow() {
+    return this.#handlers.get('show') ?? null;
+  }
+
+  set onshow(listener) {
+    this.#setHandler('show', listener);
+  }
+
+  #setHandler(type, listener) {
+    if (listener == null) {
+      this.#handlers.delete(type);
+      return;
+    }
+    if (typeof listener !== 'function') {
+      throw new TypeError(`on${type} must be a function or null`);
+    }
+    this.#handlers.set(type, listener);
+  }
+}
+
 // Patch the native Application prototype with non-blocking run/stop.
 // A WeakMap stores each instance's timer so no extra class wrapper is needed.
 const _timers = new WeakMap();
@@ -464,10 +719,13 @@ nativeBinding.Webview.prototype.expose = function expose(name, target) {
 
 module.exports = nativeBinding;
 module.exports.SerializationError = SerializationError;
+module.exports.Notification = Notification;
 
 // Auto-generated exports by postbuild.js. Do not edit directly.
 module.exports.Application = nativeBinding.Application;
 module.exports.BrowserWindow = nativeBinding.BrowserWindow;
+module.exports.NativeNotification = nativeBinding.NativeNotification;
+module.exports.JsNotification = nativeBinding.JsNotification;
 module.exports.TrayIcon = nativeBinding.TrayIcon;
 module.exports.JsTrayIcon = nativeBinding.JsTrayIcon;
 module.exports.WebContext = nativeBinding.WebContext;
