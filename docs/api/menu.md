@@ -111,4 +111,4 @@ F5
 | ----------- | -------------------------------------------------------------------------------- |
 | **Windows** | Menu bar attached to each window's title bar                                     |
 | **macOS**   | Single app-level menu bar at the top of the screen                               |
-| **Linux**   | Menu events are not available — winit does not expose GTK handles needed by muda |
+| **Linux**   | Per-window GTK menu bar attached through Tao's GTK window and default container |

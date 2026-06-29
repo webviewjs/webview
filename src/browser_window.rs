@@ -86,12 +86,6 @@ impl Default for BrowserWindowOptions {
       windows_skip_taskbar: None,
       windows_class_name: None,
       windows_undecorated_shadow: None,
-      windows_system_backdrop: None,
-      windows_clip_children: None,
-      windows_border_color: None,
-      windows_title_background_color: None,
-      windows_title_text_color: None,
-      windows_corner_preference: None,
       macos_movable_by_window_background: None,
       macos_titlebar_transparent: None,
       macos_title_hidden: None,
@@ -100,10 +94,7 @@ impl Default for BrowserWindowOptions {
       macos_fullsize_content_view: None,
       macos_disallow_hidpi: None,
       macos_has_shadow: None,
-      macos_accepts_first_mouse: None,
       macos_tabbing_identifier: None,
-      macos_option_as_alt: None,
-      macos_borderless_game: None,
       x11_visual_id: None,
       x11_screen: None,
       x11_general_name: None,
@@ -112,7 +103,6 @@ impl Default for BrowserWindowOptions {
       x11_window_types: None,
       x11_base_width: None,
       x11_base_height: None,
-      x11_embed_parent_window: None,
       wayland_app_id: None,
       wayland_instance: None,
       ios_scale_factor: None,
@@ -120,7 +110,6 @@ impl Default for BrowserWindowOptions {
       ios_prefers_home_indicator_hidden: None,
       ios_deferred_system_gesture_edges: None,
       ios_prefers_status_bar_hidden: None,
-      ios_status_bar_style: None,
     }
   }
 }
@@ -270,9 +259,6 @@ impl BrowserWindow {
       if let Some(value) = options.windows_undecorated_shadow {
         builder = builder.with_undecorated_shadow(value);
       }
-      // windows_system_backdrop, windows_clip_children, windows_border_color,
-      // windows_title_background_color, windows_title_text_color, windows_corner_preference
-      // are not supported in tao 0.35 — silently ignored.
     }
 
     #[cfg(target_os = "macos")]
@@ -305,8 +291,6 @@ impl BrowserWindow {
       if let Some(value) = options.macos_tabbing_identifier.as_deref() {
         builder = builder.with_tabbing_identifier(value);
       }
-      // macos_accepts_first_mouse, macos_option_as_alt, macos_borderless_game
-      // are not supported in tao 0.35 — silently ignored.
     }
 
     #[cfg(target_os = "linux")]
@@ -353,7 +337,6 @@ impl BrowserWindow {
       if let (Some(width), Some(height)) = (options.x11_base_width, options.x11_base_height) {
         builder = builder.with_base_size(LogicalSize::new(width, height));
       }
-      // x11_embed_parent_window not available in tao 0.35 — silently ignored.
     }
 
     #[cfg(target_os = "linux")]
@@ -363,6 +346,34 @@ impl BrowserWindow {
         general,
         options.wayland_instance.as_deref().unwrap_or(general),
       );
+    }
+
+    #[cfg(target_os = "ios")]
+    {
+      use tao::platform::ios::{ScreenEdge, ValidOrientations, WindowBuilderExtIOS};
+
+      if let Some(value) = options.ios_scale_factor {
+        builder = builder.with_scale_factor(value);
+      }
+      if let Some(value) = options.ios_valid_orientations {
+        let orientations = match value {
+          IosValidOrientations::LandscapeAndPortrait => ValidOrientations::LandscapeAndPortrait,
+          IosValidOrientations::Landscape => ValidOrientations::Landscape,
+          IosValidOrientations::Portrait => ValidOrientations::Portrait,
+        };
+        builder = builder.with_valid_orientations(orientations);
+      }
+      if let Some(value) = options.ios_prefers_home_indicator_hidden {
+        builder = builder.with_prefers_home_indicator_hidden(value);
+      }
+      if let Some(value) = options.ios_deferred_system_gesture_edges {
+        builder = builder.with_preferred_screen_edges_deferring_system_gestures(
+          ScreenEdge::from_bits_truncate(value),
+        );
+      }
+      if let Some(value) = options.ios_prefers_status_bar_hidden {
+        builder = builder.with_prefers_status_bar_hidden(value);
+      }
     }
 
     let window = builder.build(event_loop).map_err(|e| {
@@ -899,26 +910,6 @@ impl BrowserWindow {
     let _ = shadow;
   }
 
-  /// No-op: tao 0.35 does not expose system backdrop (Mica/Acrylic) APIs.
-  #[napi]
-  pub fn set_system_backdrop(&self, _backdrop: WindowsSystemBackdrop) {}
-
-  /// No-op: tao 0.35 does not expose window border color APIs.
-  #[napi]
-  pub fn set_border_color(&self, _r: Option<u8>, _g: Option<u8>, _b: Option<u8>) {}
-
-  /// No-op: tao 0.35 does not expose title background color APIs.
-  #[napi]
-  pub fn set_title_background_color(&self, _r: Option<u8>, _g: Option<u8>, _b: Option<u8>) {}
-
-  /// No-op: tao 0.35 does not expose title text color APIs.
-  #[napi]
-  pub fn set_title_text_color(&self, _r: u8, _g: u8, _b: u8) {}
-
-  /// No-op: tao 0.35 does not expose corner preference APIs.
-  #[napi]
-  pub fn set_corner_preference(&self, _preference: WindowsCornerPreference) {}
-
   #[napi]
   pub fn get_native_handle_any_thread(&self) -> u64 {
     #[cfg(target_os = "windows")]
@@ -1060,28 +1051,8 @@ impl BrowserWindow {
     let _ = edited;
   }
 
-  /// No-op: tao 0.35 does not expose option-as-alt runtime setter.
   #[napi]
-  pub fn set_option_as_alt(&self, _value: MacosOptionAsAlt) {}
-
-  /// No-op: tao 0.35 does not expose option-as-alt getter.
-  #[napi]
-  pub fn option_as_alt(&self) -> MacosOptionAsAlt {
-    MacosOptionAsAlt::None
-  }
-
-  /// No-op: tao 0.35 does not expose borderless-game mode.
-  #[napi]
-  pub fn set_borderless_game(&self, _value: bool) {}
-
-  /// No-op: tao 0.35 does not expose borderless-game mode.
-  #[napi]
-  pub fn is_borderless_game(&self) -> bool {
-    false
-  }
-
-  #[napi]
-  pub fn get_wayland_xdg_toplevel(&self) -> u64 {
+  pub fn get_wayland_surface(&self) -> u64 {
     #[cfg(target_os = "linux")]
     {
       use tao::platform::unix::WindowExtUnix;
@@ -1091,36 +1062,69 @@ impl BrowserWindow {
     0
   }
 
-  // iOS platform methods — tao does not support iOS, all are no-ops.
   #[napi]
-  pub fn set_ios_scale_factor(&self, _value: f64) {}
+  pub fn set_ios_scale_factor(&self, value: f64) {
+    #[cfg(target_os = "ios")]
+    {
+      use tao::platform::ios::WindowExtIOS;
+      self.window.set_scale_factor(value);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
 
   #[napi]
-  pub fn set_valid_orientations(&self, _value: IosValidOrientations) {}
+  pub fn set_valid_orientations(&self, value: IosValidOrientations) {
+    #[cfg(target_os = "ios")]
+    {
+      use tao::platform::ios::{ValidOrientations, WindowExtIOS};
+      let value = match value {
+        IosValidOrientations::LandscapeAndPortrait => ValidOrientations::LandscapeAndPortrait,
+        IosValidOrientations::Landscape => ValidOrientations::Landscape,
+        IosValidOrientations::Portrait => ValidOrientations::Portrait,
+      };
+      self.window.set_valid_orientations(value);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
 
   #[napi]
-  pub fn set_prefers_home_indicator_hidden(&self, _value: bool) {}
+  pub fn set_prefers_home_indicator_hidden(&self, value: bool) {
+    #[cfg(target_os = "ios")]
+    {
+      use tao::platform::ios::WindowExtIOS;
+      self.window.set_prefers_home_indicator_hidden(value);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
 
   #[napi]
-  pub fn set_preferred_screen_edges_deferring_system_gestures(&self, _edges: u8) {}
+  pub fn set_preferred_screen_edges_deferring_system_gestures(&self, edges: u8) {
+    #[cfg(target_os = "ios")]
+    {
+      use tao::platform::ios::{ScreenEdge, WindowExtIOS};
+      self
+        .window
+        .set_preferred_screen_edges_deferring_system_gestures(ScreenEdge::from_bits_truncate(
+          edges,
+        ));
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = edges;
+  }
 
   #[napi]
-  pub fn set_prefers_status_bar_hidden(&self, _value: bool) {}
-
-  #[napi]
-  pub fn set_preferred_status_bar_style(&self, _value: IosStatusBarStyle) {}
-
-  #[napi]
-  pub fn recognize_pinch_gesture(&self, _value: bool) {}
-
-  #[napi]
-  pub fn recognize_pan_gesture(&self, _value: bool, _minimum_touches: u8, _maximum_touches: u8) {}
-
-  #[napi]
-  pub fn recognize_doubletap_gesture(&self, _value: bool) {}
-
-  #[napi]
-  pub fn recognize_rotation_gesture(&self, _value: bool) {}
+  pub fn set_prefers_status_bar_hidden(&self, value: bool) {
+    #[cfg(target_os = "ios")]
+    {
+      use tao::platform::ios::WindowExtIOS;
+      self.window.set_prefers_status_bar_hidden(value);
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = value;
+  }
 
   #[napi]
   pub fn android_content_rect(&self) -> AndroidContentRect {
@@ -1161,7 +1165,23 @@ impl BrowserWindow {
   }
 
   #[napi]
-  pub fn set_progress_bar(&self, _state: JsProgressBar) {}
+  pub fn set_progress_bar(&self, state: JsProgressBar) {
+    use tao::window::{ProgressBarState, ProgressState};
+
+    let progress = state.progress.map(u64::from);
+    let progress_state = state.state.map(|state| match state {
+      JsProgressBarState::None => ProgressState::None,
+      JsProgressBarState::Normal => ProgressState::Normal,
+      JsProgressBarState::Indeterminate => ProgressState::Indeterminate,
+      JsProgressBarState::Paused => ProgressState::Paused,
+      JsProgressBarState::Error => ProgressState::Error,
+    });
+    self.window.set_progress_bar(ProgressBarState {
+      state: progress_state,
+      progress,
+      desktop_filename: None,
+    });
+  }
 
   #[napi]
   pub fn set_maximized(&self, value: bool) {
@@ -1198,8 +1218,8 @@ impl BrowserWindow {
   }
 
   #[napi]
-  pub fn get_monitor_from_point(&self, _x: f64, _y: f64) -> Option<Monitor> {
-    None
+  pub fn get_monitor_from_point(&self, x: f64, y: f64) -> Option<Monitor> {
+    self.window.monitor_from_point(x, y).map(monitor_to_js)
   }
 
   #[napi]
@@ -1367,7 +1387,12 @@ impl BrowserWindow {
       use tao::platform::windows::WindowExtWindows;
       let _ = self.window.set_skip_taskbar(skip);
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
+    {
+      use tao::platform::unix::WindowExtUnix;
+      let _ = self.window.set_skip_taskbar(skip);
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     let _ = skip;
   }
 

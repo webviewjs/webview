@@ -1,6 +1,6 @@
 # Event Loop
 
-WebviewJS uses **winit**'s non-blocking `pump_events()` internally so the GUI never blocks Node.js's event loop.
+WebviewJS uses **Tao**'s non-blocking `pump_events()` integration so the GUI never blocks Node.js's event loop.
 
 ## How it works
 
@@ -19,8 +19,8 @@ Because this runs inside a Node.js timer, all Node APIs (file I/O, network, chil
 
 ## Application readiness
 
-`app.whenReady()` starts the event pump and resolves when it reaches winit's
-first native `resumed()` callback:
+`app.whenReady()` starts the event pump and resolves when Tao emits the first
+native `Resumed` event:
 
 ```js
 app.whenReady().then(() => {

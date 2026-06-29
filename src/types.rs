@@ -9,31 +9,6 @@ pub enum WindowCommand {
 }
 
 #[napi]
-pub enum WindowsSystemBackdrop {
-  Auto,
-  None,
-  MainWindow,
-  TransientWindow,
-  TabbedWindow,
-}
-
-#[napi]
-pub enum WindowsCornerPreference {
-  Default,
-  DoNotRound,
-  Round,
-  RoundSmall,
-}
-
-#[napi]
-pub enum MacosOptionAsAlt {
-  OnlyLeft,
-  OnlyRight,
-  Both,
-  None,
-}
-
-#[napi]
 pub enum X11WindowType {
   Desktop,
   Dock,
@@ -56,13 +31,6 @@ pub enum IosValidOrientations {
   LandscapeAndPortrait,
   Landscape,
   Portrait,
-}
-
-#[napi]
-pub enum IosStatusBarStyle {
-  Default,
-  LightContent,
-  DarkContent,
 }
 
 #[napi(object)]
@@ -371,12 +339,6 @@ pub struct BrowserWindowOptions {
   pub windows_skip_taskbar: Option<bool>,
   pub windows_class_name: Option<String>,
   pub windows_undecorated_shadow: Option<bool>,
-  pub windows_system_backdrop: Option<WindowsSystemBackdrop>,
-  pub windows_clip_children: Option<bool>,
-  pub windows_border_color: Option<u32>,
-  pub windows_title_background_color: Option<u32>,
-  pub windows_title_text_color: Option<u32>,
-  pub windows_corner_preference: Option<WindowsCornerPreference>,
   pub macos_movable_by_window_background: Option<bool>,
   pub macos_titlebar_transparent: Option<bool>,
   pub macos_title_hidden: Option<bool>,
@@ -385,10 +347,7 @@ pub struct BrowserWindowOptions {
   pub macos_fullsize_content_view: Option<bool>,
   pub macos_disallow_hidpi: Option<bool>,
   pub macos_has_shadow: Option<bool>,
-  pub macos_accepts_first_mouse: Option<bool>,
   pub macos_tabbing_identifier: Option<String>,
-  pub macos_option_as_alt: Option<MacosOptionAsAlt>,
-  pub macos_borderless_game: Option<bool>,
   pub x11_visual_id: Option<u32>,
   pub x11_screen: Option<i32>,
   pub x11_general_name: Option<String>,
@@ -397,7 +356,6 @@ pub struct BrowserWindowOptions {
   pub x11_window_types: Option<Vec<X11WindowType>>,
   pub x11_base_width: Option<f64>,
   pub x11_base_height: Option<f64>,
-  pub x11_embed_parent_window: Option<u32>,
   pub wayland_app_id: Option<String>,
   pub wayland_instance: Option<String>,
   pub ios_scale_factor: Option<f64>,
@@ -405,7 +363,6 @@ pub struct BrowserWindowOptions {
   pub ios_prefers_home_indicator_hidden: Option<bool>,
   pub ios_deferred_system_gesture_edges: Option<u8>,
   pub ios_prefers_status_bar_hidden: Option<bool>,
-  pub ios_status_bar_style: Option<IosStatusBarStyle>,
 }
 
 #[napi(object)]

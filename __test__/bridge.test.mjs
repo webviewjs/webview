@@ -134,14 +134,19 @@ test('BrowserWindow exposes the complete Windows extension surface', () => {
     'removeTaskbarIcon',
     'setSkipTaskbar',
     'setUndecoratedShadow',
+    'getNativeHandleAnyThread',
+  ]) {
+    assert.equal(typeof BrowserWindow.prototype[method], 'function', method);
+  }
+
+  for (const method of [
     'setSystemBackdrop',
     'setBorderColor',
     'setTitleBackgroundColor',
     'setTitleTextColor',
     'setCornerPreference',
-    'getNativeHandleAnyThread',
   ]) {
-    assert.equal(typeof BrowserWindow.prototype[method], 'function', method);
+    assert.equal(BrowserWindow.prototype[method], undefined, method);
   }
 });
 
@@ -159,25 +164,31 @@ test('BrowserWindow exposes cross-platform extension methods', () => {
     'numTabs',
     'isDocumentEdited',
     'setDocumentEdited',
-    'setOptionAsAlt',
-    'optionAsAlt',
-    'setBorderlessGame',
-    'isBorderlessGame',
-    'getWaylandXdgToplevel',
+    'getWaylandSurface',
     'setIosScaleFactor',
     'setValidOrientations',
     'setPrefersHomeIndicatorHidden',
     'setPreferredScreenEdgesDeferringSystemGestures',
     'setPrefersStatusBarHidden',
+    'androidContentRect',
+    'androidConfig',
+  ]) {
+    assert.equal(typeof BrowserWindow.prototype[method], 'function', method);
+  }
+
+  for (const method of [
+    'setOptionAsAlt',
+    'optionAsAlt',
+    'setBorderlessGame',
+    'isBorderlessGame',
+    'getWaylandXdgToplevel',
     'setPreferredStatusBarStyle',
     'recognizePinchGesture',
     'recognizePanGesture',
     'recognizeDoubletapGesture',
     'recognizeRotationGesture',
-    'androidContentRect',
-    'androidConfig',
   ]) {
-    assert.equal(typeof BrowserWindow.prototype[method], 'function', method);
+    assert.equal(BrowserWindow.prototype[method], undefined, method);
   }
 });
 
@@ -186,10 +197,8 @@ test('generated BrowserWindowOptions include platform creation attributes', asyn
 
   for (const option of [
     'windowsTaskbarIcon',
-    'windowsSystemBackdrop',
     'macosMovableByWindowBackground',
     'macosTitlebarTransparent',
-    'macosOptionAsAlt',
     'x11VisualId',
     'x11WindowTypes',
     'waylandAppId',
@@ -198,6 +207,37 @@ test('generated BrowserWindowOptions include platform creation attributes', asyn
   ]) {
     assert.match(declarations, new RegExp(`\\b${option}\\??:`), option);
   }
+
+  for (const option of [
+    'windowsSystemBackdrop',
+    'windowsClipChildren',
+    'windowsBorderColor',
+    'windowsTitleBackgroundColor',
+    'windowsTitleTextColor',
+    'windowsCornerPreference',
+    'macosAcceptsFirstMouse',
+    'macosOptionAsAlt',
+    'macosBorderlessGame',
+    'x11EmbedParentWindow',
+    'iosStatusBarStyle',
+  ]) {
+    assert.doesNotMatch(declarations, new RegExp(`\\b${option}\\??:`), option);
+  }
+});
+
+test('BrowserWindow delegates supported platform behavior to Tao and Muda', async () => {
+  const windowSource = await readFile(new URL('../src/browser_window.rs', import.meta.url), 'utf8');
+  const menuSource = await readFile(new URL('../src/menu.rs', import.meta.url), 'utf8');
+
+  assert.match(windowSource, /self\.window\.set_progress_bar\(/);
+  assert.match(windowSource, /self\.window\.monitor_from_point\(x, y\)/);
+  assert.match(windowSource, /WindowExtIOS/);
+  assert.match(windowSource, /WindowBuilderExtIOS/);
+  assert.match(windowSource, /pub fn get_wayland_surface/);
+  assert.match(
+    menuSource,
+    /menu[\s\S]*?\.init_for_gtk_window\(window\.gtk_window\(\), window\.default_vbox\(\)\)/,
+  );
 });
 
 test('Application and TrayIcon expose the system tray API', () => {

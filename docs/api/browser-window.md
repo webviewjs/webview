@@ -9,8 +9,9 @@ interface BrowserWindowOptions {
   title?: string; // default: "WebviewJS"
   width?: number; // default: 800 (physical px)
   height?: number; // default: 600 (physical px)
-  x?: number; // initial left position (logical px)
-  y?: number; // initial top position (logical px)
+  x?: number; // initial left position
+  y?: number; // initial top position
+  logical?: boolean; // interpret size and position as logical pixels
   resizable?: boolean; // default: true
   visible?: boolean; // default: true
   decorations?: boolean; // default: true (title bar + border)
@@ -53,9 +54,9 @@ win.setTitle(title: string): void
 win.setVisible(visible: boolean): void
 win.show(): void
 win.hide(): void
-win.minimize(): void
-win.maximize(): void
-win.unmaximize(): void
+win.close(): void
+win.setMinimized(value: boolean): void
+win.setMaximized(value: boolean): void
 win.setFullscreen(type: FullscreenType | null): void
 win.focus(): void
 win.requestRedraw(): void
@@ -64,16 +65,15 @@ win.requestRedraw(): void
 ### Size & position
 
 ```ts
-// Inner (content) size in logical pixels
-win.getSize(): Dimensions                        // { width, height }
-win.getOuterSize(): Dimensions                   // includes decorations
-win.setSize(width: number, height: number): void
-win.setMinSize(width: number | null, height: number | null): void
-win.setMaxSize(width: number | null, height: number | null): void
+// Pass true for logical pixels. The default is physical pixels.
+win.getInnerSize(logical?: boolean): Dimensions
+win.getOuterSize(logical?: boolean): Dimensions
+win.setSize(width: number, height: number, logical?: boolean): Dimensions | null
+win.setMinSize(width: number, height: number, logical?: boolean): void
+win.setMaxSize(width: number, height: number, logical?: boolean): void
 
-// Position of the outer window in physical pixels
-win.getPosition(): Position | null               // { x, y }
-win.setPosition(x: number, y: number): void
+win.getPosition(logical?: boolean): Position
+win.setPosition(x: number, y: number, logical?: boolean): void
 win.center(): void                               // center on current monitor
 
 win.scaleFactor(): number                        // device-pixel ratio
@@ -106,11 +106,10 @@ win.setMinimizable(minimizable: boolean): void
 win.setMaximizable(maximizable: boolean): void
 win.setClosable(closable: boolean): void
 win.setAlwaysOnTop(always: boolean): void
+win.setAlwaysOnBottom(always: boolean): void
 win.setContentProtection(enabled: boolean): void
-win.setVisibleOnAllWorkspaces(visible: boolean): void
 win.setDecorations(decorated: boolean): void
-win.setWindowLevel(level: WindowLevel): void
-win.setSkipTaskbar(skip: boolean): void         // Windows only
+win.setSkipTaskbar(skip: boolean): void         // Windows and Linux
 ```
 
 ### Icon & progress
@@ -122,8 +121,8 @@ win.setProgressBar(progress: JsProgressBar): void
 
 ### Windows extensions
 
-These methods call winit's `WindowExtWindows` API on Windows and are no-ops on
-other platforms:
+These methods call Tao's `WindowExtWindows` API on Windows and return neutral
+results or do nothing on other platforms:
 
 Creation options expose the matching native attributes:
 
@@ -135,12 +134,6 @@ windowsDragAndDrop?: boolean
 windowsSkipTaskbar?: boolean
 windowsClassName?: string
 windowsUndecoratedShadow?: boolean
-windowsSystemBackdrop?: WindowsSystemBackdrop
-windowsClipChildren?: boolean
-windowsBorderColor?: number // 0xRRGGBB
-windowsTitleBackgroundColor?: number // 0xRRGGBB
-windowsTitleTextColor?: number // 0xRRGGBB
-windowsCornerPreference?: WindowsCornerPreference
 ```
 
 Use the existing `menu` option instead of a raw Win32 `HMENU`.
@@ -150,16 +143,10 @@ win.setEnable(enabled: boolean): void
 win.setTaskbarIcon(data: Buffer, width?: number, height?: number): void
 win.removeTaskbarIcon(): void
 win.setUndecoratedShadow(shadow: boolean): void
-win.setSystemBackdrop(backdrop: WindowsSystemBackdrop): void
-win.setBorderColor(r?: number, g?: number, b?: number): void
-win.setTitleBackgroundColor(r?: number, g?: number, b?: number): void
-win.setTitleTextColor(r: number, g: number, b: number): void
-win.setCornerPreference(preference: WindowsCornerPreference): void
 win.getNativeHandleAnyThread(): bigint
 ```
 
-Taskbar icon input follows `setWindowIcon`. Omit all color components to
-restore system border or title-background behavior.
+Taskbar icon input follows `setWindowIcon`.
 
 ### macOS creation options
 
@@ -172,10 +159,7 @@ macosTitlebarButtonsHidden?: boolean
 macosFullsizeContentView?: boolean
 macosDisallowHidpi?: boolean
 macosHasShadow?: boolean
-macosAcceptsFirstMouse?: boolean
 macosTabbingIdentifier?: string
-macosOptionAsAlt?: MacosOptionAsAlt
-macosBorderlessGame?: boolean
 ```
 
 ### macOS runtime extensions
@@ -193,10 +177,6 @@ win.selectTabAtIndex(index: number): void
 win.numTabs(): number
 win.isDocumentEdited(): boolean
 win.setDocumentEdited(edited: boolean): void
-win.setOptionAsAlt(value: MacosOptionAsAlt): void
-win.optionAsAlt(): MacosOptionAsAlt
-win.setBorderlessGame(value: boolean): void
-win.isBorderlessGame(): boolean
 ```
 
 ### Linux creation options
@@ -212,7 +192,6 @@ x11OverrideRedirect?: boolean
 x11WindowTypes?: X11WindowType[]
 x11BaseWidth?: number
 x11BaseHeight?: number
-x11EmbedParentWindow?: number
 ```
 
 Wayland options:
@@ -222,19 +201,18 @@ waylandAppId?: string
 waylandInstance?: string
 ```
 
-`win.getWaylandXdgToplevel()` returns the native pointer as a bigint, or `0n`
-when the window is not using Wayland.
+`win.getWaylandSurface()` returns Tao's native Wayland surface pointer as a
+bigint, or `0n` when the window is not using Wayland.
 
 ### iOS options and runtime extensions
 
 Creation options use the `ios` prefix: `iosScaleFactor`,
 `iosValidOrientations`, `iosPrefersHomeIndicatorHidden`,
-`iosDeferredSystemGestureEdges`, `iosPrefersStatusBarHidden`, and
-`iosStatusBarStyle`.
+`iosDeferredSystemGestureEdges`, and `iosPrefersStatusBarHidden`.
 
 Runtime methods expose scale factor, valid orientations, home-indicator and
-status-bar preferences, deferred system-gesture edges, and pinch, pan,
-double-tap, and rotation gesture recognition.
+status-bar preferences, and deferred system-gesture edges through Tao's iOS
+extensions.
 
 Screen edges use a bitmask: top `1`, left `2`, bottom `4`, right `8`.
 
@@ -261,16 +239,13 @@ interface JsProgressBar {
 ### Theme
 
 ```ts
-win.setTheme(theme: Theme | null): void   // 'Light' | 'Dark' | null (system)
+win.setTheme(theme: Theme): void
 ```
 
 ### Menu
 
-```ts
-win.setMenu(options: MenuOptions | null): void
-```
-
-See [Menus guide](../guides/menus).
+Set `menu` in `BrowserWindowOptions` for a per-window menu. Set `showMenu` to
+use the application menu. See the [Menus guide](../guides/menus).
 
 ### Custom protocols
 

@@ -1,8 +1,7 @@
 //! Platform behaviour:
 //!  - **Windows**: per-window menu bar attached via Win32 HWND.
 //!  - **macOS**: app-level NSApplication menu bar (no per-window attachment).
-//!  - **Linux**: GTK integration is not possible through winit's raw handles,
-//!    so menus are a no-op; menu events are never fired on Linux.
+//!  - **Linux**: per-window GTK menu bar attached through Tao's GTK handles.
 //!  - **Android**: menu system is completely disabled.
 
 #[cfg(not(target_os = "android"))]
@@ -87,8 +86,14 @@ pub fn init_menu_for_window(menu: &Menu, window: &tao::window::Window) -> Result
   // macOS: menus are app-level — init_for_nsapp is called in auto_init_platform.
   #[cfg(target_os = "macos")]
   let _ = (menu, window);
-  // Linux: winit does not expose GTK handles so menus can't be attached.
-  #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+  #[cfg(target_os = "linux")]
+  {
+    use tao::platform::unix::WindowExtUnix;
+    menu
+      .init_for_gtk_window(window.gtk_window(), window.default_vbox())
+      .map_err(menu_err)?;
+  }
+  #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
   let _ = (menu, window);
 
   Ok(())

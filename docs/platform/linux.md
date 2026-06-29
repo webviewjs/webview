@@ -3,11 +3,10 @@
 ## X11 and Wayland window attributes
 
 X11 creation options expose visual and screen IDs, `WM_CLASS` names,
-override-redirect, `_NET_WM_WINDOW_TYPE`, base size, and embedding into a
-parent X11 window.
+override-redirect, `_NET_WM_WINDOW_TYPE`, and base size.
 
 Wayland creation options expose the application ID and instance name.
-`getWaylandXdgToplevel()` returns the native `xdg_toplevel` pointer for
+`getWaylandSurface()` returns Tao's native Wayland surface pointer for
 interoperability, or `0n` when the window uses X11.
 
 See [BrowserWindow platform APIs](../api/browser-window#linux-creation-options).
@@ -29,19 +28,16 @@ sudo pacman -S webkit2gtk-4.1 xdotool
 
 ## Display server support
 
-WebviewJS supports both **X11** and **Wayland** out of the box. winit 0.29 compiles both backends by default — the correct one is selected at runtime based on the `$WAYLAND_DISPLAY` / `$DISPLAY` environment variables.
+WebviewJS supports both **X11** and **Wayland** through Tao. The active backend
+is selected at runtime from the available display environment.
 
 No `Cargo.toml` changes or feature flags are needed.
 
-## Menu limitations
+## Menus
 
-Native menu bars are **not available** on Linux. The muda menu library requires GTK window handles that winit 0.29 does not expose. As a result:
-
-- `app.setMenu()` and `win.setMenu()` are silently ignored.
-- `CustomMenuClick` events are never fired.
-- There is no visible menu bar in the window.
-
-**Workaround**: implement your own in-page menu using HTML/CSS, and communicate with Node via IPC.
+Native menu bars use Muda's GTK integration. WebviewJS obtains the GTK window
+and default vertical box directly from Tao, so `app.setMenu()`, window menu
+options, and `CustomMenuClick` events work on Linux.
 
 ## Wayland-specific notes
 
@@ -51,7 +47,8 @@ Native menu bars are **not available** on Linux. The muda menu library requires 
 
 ## `setSkipTaskbar`
 
-This is a **no-op** on Linux; the behaviour depends on the window manager and cannot be reliably set from within the app.
+This calls Tao's GTK implementation. The final behavior remains subject to the
+desktop environment and window manager.
 
 ## Tested environments
 

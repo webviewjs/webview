@@ -132,8 +132,8 @@ impl JsWebview {
     //
     // On macOS we always use build_as_child (adding as an NSView subview instead
     // of replacing the NSWindow's contentView).  wry's non-child path calls
-    // setContentView which breaks winit's invariant that the content view is
-    // always its own WinitView subclass, crashing on window focus change.
+    // setContentView which breaks Tao's invariant that the content view remains
+    // its own native view subclass, crashing on window focus change.
     // So on macOS a full-window webview also needs explicit bounds.
     let is_child = options.child.unwrap_or(false);
     let _ = is_child; // used on non-macOS paths below
@@ -498,8 +498,7 @@ impl JsWebview {
     };
 
     // On macOS we always use build_as_child so the webview becomes a subview of
-    // winit's WinitView rather than replacing the NSWindow contentView.
-    // See: https://github.com/tauri-apps/wry/blob/dev/examples/winit.rs
+    // Tao's native content view rather than replacing the NSWindow contentView.
     #[cfg(target_os = "macos")]
     let built = webview.build_as_child(window).map_err(err)?;
     #[cfg(not(target_os = "macos"))]

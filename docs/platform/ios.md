@@ -2,10 +2,10 @@
 
 `BrowserWindowOptions` supports initial content scale, valid orientations,
 home-indicator visibility, deferred system-gesture edges, status-bar
-visibility, and status-bar style.
+visibility.
 
-The same settings can be changed at runtime. Gesture-recognition methods
-enable pinch, pan, double-tap, and rotation events in winit.
+The same settings can be changed at runtime through Tao's iOS window
+extensions.
 
 Screen-edge values are a bitmask: top `1`, left `2`, bottom `4`, and right
 `8`.

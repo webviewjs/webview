@@ -4,7 +4,7 @@
 pub mod types;
 pub mod version;
 
-// FreeBSD x64 is a stub-only target: the real GUI stack (wry/winit) is not
+// FreeBSD x64 is a stub-only target: the real GUI stack (Wry/Tao) is not
 // compiled.  Every exported API throws a clear runtime error on that platform.
 #[cfg(target_os = "freebsd")]
 mod freebsd_stub;

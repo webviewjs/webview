@@ -20,7 +20,9 @@ The menu bar is attached to each window's title bar (standard Win32 behaviour). 
 
 ## DPI / HiDPI
 
-winit advertises the monitor's scale factor and scales the window accordingly. Use `win.scaleFactor()` to get the current DPI ratio, and logical pixels when positioning child elements.
+Tao reports the monitor's scale factor and scales the window accordingly. Use
+`win.scaleFactor()` to get the current DPI ratio, and logical pixels when
+positioning child elements.
 
 ## Taskbar integration
 
@@ -32,14 +34,9 @@ win.setSkipTaskbar(true);
 win.setProgressBar({ state: ProgressBarState.Normal, progress: 42 });
 ```
 
-The complete winit Windows extension surface is exposed on `BrowserWindow`,
-including taskbar icons, system backdrops, title and border colors, corner
-preferences, undecorated shadows, enabled state, and the any-thread native
-handle. See [Windows extensions](../api/browser-window#windows-extensions).
-
-The [acrylic example](../../examples/acrylic.mjs) uses
-`WindowsSystemBackdrop.TransientWindow` with a transparent native window and
-transparent webview. System backdrops require Windows 11 build 22523 or newer.
+WebviewJS exposes Tao's Windows window extensions for taskbar icons,
+skip-taskbar state, undecorated shadows, enabled state, and native handles. See
+[Windows extensions](../api/browser-window#windows-extensions).
 
 ## Content protection
 
@@ -54,4 +51,5 @@ win.setContentProtection(true);
 - In wry 0.53, a `file:` page that calls `window.ipc.postMessage()` can abort because WebView2 reports the page source as a `file:` URI and wry attempts to convert it to an HTTP request URI. Use an `app://` custom protocol for pages that use IPC or `webview.expose()`.
 - `setIgnoreCursorEvents(true)` (click-through) is supported on Windows via the `WS_EX_TRANSPARENT` extended window style.
 - Window transparency requires `transparent: true` at creation time; it cannot be toggled at runtime.
-- There is no `blur()` / un-focus API in winit 0.29; keyboard focus can be given to the webview via `webview.focus()`.
+- Tao does not expose a window blur or unfocus API. Keyboard focus can be given
+  to the webview via `webview.focus()`.
