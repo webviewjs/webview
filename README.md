@@ -2,7 +2,7 @@
 
 ![https://github.com/webviewjs/webview/actions](https://github.com/webviewjs/webview/workflows/CI/badge.svg)
 
-Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [winit](https://github.com/rust-windowing/winit) and [wry](https://github.com/tauri-apps/wry) allowing you to easily manage cross platform windowing and webview.
+Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [tao](https://github.com/tauri-apps/tao) and [wry](https://github.com/tauri-apps/wry) allowing you to easily manage cross platform windowing and webview.
 
 ## Highlights
 
@@ -29,16 +29,16 @@ notes, and runnable examples.
 
 ## Getting started
 
-|                                                        |                                 |
-| ------------------------------------------------------ | ------------------------------- |
+|                                                |                                 |
+| ---------------------------------------------- | ------------------------------- |
 | [Installation](./getting-started/installation) | System requirements and setup   |
 | [Quick Start](./getting-started/quick-start)   | Your first window in minutes    |
 | [Event Loop](./getting-started/event-loop)     | How the non-blocking pump works |
 
 ## API reference
 
-|                                               |                                                        |
-| --------------------------------------------- | ------------------------------------------------------ |
+|                                       |                                                        |
+| ------------------------------------- | ------------------------------------------------------ |
 | [Application](./api/application)      | Root object — event loop, windows, menus               |
 | [BrowserWindow](./api/browser-window) | OS window, size, position, cursor, decorations         |
 | [Webview](./api/webview)              | Embedded browser — navigation, cookies, script, bounds |
@@ -49,8 +49,8 @@ notes, and runnable examples.
 
 ## Guides
 
-|                                                               |                                                 |
-| ------------------------------------------------------------- | ----------------------------------------------- |
+|                                                       |                                                 |
+| ----------------------------------------------------- | ----------------------------------------------- |
 | [Building Executables](./guides/building-executables) | Compile to `.exe` / binary with node, deno, bun |
 | [IPC Messaging](./guides/ipc-messaging)               | Page ↔ Node communication                       |
 | [Menus](./guides/menus)                               | Building menu bars with roles and accelerators  |
@@ -60,14 +60,13 @@ notes, and runnable examples.
 
 ## Platform notes
 
-|                                       |                                           |
-| ------------------------------------- | ----------------------------------------- |
+|                               |                                           |
+| ----------------------------- | ----------------------------------------- |
 | [Windows](./platform/windows) | WebView2, taskbar, DPI                    |
 | [macOS](./platform/macos)     | WebKit, main-thread requirement, app menu |
 | [Linux](./platform/linux)     | WebKitGTK, Wayland/X11, menu limitations  |
 | [iOS](./platform/ios)         | Orientation, status bar, and gestures     |
 | [Android](./platform/android) | Content rectangle and configuration       |
-
 
 # Installation
 

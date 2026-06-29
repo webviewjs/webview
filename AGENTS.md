@@ -2,7 +2,7 @@
 
 ## What this project is
 
-A native Node.js (NAPI-RS) binding to [wry](https://github.com/tauri-apps/wry) and [winit](https://github.com/rust-windowing/winit) that lets JavaScript/TypeScript create native desktop windows with embedded webviews. Works with Node.js, Deno, and Bun.
+A native Node.js (NAPI-RS) binding to [wry](https://github.com/tauri-apps/wry) and [tao](https://github.com/tauri-apps/tao) that lets JavaScript/TypeScript create native desktop windows with embedded webviews. Works with Node.js, Deno, and Bun.
 
 ## Repo layout
 

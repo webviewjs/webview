@@ -395,14 +395,8 @@ See the runnable [application events example](../../examples/application-events.
 
 ### Undecorated-window resize
 
-When a window is created with `{ decorations: false, resizable: true }`, native
-OS resize handles are absent. WebviewJS automatically handles this:
-
-- **Cursor** — while the pointer is within 6 physical pixels of any edge or
-  corner, the cursor updates to the appropriate directional resize icon.
-- **Drag** — a left-button press in that same border strip immediately calls
-  winit's `drag_resize_window()` so the OS takes over the resize gesture.
-  No `mouse-down` event is fired for border-strip presses (the drag consumes them).
+Windows created with `{ decorations: false, resizable: true }` use Tao's native
+platform behavior for resizing.
 
 ```ts
 const win = app.createBrowserWindow({ decorations: false, resizable: true });

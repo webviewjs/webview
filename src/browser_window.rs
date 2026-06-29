@@ -13,16 +13,14 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Arc;
-use winit::{
+use tao::{
   dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
   event_loop::EventLoop,
-  window::{
-    CursorIcon, Fullscreen, Icon, Window, WindowAttributes, WindowButtons, WindowId, WindowLevel,
-  },
+  window::{CursorIcon, Fullscreen, Icon, Window, WindowBuilder, WindowId},
 };
 
 #[cfg(target_os = "windows")]
-use winit::platform::windows::WindowExtWindows;
+use tao::platform::windows::WindowExtWindows;
 
 #[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
@@ -55,27 +53,6 @@ fn decode_icon(
       "height requires width",
     )),
   }
-}
-
-#[cfg(target_os = "windows")]
-fn rgb_option(
-  r: Option<u8>,
-  g: Option<u8>,
-  b: Option<u8>,
-) -> Option<winit::platform::windows::Color> {
-  match (r, g, b) {
-    (Some(r), Some(g), Some(b)) => Some(winit::platform::windows::Color::from_rgb(r, g, b)),
-    _ => None,
-  }
-}
-
-#[cfg(target_os = "windows")]
-fn windows_color(value: u32) -> winit::platform::windows::Color {
-  winit::platform::windows::Color::from_rgb(
-    ((value >> 16) & 0xff) as u8,
-    ((value >> 8) & 0xff) as u8,
-    (value & 0xff) as u8,
-  )
 }
 
 impl Default for BrowserWindowOptions {
@@ -155,20 +132,11 @@ pub struct BrowserWindow {
   window_id: u32,
   #[cfg(not(target_os = "android"))]
   window_menu: Option<Menu>,
-  /// Shared with AppState so resize events can trigger WebView2 resize.
-  /// wry's own WM_SIZE subclass is bypassed by winit, so we do it manually.
   webviews: Rc<RefCell<Vec<WebviewResource>>>,
-  /// Per-window event handler shared with AppState for dispatching window events.
   event_handler: Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>>,
-  /// Async protocol handlers: (scheme, js_handler_ref, responders, next_id).
-  /// The closure is NOT required to be Send (wry guarantees main-thread call),
-  /// so we use Rc<RefCell<>> instead of Arc<Mutex<>>.
   pending_protocols: Vec<PendingProtocol>,
   protocol_next_id: ProtocolCounterRef,
-  /// Pending webview event dispatch callback (page_load, title, download, etc.).
-  /// Set by `_setPendingWebviewEventCallback` before `createWebview`.
   pending_webview_event_handler: WebviewEventHandlerRef,
-  /// Pending sync navigation-guard (allow/deny navigation by URL).
   pending_nav_handler: WebviewBoolHandlerRef,
   disposed: Rc<Cell<bool>>,
   webview_lifecycles: Rc<RefCell<Vec<Rc<Cell<bool>>>>>,
@@ -192,85 +160,68 @@ impl BrowserWindow {
   ) -> Result<Self> {
     let options = options.unwrap_or_default();
 
-    let mut attrs = WindowAttributes::default();
+    let mut builder = WindowBuilder::new();
 
     if let Some(resizable) = options.resizable {
-      attrs = attrs.with_resizable(resizable);
+      builder = builder.with_resizable(resizable);
     }
 
     if let Some(width) = options.width {
-      if let Some(logical) = options.logical {
-        if logical {
-          attrs = attrs.with_inner_size(LogicalSize::new(width, options.height.unwrap()));
-        } else {
-          attrs = attrs.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
-        }
+      if options.logical == Some(true) {
+        builder = builder.with_inner_size(LogicalSize::new(width, options.height.unwrap()));
       } else {
-        attrs = attrs.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
+        builder = builder.with_inner_size(PhysicalSize::new(width, options.height.unwrap()));
       }
     }
 
     if let Some(x) = options.x {
-      if let Some(logical) = options.logical {
-        if logical {
-          attrs = attrs.with_position(LogicalPosition::new(x, options.y.unwrap()));
-        } else {
-          attrs = attrs.with_position(PhysicalPosition::new(x, options.y.unwrap()));
-        }
+      if options.logical == Some(true) {
+        builder = builder.with_position(LogicalPosition::new(x, options.y.unwrap()));
       } else {
-        attrs = attrs.with_position(PhysicalPosition::new(x, options.y.unwrap()));
+        builder = builder.with_position(PhysicalPosition::new(x, options.y.unwrap()));
       }
     }
 
     if let Some(visible) = options.visible {
-      attrs = attrs.with_visible(visible);
+      builder = builder.with_visible(visible);
     }
 
     if let Some(decorations) = options.decorations {
-      attrs = attrs.with_decorations(decorations);
+      builder = builder.with_decorations(decorations);
     }
 
     if let Some(transparent) = options.transparent {
-      attrs = attrs.with_transparent(transparent);
+      builder = builder.with_transparent(transparent);
     }
 
     if let Some(maximized) = options.maximized {
-      attrs = attrs.with_maximized(maximized);
+      builder = builder.with_maximized(maximized);
     }
 
     if let Some(focused) = options.focused {
-      attrs = attrs.with_active(focused);
+      builder = builder.with_focused(focused);
     }
 
     if let Some(content_protection) = options.content_protection {
-      attrs = attrs.with_content_protected(content_protection);
+      builder = builder.with_content_protection(content_protection);
     }
 
-    // Window level: always_on_top takes priority over always_on_bottom
-    let level = match (options.always_on_top, options.always_on_bottom) {
-      (Some(true), _) => Some(WindowLevel::AlwaysOnTop),
-      (_, Some(true)) => Some(WindowLevel::AlwaysOnBottom),
-      _ => None,
-    };
-    if let Some(level) = level {
-      attrs = attrs.with_window_level(level);
+    if options.always_on_top == Some(true) {
+      builder = builder.with_always_on_top(true);
+    } else if options.always_on_bottom == Some(true) {
+      builder = builder.with_always_on_bottom(true);
     }
 
-    // Minimizable / maximizable via enabled buttons
-    {
-      let mut buttons = WindowButtons::all();
-      if options.maximizable == Some(false) {
-        buttons.remove(WindowButtons::MAXIMIZE);
-      }
-      if options.minimizable == Some(false) {
-        buttons.remove(WindowButtons::MINIMIZE);
-      }
-      attrs = attrs.with_enabled_buttons(buttons);
+    if options.maximizable == Some(false) {
+      builder = builder.with_maximizable(false);
+    }
+    if options.minimizable == Some(false) {
+      builder = builder.with_minimizable(false);
     }
 
     #[cfg(target_os = "macos")]
     if options.visible_on_all_workspaces == Some(true) {
-      attrs = attrs.with_visible(true);
+      builder = builder.with_visible_on_all_workspaces(true);
     }
 
     if let Some(fullscreen) = options.fullscreen {
@@ -278,12 +229,16 @@ impl BrowserWindow {
         FullscreenType::Borderless => Some(Fullscreen::Borderless(None)),
         FullscreenType::Exclusive => Some(Fullscreen::Borderless(None)), // best-effort
       };
-      attrs = attrs.with_fullscreen(fs);
+      builder = builder.with_fullscreen(fs);
+    }
+
+    if let Some(title) = options.title {
+      builder = builder.with_title(&title);
     }
 
     #[cfg(target_os = "windows")]
     {
-      use winit::platform::windows::{BackdropType, CornerPreference, WindowAttributesExtWindows};
+      use tao::platform::windows::WindowBuilderExtWindows;
       if let Some(value) = options.windows_owner_window {
         let (negative, value, lossless) = value.get_u64();
         if negative || !lossless {
@@ -292,126 +247,88 @@ impl BrowserWindow {
             "windowsOwnerWindow must be a non-negative 64-bit bigint",
           ));
         }
-        attrs = attrs.with_owner_window(value as isize);
+        builder = builder.with_owner_window(value as isize);
       }
       if let Some(image) = options.windows_taskbar_icon {
         let (rgba, width, height) = decode_icon(image.data.as_ref(), image.width, image.height)?;
         let icon = Icon::from_rgba(rgba, width, height)
           .map_err(|e| napi::Error::new(napi::Status::InvalidArg, e.to_string()))?;
-        attrs = attrs.with_taskbar_icon(Some(icon));
+        builder = builder.with_taskbar_icon(Some(icon));
       }
       if let Some(value) = options.windows_no_redirection_bitmap {
-        attrs = attrs.with_no_redirection_bitmap(value);
+        builder = builder.with_no_redirection_bitmap(value);
       }
       if let Some(value) = options.windows_drag_and_drop {
-        attrs = attrs.with_drag_and_drop(value);
+        builder = builder.with_drag_and_drop(value);
       }
       if let Some(value) = options.windows_skip_taskbar {
-        attrs = attrs.with_skip_taskbar(value);
+        builder = builder.with_skip_taskbar(value);
       }
       if let Some(value) = options.windows_class_name {
-        attrs = attrs.with_class_name(value);
+        builder = builder.with_window_classname(value);
       }
       if let Some(value) = options.windows_undecorated_shadow {
-        attrs = attrs.with_undecorated_shadow(value);
+        builder = builder.with_undecorated_shadow(value);
       }
-      if let Some(value) = options.windows_system_backdrop {
-        attrs = attrs.with_system_backdrop(match value {
-          WindowsSystemBackdrop::Auto => BackdropType::Auto,
-          WindowsSystemBackdrop::None => BackdropType::None,
-          WindowsSystemBackdrop::MainWindow => BackdropType::MainWindow,
-          WindowsSystemBackdrop::TransientWindow => BackdropType::TransientWindow,
-          WindowsSystemBackdrop::TabbedWindow => BackdropType::TabbedWindow,
-        });
-      }
-      if let Some(value) = options.windows_clip_children {
-        attrs = attrs.with_clip_children(value);
-      }
-      if let Some(value) = options.windows_border_color {
-        attrs = attrs.with_border_color(Some(windows_color(value)));
-      }
-      if let Some(value) = options.windows_title_background_color {
-        attrs = attrs.with_title_background_color(Some(windows_color(value)));
-      }
-      if let Some(value) = options.windows_title_text_color {
-        attrs = attrs.with_title_text_color(windows_color(value));
-      }
-      if let Some(value) = options.windows_corner_preference {
-        attrs = attrs.with_corner_preference(match value {
-          WindowsCornerPreference::Default => CornerPreference::Default,
-          WindowsCornerPreference::DoNotRound => CornerPreference::DoNotRound,
-          WindowsCornerPreference::Round => CornerPreference::Round,
-          WindowsCornerPreference::RoundSmall => CornerPreference::RoundSmall,
-        });
-      }
+      // windows_system_backdrop, windows_clip_children, windows_border_color,
+      // windows_title_background_color, windows_title_text_color, windows_corner_preference
+      // are not supported in tao 0.35 — silently ignored.
     }
 
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::{OptionAsAlt, WindowAttributesExtMacOS};
+      use tao::platform::macos::WindowBuilderExtMacOS;
       if let Some(value) = options.macos_movable_by_window_background {
-        attrs = attrs.with_movable_by_window_background(value);
+        builder = builder.with_movable_by_window_background(value);
       }
       if let Some(value) = options.macos_titlebar_transparent {
-        attrs = attrs.with_titlebar_transparent(value);
+        builder = builder.with_titlebar_transparent(value);
       }
       if let Some(value) = options.macos_title_hidden {
-        attrs = attrs.with_title_hidden(value);
+        builder = builder.with_title_hidden(value);
       }
       if let Some(value) = options.macos_titlebar_hidden {
-        attrs = attrs.with_titlebar_hidden(value);
+        builder = builder.with_titlebar_hidden(value);
       }
       if let Some(value) = options.macos_titlebar_buttons_hidden {
-        attrs = attrs.with_titlebar_buttons_hidden(value);
+        builder = builder.with_titlebar_buttons_hidden(value);
       }
       if let Some(value) = options.macos_fullsize_content_view {
-        attrs = attrs.with_fullsize_content_view(value);
+        builder = builder.with_fullsize_content_view(value);
       }
       if let Some(value) = options.macos_disallow_hidpi {
-        attrs = attrs.with_disallow_hidpi(value);
+        builder = builder.with_disallow_hidpi(value);
       }
       if let Some(value) = options.macos_has_shadow {
-        attrs = attrs.with_has_shadow(value);
-      }
-      if let Some(value) = options.macos_accepts_first_mouse {
-        attrs = attrs.with_accepts_first_mouse(value);
+        builder = builder.with_has_shadow(value);
       }
       if let Some(value) = options.macos_tabbing_identifier.as_deref() {
-        attrs = attrs.with_tabbing_identifier(value);
+        builder = builder.with_tabbing_identifier(value);
       }
-      if let Some(value) = options.macos_option_as_alt {
-        attrs = attrs.with_option_as_alt(match value {
-          MacosOptionAsAlt::OnlyLeft => OptionAsAlt::OnlyLeft,
-          MacosOptionAsAlt::OnlyRight => OptionAsAlt::OnlyRight,
-          MacosOptionAsAlt::Both => OptionAsAlt::Both,
-          MacosOptionAsAlt::None => OptionAsAlt::None,
-        });
-      }
-      if let Some(value) = options.macos_borderless_game {
-        attrs = attrs.with_borderless_game(value);
-      }
+      // macos_accepts_first_mouse, macos_option_as_alt, macos_borderless_game
+      // are not supported in tao 0.35 — silently ignored.
     }
 
     #[cfg(target_os = "linux")]
     {
-      use winit::platform::x11::{WindowAttributesExtX11, WindowType};
+      use tao::platform::x11::{WindowBuilderExtX11, WindowType};
       if let Some(value) = options.x11_visual_id {
-        attrs = attrs.with_x11_visual(value);
+        builder = builder.with_x11_visual(value as *const ());
       }
       if let Some(value) = options.x11_screen {
-        attrs = attrs.with_x11_screen(value);
+        builder = builder.with_x11_screen(value);
       }
       if let (Some(general), Some(instance)) = (
         options.x11_general_name.as_deref(),
         options.x11_instance_name.as_deref(),
       ) {
-        attrs = WindowAttributesExtX11::with_name(attrs, general, instance);
+        builder = builder.with_name(general, instance);
       }
       if let Some(value) = options.x11_override_redirect {
-        attrs = attrs.with_override_redirect(value);
+        builder = builder.with_override_redirect(value);
       }
       if let Some(values) = options.x11_window_types.as_ref() {
-        attrs = attrs.with_x11_window_type(
+        builder = builder.with_x11_window_type(
           values
             .iter()
             .map(|value| match value {
@@ -434,85 +351,31 @@ impl BrowserWindow {
         );
       }
       if let (Some(width), Some(height)) = (options.x11_base_width, options.x11_base_height) {
-        attrs = attrs.with_base_size(LogicalSize::new(width, height));
+        builder = builder.with_base_size(LogicalSize::new(width, height));
       }
-      if let Some(value) = options.x11_embed_parent_window {
-        attrs = attrs.with_embed_parent_window(value);
-      }
+      // x11_embed_parent_window not available in tao 0.35 — silently ignored.
     }
 
     #[cfg(target_os = "linux")]
     if let Some(general) = options.wayland_app_id.as_deref() {
-      use winit::platform::wayland::WindowAttributesExtWayland;
-      attrs = WindowAttributesExtWayland::with_name(
-        attrs,
+      use tao::platform::wayland::WindowBuilderExtWayland;
+      builder = builder.with_name(
         general,
         options.wayland_instance.as_deref().unwrap_or(general),
       );
     }
 
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::{
-        ScreenEdge, StatusBarStyle, ValidOrientations, WindowAttributesExtIOS,
-      };
-      if let Some(value) = options.ios_scale_factor {
-        attrs = attrs.with_scale_factor(value);
-      }
-      if let Some(value) = options.ios_valid_orientations {
-        attrs = attrs.with_valid_orientations(match value {
-          IosValidOrientations::LandscapeAndPortrait => ValidOrientations::LandscapeAndPortrait,
-          IosValidOrientations::Landscape => ValidOrientations::Landscape,
-          IosValidOrientations::Portrait => ValidOrientations::Portrait,
-        });
-      }
-      if let Some(value) = options.ios_prefers_home_indicator_hidden {
-        attrs = attrs.with_prefers_home_indicator_hidden(value);
-      }
-      if let Some(value) = options.ios_deferred_system_gesture_edges {
-        attrs = attrs.with_preferred_screen_edges_deferring_system_gestures(
-          ScreenEdge::from_bits_truncate(value),
-        );
-      }
-      if let Some(value) = options.ios_prefers_status_bar_hidden {
-        attrs = attrs.with_prefers_status_bar_hidden(value);
-      }
-      if let Some(value) = options.ios_status_bar_style {
-        attrs = attrs.with_preferred_status_bar_style(match value {
-          IosStatusBarStyle::Default => StatusBarStyle::Default,
-          IosStatusBarStyle::LightContent => StatusBarStyle::LightContent,
-          IosStatusBarStyle::DarkContent => StatusBarStyle::DarkContent,
-        });
-      }
-    }
-
-    if let Some(title) = options.title {
-      attrs = attrs.with_title(&title);
-    }
-
-    #[allow(deprecated)]
-    let window = event_loop.create_window(attrs).map_err(|e| {
+    let window = builder.build(event_loop).map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to create window: {}", e),
       )
     })?;
 
-    // On Windows, WebView2 is a child HWND that consumes all mouse events, so
-    // winit's CursorMoved/MouseInput never fire for the border strip.  Install a
-    // WM_NCHITTEST subclass on the parent HWND instead — Windows routes that
-    // message to the topmost window before child dispatch, giving us native
-    // cursor and drag-resize without any JS involvement.
-    #[cfg(target_os = "windows")]
-    if options.decorations == Some(false) && options.resizable != Some(false) {
-      crate::win32_resize::install_resize_border(&window);
-    }
-
     let mut hasher = DefaultHasher::new();
     window.id().hash(&mut hasher);
     let window_id = hasher.finish() as u32;
 
-    // Menu init
     #[cfg(not(target_os = "android"))]
     let window_menu = if let Some(menu_options) = options.menu {
       let menu = create_menu_from_options(menu_options)?;
@@ -535,7 +398,7 @@ impl BrowserWindow {
       window_menu,
       webviews: Rc::new(RefCell::new(Vec::new())),
       event_handler: Rc::new(RefCell::new(None)),
-      pending_protocols: Vec::new(), // populated by _registerProtocol
+      pending_protocols: Vec::new(),
       protocol_next_id: Rc::new(RefCell::new(0)),
       pending_webview_event_handler: Rc::new(RefCell::new(None)),
       pending_nav_handler: Rc::new(RefCell::new(None)),
@@ -544,8 +407,6 @@ impl BrowserWindow {
     })
   }
 
-  /// Return a clone of the shared webview list. AppState holds this Rc so it
-  /// can resize all webviews when a Resized event arrives for this window.
   pub(crate) fn webviews_shared(&self) -> Rc<RefCell<Vec<WebviewResource>>> {
     Rc::clone(&self.webviews)
   }
@@ -558,10 +419,6 @@ impl BrowserWindow {
     Rc::clone(&self.webview_lifecycles)
   }
 
-  /// Low-level protocol registration used by the JS `registerProtocol` wrapper.
-  /// `handler` is called with a single JSON string argument:
-  /// `{ id, url, method, headers, body }` where `body` is a number[] or null.
-  /// Call `_completeProtocol(id, response)` when the response is ready.
   #[napi(js_name = "_registerProtocol")]
   pub fn register_protocol_raw(&mut self, name: String, handler: FunctionRef<String, ()>) {
     self.pending_protocols.push((
@@ -572,12 +429,9 @@ impl BrowserWindow {
     ));
   }
 
-  /// Complete a pending async protocol request previously started by the
-  /// `_registerProtocol` handler.  `id` matches the value in the JSON payload.
   #[napi(js_name = "_completeProtocol")]
   pub fn complete_protocol(&self, id: f64, response: CustomProtocolResponse) -> Result<()> {
     let id = id as u64;
-    // Find the right responder map across all registered protocols
     for (_, _, responders, _) in &self.pending_protocols {
       let mut map = responders.borrow_mut();
       if let Some(responder) = map.remove(&id) {
@@ -586,7 +440,7 @@ impl BrowserWindow {
         return Ok(());
       }
     }
-    Ok(()) // id already completed or unknown — silently ignore
+    Ok(())
   }
 
   #[napi]
@@ -602,8 +456,6 @@ impl BrowserWindow {
         "BrowserWindow has been disposed",
       ));
     }
-    // Move the pending handlers into per-webview storage. Reusing the pending
-    // Rc here would let `_clearPendingWebviewHandlers` disable live handlers.
     let event_handler = Rc::new(RefCell::new(
       self.pending_webview_event_handler.borrow_mut().take(),
     ));
@@ -617,8 +469,6 @@ impl BrowserWindow {
       event_handler,
       nav_handler,
     )?;
-    // Keep an Rc clone so the WebView survives JS GC of the returned handle,
-    // and so AppState can resize it on WM_SIZE.
     self
       .webviews
       .borrow_mut()
@@ -630,9 +480,6 @@ impl BrowserWindow {
     Ok(webview)
   }
 
-  /// Pre-register the webview event dispatch callback before `createWebview`.
-  /// Called by the JS wrapper to wire page_load / title / download events into
-  /// an EventEmitter on the returned Webview object.
   #[napi(js_name = "_setPendingWebviewEventCallback")]
   pub fn set_pending_webview_event_callback(
     &mut self,
@@ -641,17 +488,11 @@ impl BrowserWindow {
     *self.pending_webview_event_handler.borrow_mut() = Some(Arc::new(handler));
   }
 
-  /// Pre-register a sync navigation guard before `createWebview`.
-  /// The JS function receives the target URL and must return `true` (allow)
-  /// or `false` (deny) synchronously.
   #[napi(js_name = "_setPendingWebviewNavigationHandler")]
   pub fn set_pending_webview_navigation_handler(&mut self, handler: FunctionRef<String, bool>) {
     *self.pending_nav_handler.borrow_mut() = Some(handler);
   }
 
-  /// Clear all pending per-webview handlers so they don't leak into the next
-  /// `createWebview` call on the same window.  Called by the JS wrapper after
-  /// each `createWebview`.
   #[napi(js_name = "_clearPendingWebviewHandlers")]
   pub fn clear_pending_webview_handlers(&mut self) {
     *self.pending_webview_event_handler.borrow_mut() = None;
@@ -663,33 +504,40 @@ impl BrowserWindow {
     self.is_child_window
   }
 
-  /// Returns the platform-native window handle as a raw pointer value.
-  /// On Windows this is the HWND, on macOS the NSWindow pointer,
-  /// on Linux X11 the Window XID, on Linux Wayland the wl_surface pointer.
-  /// Returns 0 if the handle cannot be retrieved.
   #[napi]
   pub fn get_native_handle(&self) -> u64 {
-    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    let Ok(handle) = self.window.window_handle() else {
-      return 0;
-    };
-    match handle.as_raw() {
-      RawWindowHandle::Win32(h) => h.hwnd.get() as u64,
-      RawWindowHandle::AppKit(h) => h.ns_view.as_ptr() as u64,
-      RawWindowHandle::Xlib(h) => h.window as u64,
-      RawWindowHandle::Wayland(h) => h.surface.as_ptr() as u64,
-      _ => 0,
+    #[cfg(target_os = "windows")]
+    {
+      return self.window.hwnd() as u64;
     }
+    #[cfg(target_os = "macos")]
+    {
+      use tao::platform::macos::WindowExtMacOS;
+      return self.window.ns_view() as u64;
+    }
+    #[cfg(target_os = "linux")]
+    {
+      use tao::platform::unix::WindowExtUnix;
+      if let Some(xid) = self.window.xlib_window() {
+        return xid as u64;
+      }
+      if let Some(ptr) = self.window.wayland_surface() {
+        return ptr as u64;
+      }
+      return 0;
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    0
   }
 
   #[napi]
   pub fn is_focused(&self) -> bool {
-    self.window.has_focus()
+    self.window.is_focused()
   }
 
   #[napi]
   pub fn is_visible(&self) -> bool {
-    self.window.is_visible().unwrap_or(false)
+    self.window.is_visible()
   }
 
   #[napi]
@@ -699,23 +547,17 @@ impl BrowserWindow {
 
   #[napi]
   pub fn is_closable(&self) -> bool {
-    self.window.enabled_buttons().contains(WindowButtons::CLOSE)
+    self.window.is_closable()
   }
 
   #[napi]
   pub fn is_maximizable(&self) -> bool {
-    self
-      .window
-      .enabled_buttons()
-      .contains(WindowButtons::MAXIMIZE)
+    self.window.is_maximizable()
   }
 
   #[napi]
   pub fn is_minimizable(&self) -> bool {
-    self
-      .window
-      .enabled_buttons()
-      .contains(WindowButtons::MINIMIZE)
+    self.window.is_minimizable()
   }
 
   #[napi]
@@ -725,7 +567,7 @@ impl BrowserWindow {
 
   #[napi]
   pub fn is_minimized(&self) -> bool {
-    self.window.is_minimized().unwrap_or(false)
+    self.window.is_minimized()
   }
 
   #[napi]
@@ -745,87 +587,47 @@ impl BrowserWindow {
 
   #[napi]
   pub fn set_closable(&self, closable: bool) {
-    let mut buttons = self.window.enabled_buttons();
-    if closable {
-      buttons.insert(WindowButtons::CLOSE);
-    } else {
-      buttons.remove(WindowButtons::CLOSE);
-    }
-    self.window.set_enabled_buttons(buttons);
+    self.window.set_closable(closable);
   }
 
   #[napi]
   pub fn set_maximizable(&self, maximizable: bool) {
-    let mut buttons = self.window.enabled_buttons();
-    if maximizable {
-      buttons.insert(WindowButtons::MAXIMIZE);
-    } else {
-      buttons.remove(WindowButtons::MAXIMIZE);
-    }
-    self.window.set_enabled_buttons(buttons);
+    self.window.set_maximizable(maximizable);
   }
 
   #[napi]
   pub fn set_minimizable(&self, minimizable: bool) {
-    let mut buttons = self.window.enabled_buttons();
-    if minimizable {
-      buttons.insert(WindowButtons::MINIMIZE);
-    } else {
-      buttons.remove(WindowButtons::MINIMIZE);
-    }
-    self.window.set_enabled_buttons(buttons);
+    self.window.set_minimizable(minimizable);
   }
 
   #[napi]
   pub fn set_resizable(&self, resizable: bool) {
     self.window.set_resizable(resizable);
-    // Note: resize border installation is managed by decoration state only.
-    // The resizable flag controls whether the window actually responds to resize attempts.
   }
 
   #[napi]
-  /// Sets the window inner size (width and height).
   pub fn set_size(&self, width: u32, height: u32, logical: Option<bool>) -> Option<Dimensions> {
-    let size = if let Some(logical) = logical {
-      if logical {
-        self
-          .window
-          .request_inner_size(LogicalSize::new(width as f64, height as f64))
-      } else {
-        self
-          .window
-          .request_inner_size(PhysicalSize::new(width, height))
-      }
-    } else {
+    if logical == Some(true) {
       self
         .window
-        .request_inner_size(PhysicalSize::new(width, height))
-    };
-
-    size.map(|s| Dimensions {
-      width: s.width,
-      height: s.height,
-    })
+        .set_inner_size(LogicalSize::new(width as f64, height as f64));
+    } else {
+      self.window.set_inner_size(PhysicalSize::new(width, height));
+    }
+    // tao's set_inner_size is void — return None to indicate async application
+    None
   }
 
   #[napi]
-  /// Sets the min window inner size (width and height).
   pub fn set_min_size(&self, width: u32, height: u32, logical: Option<bool>) {
     if width == 0 && height == 0 {
       self.window.set_min_inner_size(None::<Size>);
       return;
     }
-
-    if let Some(logical) = logical {
-      if logical {
-        self
-          .window
-          .set_min_inner_size(Some(LogicalSize::new(width, height)));
-      } else {
-        self
-          .window
-          .set_min_inner_size(Some(PhysicalSize::new(width, height)));
-      }
+    if logical == Some(true) {
+      self
+        .window
+        .set_min_inner_size(Some(LogicalSize::new(width, height)));
     } else {
       self
         .window
@@ -834,17 +636,14 @@ impl BrowserWindow {
   }
 
   #[napi]
-  /// Gets the window inner size.
   pub fn get_inner_size(&self, logical: Option<bool>) -> Dimensions {
     let size = self.window.inner_size();
-    if let Some(logical) = logical {
-      if logical {
-        let logical_size = size.to_logical::<f64>(self.window.scale_factor());
-        return Dimensions {
-          width: logical_size.width as u32,
-          height: logical_size.height as u32,
-        };
-      }
+    if logical == Some(true) {
+      let logical_size = size.to_logical::<f64>(self.window.scale_factor());
+      return Dimensions {
+        width: logical_size.width as u32,
+        height: logical_size.height as u32,
+      };
     }
     Dimensions {
       width: size.width,
@@ -853,23 +652,15 @@ impl BrowserWindow {
   }
 
   #[napi]
-  /// Sets the max window inner size (width and height).
   pub fn set_max_size(&self, width: u32, height: u32, logical: Option<bool>) {
     if width == 0 && height == 0 {
       self.window.set_max_inner_size(None::<Size>);
       return;
     }
-
-    if let Some(logical) = logical {
-      if logical {
-        self
-          .window
-          .set_max_inner_size(Some(LogicalSize::new(width, height)));
-      } else {
-        self
-          .window
-          .set_max_inner_size(Some(PhysicalSize::new(width, height)));
-      }
+    if logical == Some(true) {
+      self
+        .window
+        .set_max_inner_size(Some(LogicalSize::new(width, height)));
     } else {
       self
         .window
@@ -878,17 +669,14 @@ impl BrowserWindow {
   }
 
   #[napi]
-  /// Gets the window outer size.
   pub fn get_outer_size(&self, logical: Option<bool>) -> Dimensions {
     let size = self.window.outer_size();
-    if let Some(logical) = logical {
-      if logical {
-        let logical_size = size.to_logical::<f64>(self.window.scale_factor());
-        return Dimensions {
-          width: logical_size.width as u32,
-          height: logical_size.height as u32,
-        };
-      }
+    if logical == Some(true) {
+      let logical_size = size.to_logical::<f64>(self.window.scale_factor());
+      return Dimensions {
+        width: logical_size.width as u32,
+        height: logical_size.height as u32,
+      };
     }
     Dimensions {
       width: size.width,
@@ -897,12 +685,10 @@ impl BrowserWindow {
   }
 
   #[napi]
-  /// Opens a file select dialog
   pub fn open_file_dialog(&self, options: Option<FileDialogOptions>) -> Result<Vec<String>> {
     #[cfg(not(target_os = "android"))]
     {
       let mut dialog = FileDialog::new();
-
       if let Some(opts) = options.as_ref() {
         if let Some(title) = &opts.title {
           dialog = dialog.set_title(title);
@@ -916,15 +702,12 @@ impl BrowserWindow {
           }
         }
       }
-
       dialog = dialog.add_filter("All Files", &["*"]);
-
       let files = if options.as_ref().and_then(|o| o.multiple).unwrap_or(false) {
         dialog.pick_files()
       } else {
         dialog.pick_file().map(|f| vec![f])
       };
-
       Ok(
         files
           .unwrap_or_default()
@@ -957,13 +740,11 @@ impl BrowserWindow {
     }
   }
 
-  /// Returns the underlying winit WindowId (for internal tracking).
-  pub fn winit_window_id(&self) -> WindowId {
+  /// Returns the underlying tao WindowId (for internal tracking).
+  pub fn tao_window_id(&self) -> WindowId {
     self.window.id()
   }
 
-  /// Returns a clone of the shared event handler cell.  AppState holds this
-  /// Rc so it can dispatch window events to the registered JS callback.
   pub(crate) fn event_handler_shared(
     &self,
   ) -> Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>> {
@@ -1003,8 +784,6 @@ impl BrowserWindow {
     self.disposed.get()
   }
 
-  /// Register a raw callback to receive window events.  Used internally by the
-  /// JS EventEmitter wrapper; prefer `window.on(event, handler)` in user code.
   #[napi(js_name = "_onWindowEvent")]
   pub fn on_window_event(&self, handler: Option<FunctionRef<WindowEventPayload, ()>>) {
     *self.event_handler.borrow_mut() = handler;
@@ -1013,8 +792,8 @@ impl BrowserWindow {
   #[napi(getter)]
   pub fn get_theme(&self) -> Theme {
     match self.window.theme() {
-      Some(winit::window::Theme::Light) => Theme::Light,
-      Some(winit::window::Theme::Dark) => Theme::Dark,
+      tao::window::Theme::Light => Theme::Light,
+      tao::window::Theme::Dark => Theme::Dark,
       _ => Theme::System,
     }
   }
@@ -1022,17 +801,14 @@ impl BrowserWindow {
   #[napi]
   pub fn set_theme(&self, theme: Theme) {
     let t = match theme {
-      Theme::Light => Some(winit::window::Theme::Light),
-      Theme::Dark => Some(winit::window::Theme::Dark),
+      Theme::Light => Some(tao::window::Theme::Light),
+      Theme::Dark => Some(tao::window::Theme::Dark),
       _ => None,
     };
     self.window.set_theme(t);
   }
 
   #[napi]
-  /// Set the window icon.
-  /// - Passing raw RGBA bytes requires `width` and `height` (or just `width` to assume square).
-  /// - Passing an encoded image buffer (PNG, ICO, JPEG, etc.) will auto-detect dimensions.
   pub fn set_window_icon(
     &self,
     icon: Either<&[u8], Vec<u8>>,
@@ -1043,10 +819,9 @@ impl BrowserWindow {
       Either::A(bytes) => bytes,
       Either::B(bytes) => bytes.as_slice(),
     };
-
     let (rgba, width, height) = match (width, height) {
       (Some(w), Some(h)) => (icon_bytes.to_vec(), w, h),
-      (Some(w), None) => (icon_bytes.to_vec(), w, w), // assume square if only width provided
+      (Some(w), None) => (icon_bytes.to_vec(), w, w),
       (None, None) => {
         let img = image::load_from_memory(icon_bytes).map_err(|e| {
           napi::Error::new(
@@ -1060,19 +835,16 @@ impl BrowserWindow {
       _ => {
         return Err(napi::Error::new(
           napi::Status::InvalidArg,
-          "Either width and height must be provided together, or at least width only, or neither"
-            .to_string(),
+          "Either width and height must be provided together, or at least width only, or neither",
         ))
       }
     };
-
     let ico = Icon::from_rgba(rgba, width, height).map_err(|e| {
       napi::Error::new(
         napi::Status::GenericFailure,
         format!("Failed to create icon: {}", e),
       )
     })?;
-
     self.window.set_window_icon(Some(ico));
     Ok(())
   }
@@ -1127,78 +899,33 @@ impl BrowserWindow {
     let _ = shadow;
   }
 
+  /// No-op: tao 0.35 does not expose system backdrop (Mica/Acrylic) APIs.
   #[napi]
-  pub fn set_system_backdrop(&self, backdrop: WindowsSystemBackdrop) {
-    #[cfg(target_os = "windows")]
-    {
-      use winit::platform::windows::BackdropType;
-      let value = match backdrop {
-        WindowsSystemBackdrop::Auto => BackdropType::Auto,
-        WindowsSystemBackdrop::None => BackdropType::None,
-        WindowsSystemBackdrop::MainWindow => BackdropType::MainWindow,
-        WindowsSystemBackdrop::TransientWindow => BackdropType::TransientWindow,
-        WindowsSystemBackdrop::TabbedWindow => BackdropType::TabbedWindow,
-      };
-      self.window.set_system_backdrop(value);
-    }
-    #[cfg(not(target_os = "windows"))]
-    let _ = backdrop;
-  }
+  pub fn set_system_backdrop(&self, _backdrop: WindowsSystemBackdrop) {}
 
+  /// No-op: tao 0.35 does not expose window border color APIs.
   #[napi]
-  pub fn set_border_color(&self, r: Option<u8>, g: Option<u8>, b: Option<u8>) {
-    #[cfg(target_os = "windows")]
-    self.window.set_border_color(rgb_option(r, g, b));
-    #[cfg(not(target_os = "windows"))]
-    let _ = (r, g, b);
-  }
+  pub fn set_border_color(&self, _r: Option<u8>, _g: Option<u8>, _b: Option<u8>) {}
 
+  /// No-op: tao 0.35 does not expose title background color APIs.
   #[napi]
-  pub fn set_title_background_color(&self, r: Option<u8>, g: Option<u8>, b: Option<u8>) {
-    #[cfg(target_os = "windows")]
-    self.window.set_title_background_color(rgb_option(r, g, b));
-    #[cfg(not(target_os = "windows"))]
-    let _ = (r, g, b);
-  }
+  pub fn set_title_background_color(&self, _r: Option<u8>, _g: Option<u8>, _b: Option<u8>) {}
 
+  /// No-op: tao 0.35 does not expose title text color APIs.
   #[napi]
-  pub fn set_title_text_color(&self, r: u8, g: u8, b: u8) {
-    #[cfg(target_os = "windows")]
-    self
-      .window
-      .set_title_text_color(winit::platform::windows::Color::from_rgb(r, g, b));
-    #[cfg(not(target_os = "windows"))]
-    let _ = (r, g, b);
-  }
+  pub fn set_title_text_color(&self, _r: u8, _g: u8, _b: u8) {}
 
+  /// No-op: tao 0.35 does not expose corner preference APIs.
   #[napi]
-  pub fn set_corner_preference(&self, preference: WindowsCornerPreference) {
-    #[cfg(target_os = "windows")]
-    {
-      use winit::platform::windows::CornerPreference;
-      let value = match preference {
-        WindowsCornerPreference::Default => CornerPreference::Default,
-        WindowsCornerPreference::DoNotRound => CornerPreference::DoNotRound,
-        WindowsCornerPreference::Round => CornerPreference::Round,
-        WindowsCornerPreference::RoundSmall => CornerPreference::RoundSmall,
-      };
-      self.window.set_corner_preference(value);
-    }
-    #[cfg(not(target_os = "windows"))]
-    let _ = preference;
-  }
+  pub fn set_corner_preference(&self, _preference: WindowsCornerPreference) {}
 
   #[napi]
   pub fn get_native_handle_any_thread(&self) -> u64 {
     #[cfg(target_os = "windows")]
-    unsafe {
-      use winit::raw_window_handle::RawWindowHandle;
-      if let Ok(handle) = self.window.window_handle_any_thread() {
-        if let RawWindowHandle::Win32(handle) = handle.as_raw() {
-          return handle.hwnd.get() as u64;
-        }
-      }
+    {
+      return self.window.hwnd() as u64;
     }
+    #[cfg(not(target_os = "windows"))]
     0
   }
 
@@ -1206,7 +933,7 @@ impl BrowserWindow {
   pub fn simple_fullscreen(&self) -> bool {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       return self.window.simple_fullscreen();
     }
     #[cfg(not(target_os = "macos"))]
@@ -1217,7 +944,7 @@ impl BrowserWindow {
   pub fn set_simple_fullscreen(&self, fullscreen: bool) -> bool {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       return self.window.set_simple_fullscreen(fullscreen);
     }
     #[cfg(not(target_os = "macos"))]
@@ -1231,7 +958,7 @@ impl BrowserWindow {
   pub fn has_shadow(&self) -> bool {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       return self.window.has_shadow();
     }
     #[cfg(not(target_os = "macos"))]
@@ -1242,7 +969,7 @@ impl BrowserWindow {
   pub fn set_has_shadow(&self, value: bool) {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       self.window.set_has_shadow(value);
     }
     #[cfg(not(target_os = "macos"))]
@@ -1253,7 +980,7 @@ impl BrowserWindow {
   pub fn set_tabbing_identifier(&self, identifier: String) {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       self.window.set_tabbing_identifier(&identifier);
     }
     #[cfg(not(target_os = "macos"))]
@@ -1264,7 +991,7 @@ impl BrowserWindow {
   pub fn tabbing_identifier(&self) -> String {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       return self.window.tabbing_identifier();
     }
     #[cfg(not(target_os = "macos"))]
@@ -1275,7 +1002,7 @@ impl BrowserWindow {
   pub fn select_next_tab(&self) {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       self.window.select_next_tab();
     }
   }
@@ -1284,7 +1011,7 @@ impl BrowserWindow {
   pub fn select_previous_tab(&self) {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       self.window.select_previous_tab();
     }
   }
@@ -1293,7 +1020,7 @@ impl BrowserWindow {
   pub fn select_tab_at_index(&self, index: u32) {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       self.window.select_tab_at_index(index as usize);
     }
     #[cfg(not(target_os = "macos"))]
@@ -1304,7 +1031,7 @@ impl BrowserWindow {
   pub fn num_tabs(&self) -> u32 {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       return self.window.num_tabs() as u32;
     }
     #[cfg(not(target_os = "macos"))]
@@ -1315,7 +1042,7 @@ impl BrowserWindow {
   pub fn is_document_edited(&self) -> bool {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       return self.window.is_document_edited();
     }
     #[cfg(not(target_os = "macos"))]
@@ -1326,64 +1053,30 @@ impl BrowserWindow {
   pub fn set_document_edited(&self, edited: bool) {
     #[cfg(target_os = "macos")]
     {
-      use winit::platform::macos::WindowExtMacOS;
+      use tao::platform::macos::WindowExtMacOS;
       self.window.set_document_edited(edited);
     }
     #[cfg(not(target_os = "macos"))]
     let _ = edited;
   }
 
+  /// No-op: tao 0.35 does not expose option-as-alt runtime setter.
   #[napi]
-  pub fn set_option_as_alt(&self, value: MacosOptionAsAlt) {
-    #[cfg(target_os = "macos")]
-    {
-      use winit::platform::macos::{OptionAsAlt, WindowExtMacOS};
-      self.window.set_option_as_alt(match value {
-        MacosOptionAsAlt::OnlyLeft => OptionAsAlt::OnlyLeft,
-        MacosOptionAsAlt::OnlyRight => OptionAsAlt::OnlyRight,
-        MacosOptionAsAlt::Both => OptionAsAlt::Both,
-        MacosOptionAsAlt::None => OptionAsAlt::None,
-      });
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = value;
-  }
+  pub fn set_option_as_alt(&self, _value: MacosOptionAsAlt) {}
 
+  /// No-op: tao 0.35 does not expose option-as-alt getter.
   #[napi]
   pub fn option_as_alt(&self) -> MacosOptionAsAlt {
-    #[cfg(target_os = "macos")]
-    {
-      use winit::platform::macos::{OptionAsAlt, WindowExtMacOS};
-      return match self.window.option_as_alt() {
-        OptionAsAlt::OnlyLeft => MacosOptionAsAlt::OnlyLeft,
-        OptionAsAlt::OnlyRight => MacosOptionAsAlt::OnlyRight,
-        OptionAsAlt::Both => MacosOptionAsAlt::Both,
-        OptionAsAlt::None => MacosOptionAsAlt::None,
-      };
-    }
-    #[cfg(not(target_os = "macos"))]
     MacosOptionAsAlt::None
   }
 
+  /// No-op: tao 0.35 does not expose borderless-game mode.
   #[napi]
-  pub fn set_borderless_game(&self, value: bool) {
-    #[cfg(target_os = "macos")]
-    {
-      use winit::platform::macos::WindowExtMacOS;
-      self.window.set_borderless_game(value);
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = value;
-  }
+  pub fn set_borderless_game(&self, _value: bool) {}
 
+  /// No-op: tao 0.35 does not expose borderless-game mode.
   #[napi]
   pub fn is_borderless_game(&self) -> bool {
-    #[cfg(target_os = "macos")]
-    {
-      use winit::platform::macos::WindowExtMacOS;
-      return self.window.is_borderless_game();
-    }
-    #[cfg(not(target_os = "macos"))]
     false
   }
 
@@ -1391,146 +1084,49 @@ impl BrowserWindow {
   pub fn get_wayland_xdg_toplevel(&self) -> u64 {
     #[cfg(target_os = "linux")]
     {
-      use winit::platform::wayland::WindowExtWayland;
-      return self
-        .window
-        .xdg_toplevel()
-        .map(|value| value.as_ptr() as u64)
-        .unwrap_or(0);
+      use tao::platform::unix::WindowExtUnix;
+      return self.window.wayland_surface().map(|s| s as u64).unwrap_or(0);
     }
     #[cfg(not(target_os = "linux"))]
     0
   }
 
+  // iOS platform methods — tao does not support iOS, all are no-ops.
   #[napi]
-  pub fn set_ios_scale_factor(&self, value: f64) {
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::WindowExtIOS;
-      self.window.set_scale_factor(value);
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = value;
-  }
+  pub fn set_ios_scale_factor(&self, _value: f64) {}
 
   #[napi]
-  pub fn set_valid_orientations(&self, value: IosValidOrientations) {
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::{ValidOrientations, WindowExtIOS};
-      self.window.set_valid_orientations(match value {
-        IosValidOrientations::LandscapeAndPortrait => ValidOrientations::LandscapeAndPortrait,
-        IosValidOrientations::Landscape => ValidOrientations::Landscape,
-        IosValidOrientations::Portrait => ValidOrientations::Portrait,
-      });
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = value;
-  }
+  pub fn set_valid_orientations(&self, _value: IosValidOrientations) {}
 
   #[napi]
-  pub fn set_prefers_home_indicator_hidden(&self, value: bool) {
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::WindowExtIOS;
-      self.window.set_prefers_home_indicator_hidden(value);
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = value;
-  }
+  pub fn set_prefers_home_indicator_hidden(&self, _value: bool) {}
 
   #[napi]
-  pub fn set_preferred_screen_edges_deferring_system_gestures(&self, edges: u8) {
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::{ScreenEdge, WindowExtIOS};
-      self
-        .window
-        .set_preferred_screen_edges_deferring_system_gestures(ScreenEdge::from_bits_truncate(
-          edges,
-        ));
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = edges;
-  }
+  pub fn set_preferred_screen_edges_deferring_system_gestures(&self, _edges: u8) {}
 
   #[napi]
-  pub fn set_prefers_status_bar_hidden(&self, value: bool) {
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::WindowExtIOS;
-      self.window.set_prefers_status_bar_hidden(value);
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = value;
-  }
+  pub fn set_prefers_status_bar_hidden(&self, _value: bool) {}
 
   #[napi]
-  pub fn set_preferred_status_bar_style(&self, value: IosStatusBarStyle) {
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::{StatusBarStyle, WindowExtIOS};
-      self.window.set_preferred_status_bar_style(match value {
-        IosStatusBarStyle::Default => StatusBarStyle::Default,
-        IosStatusBarStyle::LightContent => StatusBarStyle::LightContent,
-        IosStatusBarStyle::DarkContent => StatusBarStyle::DarkContent,
-      });
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = value;
-  }
+  pub fn set_preferred_status_bar_style(&self, _value: IosStatusBarStyle) {}
 
   #[napi]
-  pub fn recognize_pinch_gesture(&self, value: bool) {
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::WindowExtIOS;
-      self.window.recognize_pinch_gesture(value);
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = value;
-  }
+  pub fn recognize_pinch_gesture(&self, _value: bool) {}
 
   #[napi]
-  pub fn recognize_pan_gesture(&self, value: bool, minimum_touches: u8, maximum_touches: u8) {
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::WindowExtIOS;
-      self
-        .window
-        .recognize_pan_gesture(value, minimum_touches, maximum_touches);
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = (value, minimum_touches, maximum_touches);
-  }
+  pub fn recognize_pan_gesture(&self, _value: bool, _minimum_touches: u8, _maximum_touches: u8) {}
 
   #[napi]
-  pub fn recognize_doubletap_gesture(&self, value: bool) {
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::WindowExtIOS;
-      self.window.recognize_doubletap_gesture(value);
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = value;
-  }
+  pub fn recognize_doubletap_gesture(&self, _value: bool) {}
 
   #[napi]
-  pub fn recognize_rotation_gesture(&self, value: bool) {
-    #[cfg(target_os = "ios")]
-    {
-      use winit::platform::ios::WindowExtIOS;
-      self.window.recognize_rotation_gesture(value);
-    }
-    #[cfg(not(target_os = "ios"))]
-    let _ = value;
-  }
+  pub fn recognize_rotation_gesture(&self, _value: bool) {}
 
   #[napi]
   pub fn android_content_rect(&self) -> AndroidContentRect {
     #[cfg(target_os = "android")]
     {
-      use winit::platform::android::WindowExtAndroid;
+      use tao::platform::android::WindowExtAndroid;
       let rect = self.window.content_rect();
       return AndroidContentRect {
         left: rect.left,
@@ -1552,7 +1148,7 @@ impl BrowserWindow {
   pub fn android_config(&self) -> String {
     #[cfg(target_os = "android")]
     {
-      use winit::platform::android::WindowExtAndroid;
+      use tao::platform::android::WindowExtAndroid;
       return format!("{:?}", self.window.config());
     }
     #[cfg(not(target_os = "android"))]
@@ -1564,7 +1160,6 @@ impl BrowserWindow {
     self.window.set_visible(visible);
   }
 
-  /// No-op: winit does not expose a progress bar API.
   #[napi]
   pub fn set_progress_bar(&self, _state: JsProgressBar) {}
 
@@ -1580,7 +1175,7 @@ impl BrowserWindow {
 
   #[napi]
   pub fn focus(&self) {
-    self.window.focus_window();
+    self.window.set_focus();
   }
 
   #[napi]
@@ -1602,7 +1197,6 @@ impl BrowserWindow {
     self.window.primary_monitor().map(monitor_to_js)
   }
 
-  /// Not available in winit; always returns `None`.
   #[napi]
   pub fn get_monitor_from_point(&self, _x: f64, _y: f64) -> Option<Monitor> {
     None
@@ -1610,38 +1204,22 @@ impl BrowserWindow {
 
   #[napi]
   pub fn set_content_protection(&self, enabled: bool) {
-    self.window.set_content_protected(enabled);
+    self.window.set_content_protection(enabled);
   }
 
   #[napi]
   pub fn set_always_on_top(&self, enabled: bool) {
-    self.window.set_window_level(if enabled {
-      WindowLevel::AlwaysOnTop
-    } else {
-      WindowLevel::Normal
-    });
+    self.window.set_always_on_top(enabled);
   }
 
   #[napi]
   pub fn set_always_on_bottom(&self, enabled: bool) {
-    self.window.set_window_level(if enabled {
-      WindowLevel::AlwaysOnBottom
-    } else {
-      WindowLevel::Normal
-    });
+    self.window.set_always_on_bottom(enabled);
   }
 
   #[napi]
   pub fn set_decorations(&self, enabled: bool) {
     self.window.set_decorations(enabled);
-    
-    // On Windows, when switching to undecorated mode with resizable window,
-    // install the resize border subclass for proper edge resizing support.
-    // This must be done AFTER set_decorations because it may remove WS_THICKFRAME.
-    #[cfg(target_os = "windows")]
-    if !enabled && self.window.is_resizable() {
-      crate::win32_resize::install_resize_border(&self.window);
-    }
   }
 
   #[napi(getter)]
@@ -1650,20 +1228,18 @@ impl BrowserWindow {
       None => None,
       Some(Fullscreen::Borderless(_)) => Some(FullscreenType::Borderless),
       Some(Fullscreen::Exclusive(_)) => Some(FullscreenType::Exclusive),
+      _ => None,
     }
   }
 
   #[napi]
   pub fn set_fullscreen(&self, fullscreen_type: Option<FullscreenType>) {
     let fs = match fullscreen_type {
-      Some(FullscreenType::Exclusive) => {
-        // grab first available video mode for the current monitor
-        self
-          .window
-          .current_monitor()
-          .and_then(|m| m.video_modes().next())
-          .map(Fullscreen::Exclusive)
-      }
+      Some(FullscreenType::Exclusive) => self
+        .window
+        .current_monitor()
+        .and_then(|m| m.video_modes().next())
+        .map(Fullscreen::Exclusive),
       Some(FullscreenType::Borderless) => Some(Fullscreen::Borderless(None)),
       None => None,
     };
@@ -1685,38 +1261,27 @@ impl BrowserWindow {
     self.window.set_visible(true);
   }
 
-  // ── Position ────────────────────────────────────────────────────────────────
-
   #[napi]
-  /// Move the window so its outer top-left corner is at (`x`, `y`) in
-  /// physical pixels.
   pub fn set_position(&self, x: i32, y: i32, logical: Option<bool>) {
-    if let Some(logical) = logical {
-      if logical {
-        self.window.set_outer_position(LogicalPosition::new(x, y));
-      } else {
-        self.window.set_outer_position(PhysicalPosition::new(x, y));
-      }
+    if logical == Some(true) {
+      self.window.set_outer_position(LogicalPosition::new(x, y));
     } else {
       self.window.set_outer_position(PhysicalPosition::new(x, y));
     }
   }
 
   #[napi]
-  /// Gets the window position.
   pub fn get_position(&self, logical: Option<bool>) -> Position {
     let position = self
       .window
       .outer_position()
       .unwrap_or(PhysicalPosition::new(0, 0));
-    if let Some(logical) = logical {
-      if logical {
-        let logical_position = position.to_logical::<f64>(self.window.scale_factor());
-        return Position {
-          x: logical_position.x as i32,
-          y: logical_position.y as i32,
-        };
-      }
+    if logical == Some(true) {
+      let logical_position = position.to_logical::<f64>(self.window.scale_factor());
+      return Position {
+        x: logical_position.x as i32,
+        y: logical_position.y as i32,
+      };
     }
     Position {
       x: position.x,
@@ -1724,8 +1289,6 @@ impl BrowserWindow {
     }
   }
 
-  /// Center the window on its current monitor.  Does nothing if the current
-  /// monitor cannot be determined.
   #[napi]
   pub fn center(&self) {
     if let Some(monitor) = self.window.current_monitor() {
@@ -1738,21 +1301,16 @@ impl BrowserWindow {
     }
   }
 
-  // ── DPI ─────────────────────────────────────────────────────────────────────
-
-  /// Inner width of the window in physical pixels.
   #[napi(getter)]
   pub fn width(&self) -> u32 {
     self.window.inner_size().width
   }
 
-  /// Inner height of the window in physical pixels.
   #[napi(getter)]
   pub fn height(&self) -> u32 {
     self.window.inner_size().height
   }
 
-  /// Outer x position of the window in physical pixels.
   #[napi(getter)]
   pub fn x(&self) -> i32 {
     self
@@ -1762,7 +1320,6 @@ impl BrowserWindow {
       .x
   }
 
-  /// Outer y position of the window in physical pixels.
   #[napi(getter)]
   pub fn y(&self) -> i32 {
     self
@@ -1772,17 +1329,13 @@ impl BrowserWindow {
       .y
   }
 
-  /// Device-pixel ratio for the monitor the window is currently on.
   #[napi]
   pub fn scale_factor(&self) -> f64 {
     self.window.scale_factor()
   }
 
-  // ── Cursor ──────────────────────────────────────────────────────────────────
-
   #[napi]
   pub fn set_cursor(&self, cursor: CursorType) {
-    #[allow(deprecated)]
     self.window.set_cursor_icon(cursor.into());
   }
 
@@ -1791,8 +1344,6 @@ impl BrowserWindow {
     self.window.set_cursor_visible(visible);
   }
 
-  /// Move the OS cursor to (`x`, `y`) in logical pixels relative to the
-  /// window's inner top-left corner.
   #[napi]
   pub fn set_cursor_position(&self, x: f64, y: f64) -> Result<()> {
     self
@@ -1801,32 +1352,24 @@ impl BrowserWindow {
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
 
-  /// When `true` the window ignores mouse input (click-through). Supported on
-  /// Windows and macOS; a no-op on other platforms.
   #[napi]
   pub fn set_ignore_cursor_events(&self, ignore: bool) -> Result<()> {
     self
       .window
-      .set_cursor_hittest(!ignore)
+      .set_ignore_cursor_events(ignore)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
 
-  // ── Taskbar ─────────────────────────────────────────────────────────────────
-
-  /// Hide/show the window in the system taskbar. Supported on Windows only;
-  /// a no-op on other platforms.
   #[napi]
   pub fn set_skip_taskbar(&self, skip: bool) {
     #[cfg(target_os = "windows")]
     {
-      use winit::platform::windows::WindowExtWindows;
-      self.window.set_skip_taskbar(skip);
+      use tao::platform::windows::WindowExtWindows;
+      let _ = self.window.set_skip_taskbar(skip);
     }
     #[cfg(not(target_os = "windows"))]
     let _ = skip;
   }
-
-  // ── Misc ─────────────────────────────────────────────────────────────────────
 
   #[napi]
   pub fn request_redraw(&self) {
@@ -1841,7 +1384,7 @@ impl From<CursorType> for CursorIcon {
     match c {
       CursorType::Default => CursorIcon::Default,
       CursorType::Crosshair => CursorIcon::Crosshair,
-      CursorType::Hand => CursorIcon::Pointer,
+      CursorType::Hand => CursorIcon::Hand,
       CursorType::Arrow => CursorIcon::Default,
       CursorType::Move => CursorIcon::Move,
       CursorType::Text => CursorIcon::Text,
@@ -1918,7 +1461,7 @@ pub(crate) fn next_protocol_id(counter: &ProtocolCounterRef) -> u64 {
   id
 }
 
-fn monitor_to_js(m: winit::monitor::MonitorHandle) -> Monitor {
+fn monitor_to_js(m: tao::monitor::MonitorHandle) -> Monitor {
   Monitor {
     name: m.name(),
     scale_factor: m.scale_factor(),
@@ -1938,7 +1481,7 @@ fn monitor_to_js(m: winit::monitor::MonitorHandle) -> Monitor {
           height: v.size().height,
         },
         bit_depth: v.bit_depth(),
-        refresh_rate: (v.refresh_rate_millihertz() / 1000) as u16,
+        refresh_rate: v.refresh_rate() as u16,
       })
       .collect(),
   }

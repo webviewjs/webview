@@ -226,7 +226,7 @@ jobs:
 
   # FreeBSD x64 — stub-only build.  The addon throws at runtime; it exists only
   # to satisfy package managers that resolve the freebsd-x64 optional package.
-  # The full wry/winit GUI stack is NOT compiled (see Cargo.toml cfg guards).
+  # The full wry/wry GUI stack is NOT compiled (see Cargo.toml cfg guards).
   build-freebsd:
     runs-on: ubuntu-latest
     name: FreeBSD x64 (stub)

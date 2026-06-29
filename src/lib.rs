@@ -25,5 +25,3 @@ pub mod tray;
 pub mod web_context;
 #[cfg(not(target_os = "freebsd"))]
 pub mod webview;
-#[cfg(target_os = "windows")]
-mod win32_resize;

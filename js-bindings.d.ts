@@ -13,7 +13,7 @@ export declare class Application {
   createChildBrowserWindow(options?: BrowserWindowOptions | undefined | null): BrowserWindow;
   setMenu(menuOptions?: MenuOptions | undefined | null): void;
   /**
-   * Pump the winit event loop once without blocking. Returns `true` while
+   * Pump the tao event loop once without blocking. Returns `true` while
    * the app is alive, `false` when it should stop. Drive this from a JS
    * `setInterval` via the `run()` wrapper in `index.js`.
    */
@@ -23,44 +23,13 @@ export declare class Application {
 }
 
 export declare class BrowserWindow {
-  /**
-   * Low-level protocol registration used by the JS `registerProtocol` wrapper.
-   * `handler` is called with a single JSON string argument:
-   * `{ id, url, method, headers, body }` where `body` is a number[] or null.
-   * Call `_completeProtocol(id, response)` when the response is ready.
-   */
   _registerProtocol(name: string, handler: (arg: string) => void): void;
-  /**
-   * Complete a pending async protocol request previously started by the
-   * `_registerProtocol` handler.  `id` matches the value in the JSON payload.
-   */
   _completeProtocol(id: number, response: CustomProtocolResponse): void;
   createWebview(options?: WebviewOptions | undefined | null, webContext?: JsWebContext | undefined | null): JsWebview;
-  /**
-   * Pre-register the webview event dispatch callback before `createWebview`.
-   * Called by the JS wrapper to wire page_load / title / download events into
-   * an EventEmitter on the returned Webview object.
-   */
   _setPendingWebviewEventCallback(handler: (err: Error | null, arg: WebviewEventPayload) => any): void;
-  /**
-   * Pre-register a sync navigation guard before `createWebview`.
-   * The JS function receives the target URL and must return `true` (allow)
-   * or `false` (deny) synchronously.
-   */
   _setPendingWebviewNavigationHandler(handler: (arg: string) => boolean): void;
-  /**
-   * Clear all pending per-webview handlers so they don't leak into the next
-   * `createWebview` call on the same window.  Called by the JS wrapper after
-   * each `createWebview`.
-   */
   _clearPendingWebviewHandlers(): void;
   get isChild(): boolean;
-  /**
-   * Returns the platform-native window handle as a raw pointer value.
-   * On Windows this is the HWND, on macOS the NSWindow pointer,
-   * on Linux X11 the Window XID, on Linux Wayland the wl_surface pointer.
-   * Returns 0 if the handle cannot be retrieved.
-   */
   getNativeHandle(): bigint;
   isFocused(): boolean;
   isVisible(): boolean;
@@ -77,34 +46,19 @@ export declare class BrowserWindow {
   setMaximizable(maximizable: boolean): void;
   setMinimizable(minimizable: boolean): void;
   setResizable(resizable: boolean): void;
-  /** Sets the window inner size (width and height). */
   setSize(width: number, height: number, logical?: boolean | undefined | null): Dimensions | null;
-  /** Sets the min window inner size (width and height). */
   setMinSize(width: number, height: number, logical?: boolean | undefined | null): void;
-  /** Gets the window inner size. */
   getInnerSize(logical?: boolean | undefined | null): Dimensions;
-  /** Sets the max window inner size (width and height). */
   setMaxSize(width: number, height: number, logical?: boolean | undefined | null): void;
-  /** Gets the window outer size. */
   getOuterSize(logical?: boolean | undefined | null): Dimensions;
-  /** Opens a file select dialog */
   openFileDialog(options?: FileDialogOptions | undefined | null): Array<string>;
   id(): number;
   hasMenu(): boolean;
   dispose(): void;
   isDisposed(): boolean;
-  /**
-   * Register a raw callback to receive window events.  Used internally by the
-   * JS EventEmitter wrapper; prefer `window.on(event, handler)` in user code.
-   */
   _onWindowEvent(handler?: ((arg: WindowEventPayload) => void) | undefined | null): void;
   get theme(): Theme;
   setTheme(theme: Theme): void;
-  /**
-   * Set the window icon.
-   * - Passing raw RGBA bytes requires `width` and `height` (or just `width` to assume square).
-   * - Passing an encoded image buffer (PNG, ICO, JPEG, etc.) will auto-detect dimensions.
-   */
   setWindowIcon(
     icon: Uint8Array | Array<number>,
     width?: number | undefined | null,
@@ -119,14 +73,19 @@ export declare class BrowserWindow {
   ): void;
   removeTaskbarIcon(): void;
   setUndecoratedShadow(shadow: boolean): void;
+  /** No-op: tao 0.35 does not expose system backdrop (Mica/Acrylic) APIs. */
   setSystemBackdrop(backdrop: WindowsSystemBackdrop): void;
+  /** No-op: tao 0.35 does not expose window border color APIs. */
   setBorderColor(r?: number | undefined | null, g?: number | undefined | null, b?: number | undefined | null): void;
+  /** No-op: tao 0.35 does not expose title background color APIs. */
   setTitleBackgroundColor(
     r?: number | undefined | null,
     g?: number | undefined | null,
     b?: number | undefined | null,
   ): void;
+  /** No-op: tao 0.35 does not expose title text color APIs. */
   setTitleTextColor(r: number, g: number, b: number): void;
+  /** No-op: tao 0.35 does not expose corner preference APIs. */
   setCornerPreference(preference: WindowsCornerPreference): void;
   getNativeHandleAnyThread(): bigint;
   simpleFullscreen(): boolean;
@@ -141,9 +100,13 @@ export declare class BrowserWindow {
   numTabs(): number;
   isDocumentEdited(): boolean;
   setDocumentEdited(edited: boolean): void;
+  /** No-op: tao 0.35 does not expose option-as-alt runtime setter. */
   setOptionAsAlt(value: MacosOptionAsAlt): void;
+  /** No-op: tao 0.35 does not expose option-as-alt getter. */
   optionAsAlt(): MacosOptionAsAlt;
+  /** No-op: tao 0.35 does not expose borderless-game mode. */
   setBorderlessGame(value: boolean): void;
+  /** No-op: tao 0.35 does not expose borderless-game mode. */
   isBorderlessGame(): boolean;
   getWaylandXdgToplevel(): bigint;
   setIosScaleFactor(value: number): void;
@@ -159,7 +122,6 @@ export declare class BrowserWindow {
   androidContentRect(): AndroidContentRect;
   androidConfig(): string;
   setVisible(visible: boolean): void;
-  /** No-op: winit does not expose a progress bar API. */
   setProgressBar(state: JsProgressBar): void;
   setMaximized(value: boolean): void;
   setMinimized(value: boolean): void;
@@ -167,7 +129,6 @@ export declare class BrowserWindow {
   getAvailableMonitors(): Array<Monitor>;
   getCurrentMonitor(): Monitor | null;
   getPrimaryMonitor(): Monitor | null;
-  /** Not available in winit; always returns `None`. */
   getMonitorFromPoint(x: number, y: number): Monitor | null;
   setContentProtection(enabled: boolean): void;
   setAlwaysOnTop(enabled: boolean): void;
@@ -178,44 +139,18 @@ export declare class BrowserWindow {
   close(): void;
   hide(): void;
   show(): void;
-  /**
-   * Move the window so its outer top-left corner is at (`x`, `y`) in
-   * physical pixels.
-   */
   setPosition(x: number, y: number, logical?: boolean | undefined | null): void;
-  /** Gets the window position. */
   getPosition(logical?: boolean | undefined | null): Position;
-  /**
-   * Center the window on its current monitor.  Does nothing if the current
-   * monitor cannot be determined.
-   */
   center(): void;
-  /** Inner width of the window in physical pixels. */
   get width(): number;
-  /** Inner height of the window in physical pixels. */
   get height(): number;
-  /** Outer x position of the window in physical pixels. */
   get x(): number;
-  /** Outer y position of the window in physical pixels. */
   get y(): number;
-  /** Device-pixel ratio for the monitor the window is currently on. */
   scaleFactor(): number;
   setCursor(cursor: CursorType): void;
   setCursorVisible(visible: boolean): void;
-  /**
-   * Move the OS cursor to (`x`, `y`) in logical pixels relative to the
-   * window's inner top-left corner.
-   */
   setCursorPosition(x: number, y: number): void;
-  /**
-   * When `true` the window ignores mouse input (click-through). Supported on
-   * Windows and macOS; a no-op on other platforms.
-   */
   setIgnoreCursorEvents(ignore: boolean): void;
-  /**
-   * Hide/show the window in the system taskbar. Supported on Windows only;
-   * a no-op on other platforms.
-   */
   setSkipTaskbar(skip: boolean): void;
   requestRedraw(): void;
 }

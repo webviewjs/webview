@@ -16,12 +16,10 @@ use muda::Menu;
 use napi::bindgen_prelude::*;
 use napi::Result;
 use napi_derive::napi;
-#[cfg(not(target_os = "windows"))]
-use winit::window::{Cursor, CursorIcon, ResizeDirection};
-use winit::{
-  application::ApplicationHandler,
-  event::{ElementState, Ime, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
-  event_loop::{ActiveEventLoop, EventLoop},
+use tao::{
+  event::{ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
+  event_loop::EventLoop,
+  keyboard::{Key, KeyCode, ModifiersState},
   window::{Window, WindowId},
 };
 
@@ -61,7 +59,7 @@ struct AppState {
   ready: bool,
   /// Tracks open windows so we can hide them on close without dropping BrowserWindow.
   windows: HashMap<WindowId, Arc<Window>>,
-  /// Shared handle into each BrowserWindow's webview list.  Winit swallows
+  /// Shared handle into each BrowserWindow's webview list.  Tao swallows
   /// WM_SIZE without forwarding to wry's subclass proc, so we resize manually
   /// when WindowEvent::Resized arrives.
   webviews: HashMap<WindowId, Rc<RefCell<Vec<WebviewResource>>>>,
@@ -72,7 +70,7 @@ struct AppState {
   /// Last known physical cursor position per window (for edge-resize hit testing).
   cursor_positions: HashMap<WindowId, (f64, f64)>,
   /// Last known modifier state.
-  current_modifiers: winit::event::Modifiers,
+  current_modifiers: ModifiersState,
   #[cfg(not(target_os = "android"))]
   menu_event_receiver: Option<muda::MenuEventReceiver>,
   #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
@@ -162,637 +160,532 @@ impl AppState {
   }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn resize_direction(
-  x: f64,
-  y: f64,
-  width: f64,
-  height: f64,
-  border: f64,
-) -> Option<ResizeDirection> {
-  let left = x < border;
-  let right = x > width - border;
-  let top = y < border;
-  let bottom = y > height - border;
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-  match (left, right, top, bottom) {
-    (true, _, true, _) => Some(ResizeDirection::NorthWest),
-    (_, true, true, _) => Some(ResizeDirection::NorthEast),
-    (true, _, _, true) => Some(ResizeDirection::SouthWest),
-    (_, true, _, true) => Some(ResizeDirection::SouthEast),
-    (true, _, _, _) => Some(ResizeDirection::West),
-    (_, true, _, _) => Some(ResizeDirection::East),
-    (_, _, true, _) => Some(ResizeDirection::North),
-    (_, _, _, true) => Some(ResizeDirection::South),
-    _ => None,
-  }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn cursor_for_resize_dir(dir: &ResizeDirection) -> CursorIcon {
-  match dir {
-    ResizeDirection::North | ResizeDirection::South => CursorIcon::NsResize,
-    ResizeDirection::East | ResizeDirection::West => CursorIcon::EwResize,
-    ResizeDirection::NorthEast | ResizeDirection::SouthWest => CursorIcon::NeswResize,
-    ResizeDirection::NorthWest | ResizeDirection::SouthEast => CursorIcon::NwseResize,
-  }
-}
-
-fn modifiers_bits(mods: &winit::event::Modifiers) -> u32 {
-  let s = mods.state();
+fn modifiers_bits(mods: &ModifiersState) -> u32 {
   let mut bits = 0u32;
-  if s.shift_key() {
+  if mods.shift_key() {
     bits |= 1;
   }
-  if s.control_key() {
+  if mods.control_key() {
     bits |= 2;
   }
-  if s.alt_key() {
+  if mods.alt_key() {
     bits |= 4;
   }
-  if s.super_key() {
+  if mods.super_key() {
     bits |= 8;
   }
   bits
 }
 
-fn logical_key_name(key: &winit::keyboard::Key) -> Option<String> {
+fn logical_key_name(key: &Key<'_>) -> Option<String> {
   match key {
-    winit::keyboard::Key::Character(c) => Some(c.as_str().to_owned()),
-    winit::keyboard::Key::Named(named) => Some(match named {
-      winit::keyboard::NamedKey::Space => " ".to_owned(),
-      winit::keyboard::NamedKey::Super => "Meta".to_owned(),
-      other => format!("{:?}", other),
-    }),
-    winit::keyboard::Key::Dead(Some(c)) => Some(format!("Dead({})", c)),
-    _ => None,
+    Key::Character(c) => Some(c.to_string()),
+    Key::Dead(Some(c)) => Some(format!("Dead({})", c)),
+    _ => Some(format!("{:?}", key)),
   }
 }
 
-fn physical_key_code(key: &winit::keyboard::PhysicalKey) -> Option<String> {
-  match key {
-    winit::keyboard::PhysicalKey::Code(code) => Some(format!("{:?}", code)),
-    winit::keyboard::PhysicalKey::Unidentified(_) => None,
-  }
+fn physical_key_code(key: &KeyCode) -> Option<String> {
+  Some(format!("{:?}", key))
 }
 
-// ── ApplicationHandler ────────────────────────────────────────────────────────
+// ── Window event dispatch (moved out of ApplicationHandler) ───────────────────
 
-struct AppHandler<'a>(&'a mut AppState);
+fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowEvent) {
+  if state.should_exit {
+    return;
+  }
 
-impl ApplicationHandler for AppHandler<'_> {
-  fn resumed(&mut self, _event_loop: &ActiveEventLoop) {
-    let state = &mut *self.0;
-    if !state.ready {
-      state.ready = true;
+  match event {
+    WindowEvent::Resized(new_size) => {
+      if let Some(views) = state.webviews.get(&window_id) {
+        let rect = wry::Rect {
+          position: ::dpi::PhysicalPosition::new(0_i32, 0_i32).into(),
+          size: ::dpi::PhysicalSize::new(new_size.width, new_size.height).into(),
+        };
+        for resource in views.borrow().iter() {
+          if let Some(webview) = resource.borrow().as_ref() {
+            let _ = webview.set_bounds(rect);
+          }
+        }
+      }
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::Resized,
+          width: Some(new_size.width),
+          height: Some(new_size.height),
+          x: None,
+          y: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          key: None,
+          code: None,
+          modifiers: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::Moved(pos) => {
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::Moved,
+          x: Some(pos.x as f64),
+          y: Some(pos.y as f64),
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          key: None,
+          code: None,
+          modifiers: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::CloseRequested => {
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::CloseRequested,
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          key: None,
+          code: None,
+          modifiers: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+      if let Some(win) = state.windows.remove(&window_id) {
+        win.set_visible(false);
+      }
+      state.cursor_positions.remove(&window_id);
       state.fire(ApplicationEvent {
-        event: WebviewApplicationEvent::Ready,
+        event: WebviewApplicationEvent::WindowCloseRequested,
         custom_menu_event: None,
       });
-    }
-  }
-
-  fn window_event(
-    &mut self,
-    _event_loop: &ActiveEventLoop,
-    window_id: WindowId,
-    event: WindowEvent,
-  ) {
-    let state = &mut self.0;
-    if state.should_exit {
-      return;
-    }
-
-    match event {
-      WindowEvent::Resized(new_size) => {
-        if let Some(views) = state.webviews.get(&window_id) {
-          let rect = wry::Rect {
-            position: ::dpi::PhysicalPosition::new(0_i32, 0_i32).into(),
-            size: ::dpi::PhysicalSize::new(new_size.width, new_size.height).into(),
-          };
-          for resource in views.borrow().iter() {
-            if let Some(webview) = resource.borrow().as_ref() {
-              let _ = webview.set_bounds(rect);
-            }
-          }
-        }
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::Resized,
-            width: Some(new_size.width),
-            height: Some(new_size.height),
-            x: None,
-            y: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            key: None,
-            code: None,
-            modifiers: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::Moved(pos) => {
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::Moved,
-            x: Some(pos.x as f64),
-            y: Some(pos.y as f64),
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            key: None,
-            code: None,
-            modifiers: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::CloseRequested => {
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::CloseRequested,
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            key: None,
-            code: None,
-            modifiers: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-        if let Some(win) = state.windows.remove(&window_id) {
-          win.set_visible(false);
-        }
-        state.cursor_positions.remove(&window_id);
+      if state.windows.is_empty() {
         state.fire(ApplicationEvent {
-          event: WebviewApplicationEvent::WindowCloseRequested,
+          event: WebviewApplicationEvent::ApplicationCloseRequested,
           custom_menu_event: None,
         });
-        if state.windows.is_empty() {
-          state.fire(ApplicationEvent {
-            event: WebviewApplicationEvent::ApplicationCloseRequested,
-            custom_menu_event: None,
-          });
-          state.shutdown();
-        }
+        state.shutdown();
       }
-      WindowEvent::Focused(focused) => {
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: if focused {
-              WindowEventType::Focused
-            } else {
-              WindowEventType::Blurred
-            },
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            key: None,
-            code: None,
-            modifiers: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::CursorEntered { .. } => {
-        let pos = state.cursor_positions.get(&window_id).copied();
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::MouseEnter,
-            x: pos.map(|p| p.0),
-            y: pos.map(|p| p.1),
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            key: None,
-            code: None,
-            modifiers: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::CursorLeft { .. } => {
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::MouseLeave,
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            key: None,
-            code: None,
-            modifiers: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::CursorMoved { position, .. } => {
-        let (cx, cy) = (position.x, position.y);
-        state.cursor_positions.insert(window_id, (cx, cy));
-
-        // For undecorated+resizable windows, update cursor icon near edges.
-        // On Windows this is handled by the WM_NCHITTEST subclass instead
-        // (WebView2 consumes mouse events before winit sees them).
-        #[cfg(not(target_os = "windows"))]
-        if let Some(win) = state.windows.get(&window_id) {
-          if !win.is_decorated() && win.is_resizable() {
-            let size = win.inner_size();
-            let border = 6.0 * win.scale_factor();
-            if let Some(dir) =
-              resize_direction(cx, cy, size.width as f64, size.height as f64, border)
-            {
-              win.set_cursor(Cursor::Icon(cursor_for_resize_dir(&dir)));
-            } else {
-              win.set_cursor(Cursor::Icon(CursorIcon::Default));
-            }
-          }
-        }
-
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::MouseMove,
-            x: Some(cx),
-            y: Some(cy),
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            key: None,
-            code: None,
-            modifiers: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::MouseInput {
-        state: btn_state,
-        button,
-        ..
-      } => {
-        let btn_index = match button {
-          MouseButton::Left => 0u32,
-          MouseButton::Middle => 1u32,
-          MouseButton::Right => 2u32,
-          _ => 3u32,
-        };
-
-        // For undecorated+resizable windows, initiate drag-resize on left press near edges.
-        // On Windows this is handled by the WM_NCHITTEST subclass instead.
-        #[cfg(not(target_os = "windows"))]
-        if btn_state == ElementState::Pressed && button == MouseButton::Left {
-          if let (Some(win), Some(&(cx, cy))) = (
-            state.windows.get(&window_id),
-            state.cursor_positions.get(&window_id),
-          ) {
-            if !win.is_decorated() && win.is_resizable() {
-              let size = win.inner_size();
-              let border = 6.0 * win.scale_factor();
-              if let Some(dir) =
-                resize_direction(cx, cy, size.width as f64, size.height as f64, border)
-              {
-                let _ = win.drag_resize_window(dir);
-                return;
-              }
-            }
-          }
-        }
-
-        let pos = state.cursor_positions.get(&window_id).copied();
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: if btn_state == ElementState::Pressed {
-              WindowEventType::MouseDown
-            } else {
-              WindowEventType::MouseUp
-            },
-            x: pos.map(|p| p.0),
-            y: pos.map(|p| p.1),
-            button: Some(btn_index),
-            width: None,
-            height: None,
-            delta_x: None,
-            delta_y: None,
-            modifiers: Some(modifiers_bits(&state.current_modifiers)),
-            key: None,
-            code: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::MouseWheel { delta, .. } => {
-        let (dx, dy) = match delta {
-          MouseScrollDelta::LineDelta(x, y) => (x as f64 * 20.0, y as f64 * 20.0),
-          MouseScrollDelta::PixelDelta(pos) => (pos.x, pos.y),
-        };
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::Scroll,
-            delta_x: Some(dx),
-            delta_y: Some(dy),
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            key: None,
-            code: None,
-            modifiers: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::ModifiersChanged(mods) => {
-        state.current_modifiers = mods;
-      }
-      WindowEvent::KeyboardInput {
-        event: ref key_event,
-        ..
-      } => {
-        let mods = modifiers_bits(&state.current_modifiers);
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: if key_event.state == ElementState::Pressed {
-              WindowEventType::KeyDown
-            } else {
-              WindowEventType::KeyUp
-            },
-            key: logical_key_name(&key_event.logical_key),
-            code: physical_key_code(&key_event.physical_key),
-            modifiers: Some(mods),
-            is_repeat: Some(key_event.repeat),
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::Ime(ime) => {
-        let (text, phase) = match &ime {
-          Ime::Enabled => (None, Some("enabled".to_owned())),
-          Ime::Preedit(t, _) => (Some(t.clone()), Some("preedit".to_owned())),
-          Ime::Commit(t) => (Some(t.clone()), Some("commit".to_owned())),
-          Ime::Disabled => (None, Some("disabled".to_owned())),
-        };
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::Ime,
-            text,
-            phase,
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            modifiers: None,
-            key: None,
-            code: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            touch_id: None,
-          },
-        );
-      }
-      WindowEvent::DroppedFile(path) => {
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::FileDrop,
-            files: Some(vec![path.to_string_lossy().into_owned()]),
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            modifiers: None,
-            key: None,
-            code: None,
-            is_repeat: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::HoveredFile(path) => {
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::FileHover,
-            files: Some(vec![path.to_string_lossy().into_owned()]),
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            modifiers: None,
-            key: None,
-            code: None,
-            is_repeat: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::HoveredFileCancelled => {
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::FileHoverCancelled,
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            modifiers: None,
-            key: None,
-            code: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::ScaleFactorChanged,
-            scale_factor: Some(scale_factor),
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            modifiers: None,
-            key: None,
-            code: None,
-            is_repeat: None,
-            files: None,
-            text: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::ThemeChanged(theme) => {
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::ThemeChanged,
-            text: Some(match theme {
-              winit::window::Theme::Light => "light".to_owned(),
-              winit::window::Theme::Dark => "dark".to_owned(),
-            }),
-            x: None,
-            y: None,
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            modifiers: None,
-            key: None,
-            code: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            touch_id: None,
-            phase: None,
-          },
-        );
-      }
-      WindowEvent::Touch(touch) => {
-        let phase_str = match touch.phase {
-          TouchPhase::Started => "started",
-          TouchPhase::Moved => "moved",
-          TouchPhase::Ended => "ended",
-          TouchPhase::Cancelled => "cancelled",
-        };
-        state.fire_window_event(
-          window_id,
-          WindowEventPayload {
-            event: WindowEventType::Touch,
-            x: Some(touch.location.x),
-            y: Some(touch.location.y),
-            touch_id: Some(touch.id as f64),
-            phase: Some(phase_str.to_owned()),
-            width: None,
-            height: None,
-            button: None,
-            delta_x: None,
-            delta_y: None,
-            modifiers: None,
-            key: None,
-            code: None,
-            is_repeat: None,
-            files: None,
-            scale_factor: None,
-            text: None,
-          },
-        );
-      }
-      _ => {}
     }
+    WindowEvent::Focused(focused) => {
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: if focused {
+            WindowEventType::Focused
+          } else {
+            WindowEventType::Blurred
+          },
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          key: None,
+          code: None,
+          modifiers: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::CursorEntered { .. } => {
+      let pos = state.cursor_positions.get(&window_id).copied();
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::MouseEnter,
+          x: pos.map(|p| p.0),
+          y: pos.map(|p| p.1),
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          key: None,
+          code: None,
+          modifiers: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::CursorLeft { .. } => {
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::MouseLeave,
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          key: None,
+          code: None,
+          modifiers: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::CursorMoved { position, .. } => {
+      let (cx, cy) = (position.x, position.y);
+      state.cursor_positions.insert(window_id, (cx, cy));
+
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::MouseMove,
+          x: Some(cx),
+          y: Some(cy),
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          key: None,
+          code: None,
+          modifiers: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::MouseInput {
+      state: btn_state,
+      button,
+      ..
+    } => {
+      let btn_index = match button {
+        MouseButton::Left => 0u32,
+        MouseButton::Middle => 1u32,
+        MouseButton::Right => 2u32,
+        _ => 3u32,
+      };
+
+      let pos = state.cursor_positions.get(&window_id).copied();
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: if btn_state == ElementState::Pressed {
+            WindowEventType::MouseDown
+          } else {
+            WindowEventType::MouseUp
+          },
+          x: pos.map(|p| p.0),
+          y: pos.map(|p| p.1),
+          button: Some(btn_index),
+          width: None,
+          height: None,
+          delta_x: None,
+          delta_y: None,
+          modifiers: Some(modifiers_bits(&state.current_modifiers)),
+          key: None,
+          code: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::MouseWheel { delta, .. } => {
+      let (dx, dy) = match delta {
+        MouseScrollDelta::LineDelta(x, y) => (x as f64 * 20.0, y as f64 * 20.0),
+        MouseScrollDelta::PixelDelta(pos) => (pos.x, pos.y),
+        _ => return,
+      };
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::Scroll,
+          delta_x: Some(dx),
+          delta_y: Some(dy),
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          key: None,
+          code: None,
+          modifiers: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::ModifiersChanged(mods) => {
+      state.current_modifiers = mods;
+    }
+    WindowEvent::KeyboardInput {
+      event: ref key_event,
+      ..
+    } => {
+      let mods = modifiers_bits(&state.current_modifiers);
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: if key_event.state == ElementState::Pressed {
+            WindowEventType::KeyDown
+          } else {
+            WindowEventType::KeyUp
+          },
+          key: logical_key_name(&key_event.logical_key),
+          code: physical_key_code(&key_event.physical_key),
+          modifiers: Some(mods),
+          is_repeat: Some(key_event.repeat),
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    // tao uses ReceivedImeText instead of the full Ime lifecycle
+    WindowEvent::ReceivedImeText(text) => {
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::Ime,
+          text: Some(text),
+          phase: Some("commit".to_owned()),
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          modifiers: None,
+          key: None,
+          code: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          touch_id: None,
+        },
+      );
+    }
+    WindowEvent::DroppedFile(path) => {
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::FileDrop,
+          files: Some(vec![path.to_string_lossy().into_owned()]),
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          modifiers: None,
+          key: None,
+          code: None,
+          is_repeat: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::HoveredFile(path) => {
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::FileHover,
+          files: Some(vec![path.to_string_lossy().into_owned()]),
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          modifiers: None,
+          key: None,
+          code: None,
+          is_repeat: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::HoveredFileCancelled => {
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::FileHoverCancelled,
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          modifiers: None,
+          key: None,
+          code: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::ScaleFactorChanged,
+          scale_factor: Some(scale_factor),
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          modifiers: None,
+          key: None,
+          code: None,
+          is_repeat: None,
+          files: None,
+          text: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::ThemeChanged(theme) => {
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::ThemeChanged,
+          text: Some(match theme {
+            tao::window::Theme::Light => "light".to_owned(),
+            tao::window::Theme::Dark => "dark".to_owned(),
+            _ => "light".to_owned(),
+          }),
+          x: None,
+          y: None,
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          modifiers: None,
+          key: None,
+          code: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          touch_id: None,
+          phase: None,
+        },
+      );
+    }
+    WindowEvent::Touch(touch) => {
+      let phase_str = match touch.phase {
+        TouchPhase::Started => "started",
+        TouchPhase::Moved => "moved",
+        TouchPhase::Ended => "ended",
+        TouchPhase::Cancelled => "cancelled",
+        _ => "unknown",
+      };
+      state.fire_window_event(
+        window_id,
+        WindowEventPayload {
+          event: WindowEventType::Touch,
+          x: Some(touch.location.x),
+          y: Some(touch.location.y),
+          touch_id: Some(touch.id as f64),
+          phase: Some(phase_str.to_owned()),
+          width: None,
+          height: None,
+          button: None,
+          delta_x: None,
+          delta_y: None,
+          modifiers: None,
+          key: None,
+          code: None,
+          is_repeat: None,
+          files: None,
+          scale_factor: None,
+          text: None,
+        },
+      );
+    }
+    _ => {}
   }
 }
 
@@ -811,28 +704,7 @@ pub struct Application {
 impl Application {
   #[napi(constructor)]
   pub fn new(env: Env, _options: Option<ApplicationOptions>) -> Result<Self> {
-    // On macOS, disable winit's built-in default menu so it doesn't overwrite
-    // the muda-managed menu bar on the first pump iteration.
-    #[cfg(target_os = "macos")]
-    let event_loop = {
-      use winit::platform::macos::EventLoopBuilderExtMacOS;
-      EventLoop::builder()
-        .with_default_menu(false)
-        .build()
-        .map_err(|e| {
-          napi::Error::new(
-            napi::Status::GenericFailure,
-            format!("Failed to create event loop: {}", e),
-          )
-        })?
-    };
-    #[cfg(not(target_os = "macos"))]
-    let event_loop = EventLoop::new().map_err(|e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to create event loop: {}", e),
-      )
-    })?;
+    let event_loop = EventLoop::new();
 
     // On macOS install a default app menu immediately so the menu bar is
     // functional from the start.  Store it in global_menu so the ObjC delegate
@@ -863,7 +735,7 @@ impl Application {
         window_lifecycles: HashMap::new(),
         webview_lifecycles: HashMap::new(),
         cursor_positions: HashMap::new(),
-        current_modifiers: winit::event::Modifiers::default(),
+        current_modifiers: ModifiersState::default(),
         #[cfg(not(target_os = "android"))]
         menu_event_receiver: {
           // On macOS we always have a menu from startup so start receiving events
@@ -990,12 +862,12 @@ impl Application {
     )?;
 
     if let Ok(mut ids) = self.window_ids.lock() {
-      ids.insert(format!("{:?}", window.winit_window_id()), window.id());
+      ids.insert(format!("{:?}", window.tao_window_id()), window.id());
     }
 
     // Track the window so pump_events can hide it on CloseRequested and resize
-    // its webviews on Resized (winit bypasses wry's WM_SIZE subclass proc).
-    let wid = window.winit_window_id();
+    // its webviews on Resized (tao bypasses wry's WM_SIZE subclass proc).
+    let wid = window.tao_window_id();
     self.state.windows.insert(wid, Arc::clone(&window.window));
     self.state.webviews.insert(wid, window.webviews_shared());
     self
@@ -1037,7 +909,7 @@ impl Application {
     #[cfg(target_os = "android")]
     let window = BrowserWindow::new(event_loop, options, true, Rc::new(RefCell::new(None)))?;
 
-    let wid = window.winit_window_id();
+    let wid = window.tao_window_id();
     self.state.windows.insert(wid, Arc::clone(&window.window));
     self.state.webviews.insert(wid, window.webviews_shared());
     self
@@ -1092,15 +964,25 @@ impl Application {
     Ok(())
   }
 
-  /// Pump the winit event loop once without blocking. Returns `true` while
+  /// Pump the tao event loop once without blocking. Returns `true` while
   /// the app is alive, `false` when it should stop. Drive this from a JS
   /// `setInterval` via the `run()` wrapper in `index.js`.
   #[napi]
   pub fn pump_events(&mut self) -> bool {
-    use winit::platform::pump_events::EventLoopExtPumpEvents;
+    use tao::event::{Event, StartCause};
+    use tao::platform::run_return::EventLoopExtRunReturn;
 
     if self.state.should_exit {
       return false;
+    }
+
+    // Fire the ready event on the first pump.
+    if !self.state.ready {
+      self.state.ready = true;
+      self.state.fire(ApplicationEvent {
+        event: WebviewApplicationEvent::Ready,
+        custom_menu_event: None,
+      });
     }
 
     // Drain menu events before pumping the window event loop.
@@ -1140,11 +1022,26 @@ impl Application {
     };
     let state = &mut self.state;
 
-    // Never call event_loop.exit() — doing so permanently marks the runner as
-    // exited until reset_runner() fires, which can cause the next pump to
-    // re-emit Init/Resumed and confuse the state machine.  Instead we
-    // hide windows and let the JS side stop the interval when we return false.
-    event_loop.pump_app_events(Some(std::time::Duration::ZERO), &mut AppHandler(state));
+    // Phase A: tao event dispatch — non-blocking via ControlFlow::Exit on MainEventsCleared.
+    event_loop.run_return(|event, _target, control_flow| {
+      use tao::event_loop::ControlFlow;
+      *control_flow = ControlFlow::Poll;
+
+      match event {
+        Event::WindowEvent {
+          window_id,
+          event: win_event,
+          ..
+        } => {
+          handle_window_event(state, window_id, win_event);
+        }
+        Event::MainEventsCleared => {
+          *control_flow = ControlFlow::Exit;
+        }
+        Event::NewEvents(StartCause::Poll) => {}
+        _ => {}
+      }
+    });
 
     !state.should_exit
   }

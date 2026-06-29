@@ -56,7 +56,7 @@ app.pumpEvents(): boolean
 
 ### `whenReady(options?)`
 
-Resolve when winit emits its first native `resumed()` lifecycle callback.
+Resolve when wry emits its first native `resumed()` lifecycle callback.
 `whenReady()` starts the event pump by default:
 
 ```js
