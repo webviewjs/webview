@@ -1,9 +1,8 @@
-use napi::{
-  bindgen_prelude::Buffer,
-  threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
-  Env, Result,
-};
+use napi::{bindgen_prelude::Buffer, threadsafe_function::ThreadsafeFunction, Env, Result};
 use napi_derive::napi;
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use napi::threadsafe_function::ThreadsafeFunctionCallMode;
 
 #[cfg(target_os = "linux")]
 use std::sync::{Arc, Mutex};
@@ -56,6 +55,7 @@ pub struct NotificationEventPayload {
   pub error: Option<String>,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn emit(
   callback: &ThreadsafeFunction<NotificationEventPayload>,
   event: &str,
@@ -151,7 +151,10 @@ impl JsNotification {
       use notify_rust::{Notification, Timeout};
 
       let mut notification = Notification::new();
+      #[cfg(any(target_os = "windows", target_os = "macos"))]
       let mut temporary_image: Option<TemporaryNotificationImage> = None;
+      #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+      let temporary_image: Option<TemporaryNotificationImage> = None;
       notification.summary(&options.title);
       for action in &options.actions {
         notification.action(&action.action, &action.title);

@@ -95,16 +95,6 @@ impl Default for BrowserWindowOptions {
       macos_disallow_hidpi: None,
       macos_has_shadow: None,
       macos_tabbing_identifier: None,
-      x11_visual_id: None,
-      x11_screen: None,
-      x11_general_name: None,
-      x11_instance_name: None,
-      x11_override_redirect: None,
-      x11_window_types: None,
-      x11_base_width: None,
-      x11_base_height: None,
-      wayland_app_id: None,
-      wayland_instance: None,
       ios_scale_factor: None,
       ios_valid_orientations: None,
       ios_prefers_home_indicator_hidden: None,
@@ -293,61 +283,6 @@ impl BrowserWindow {
       }
     }
 
-    #[cfg(target_os = "linux")]
-    {
-      use tao::platform::x11::{WindowBuilderExtX11, WindowType};
-      if let Some(value) = options.x11_visual_id {
-        builder = builder.with_x11_visual(value as *const ());
-      }
-      if let Some(value) = options.x11_screen {
-        builder = builder.with_x11_screen(value);
-      }
-      if let (Some(general), Some(instance)) = (
-        options.x11_general_name.as_deref(),
-        options.x11_instance_name.as_deref(),
-      ) {
-        builder = builder.with_name(general, instance);
-      }
-      if let Some(value) = options.x11_override_redirect {
-        builder = builder.with_override_redirect(value);
-      }
-      if let Some(values) = options.x11_window_types.as_ref() {
-        builder = builder.with_x11_window_type(
-          values
-            .iter()
-            .map(|value| match value {
-              X11WindowType::Desktop => WindowType::Desktop,
-              X11WindowType::Dock => WindowType::Dock,
-              X11WindowType::Toolbar => WindowType::Toolbar,
-              X11WindowType::Menu => WindowType::Menu,
-              X11WindowType::Utility => WindowType::Utility,
-              X11WindowType::Splash => WindowType::Splash,
-              X11WindowType::Dialog => WindowType::Dialog,
-              X11WindowType::DropdownMenu => WindowType::DropdownMenu,
-              X11WindowType::PopupMenu => WindowType::PopupMenu,
-              X11WindowType::Tooltip => WindowType::Tooltip,
-              X11WindowType::Notification => WindowType::Notification,
-              X11WindowType::Combo => WindowType::Combo,
-              X11WindowType::Dnd => WindowType::Dnd,
-              X11WindowType::Normal => WindowType::Normal,
-            })
-            .collect(),
-        );
-      }
-      if let (Some(width), Some(height)) = (options.x11_base_width, options.x11_base_height) {
-        builder = builder.with_base_size(LogicalSize::new(width, height));
-      }
-    }
-
-    #[cfg(target_os = "linux")]
-    if let Some(general) = options.wayland_app_id.as_deref() {
-      use tao::platform::wayland::WindowBuilderExtWayland;
-      builder = builder.with_name(
-        general,
-        options.wayland_instance.as_deref().unwrap_or(general),
-      );
-    }
-
     #[cfg(target_os = "ios")]
     {
       use tao::platform::ios::{ScreenEdge, ValidOrientations, WindowBuilderExtIOS};
@@ -519,7 +454,7 @@ impl BrowserWindow {
   pub fn get_native_handle(&self) -> u64 {
     #[cfg(target_os = "windows")]
     {
-      return self.window.hwnd() as u64;
+      self.window.hwnd() as u64
     }
     #[cfg(target_os = "macos")]
     {
@@ -528,12 +463,13 @@ impl BrowserWindow {
     }
     #[cfg(target_os = "linux")]
     {
-      use tao::platform::unix::WindowExtUnix;
-      if let Some(xid) = self.window.xlib_window() {
-        return xid as u64;
-      }
-      if let Some(ptr) = self.window.wayland_surface() {
-        return ptr as u64;
+      use tao::rwh_06::{HasWindowHandle, RawWindowHandle};
+      if let Ok(handle) = self.window.window_handle() {
+        return match handle.as_raw() {
+          RawWindowHandle::Xlib(handle) => handle.window,
+          RawWindowHandle::Wayland(handle) => handle.surface.as_ptr() as u64,
+          _ => 0,
+        };
       }
       return 0;
     }
@@ -914,7 +850,7 @@ impl BrowserWindow {
   pub fn get_native_handle_any_thread(&self) -> u64 {
     #[cfg(target_os = "windows")]
     {
-      return self.window.hwnd() as u64;
+      self.window.hwnd() as u64
     }
     #[cfg(not(target_os = "windows"))]
     0
@@ -990,46 +926,6 @@ impl BrowserWindow {
   }
 
   #[napi]
-  pub fn select_next_tab(&self) {
-    #[cfg(target_os = "macos")]
-    {
-      use tao::platform::macos::WindowExtMacOS;
-      self.window.select_next_tab();
-    }
-  }
-
-  #[napi]
-  pub fn select_previous_tab(&self) {
-    #[cfg(target_os = "macos")]
-    {
-      use tao::platform::macos::WindowExtMacOS;
-      self.window.select_previous_tab();
-    }
-  }
-
-  #[napi]
-  pub fn select_tab_at_index(&self, index: u32) {
-    #[cfg(target_os = "macos")]
-    {
-      use tao::platform::macos::WindowExtMacOS;
-      self.window.select_tab_at_index(index as usize);
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = index;
-  }
-
-  #[napi]
-  pub fn num_tabs(&self) -> u32 {
-    #[cfg(target_os = "macos")]
-    {
-      use tao::platform::macos::WindowExtMacOS;
-      return self.window.num_tabs() as u32;
-    }
-    #[cfg(not(target_os = "macos"))]
-    0
-  }
-
-  #[napi]
   pub fn is_document_edited(&self) -> bool {
     #[cfg(target_os = "macos")]
     {
@@ -1045,7 +941,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      self.window.set_document_edited(edited);
+      self.window.set_is_document_edited(edited);
     }
     #[cfg(not(target_os = "macos"))]
     let _ = edited;
@@ -1055,8 +951,16 @@ impl BrowserWindow {
   pub fn get_wayland_surface(&self) -> u64 {
     #[cfg(target_os = "linux")]
     {
-      use tao::platform::unix::WindowExtUnix;
-      return self.window.wayland_surface().map(|s| s as u64).unwrap_or(0);
+      use tao::rwh_06::{HasWindowHandle, RawWindowHandle};
+      return self
+        .window
+        .window_handle()
+        .ok()
+        .and_then(|handle| match handle.as_raw() {
+          RawWindowHandle::Wayland(handle) => Some(handle.surface.as_ptr() as u64),
+          _ => None,
+        })
+        .unwrap_or(0);
     }
     #[cfg(not(target_os = "linux"))]
     0
@@ -1506,7 +1410,7 @@ fn monitor_to_js(m: tao::monitor::MonitorHandle) -> Monitor {
           height: v.size().height,
         },
         bit_depth: v.bit_depth(),
-        refresh_rate: v.refresh_rate() as u16,
+        refresh_rate: v.refresh_rate(),
       })
       .collect(),
   }

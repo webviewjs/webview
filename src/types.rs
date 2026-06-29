@@ -9,24 +9,6 @@ pub enum WindowCommand {
 }
 
 #[napi]
-pub enum X11WindowType {
-  Desktop,
-  Dock,
-  Toolbar,
-  Menu,
-  Utility,
-  Splash,
-  Dialog,
-  DropdownMenu,
-  PopupMenu,
-  Tooltip,
-  Notification,
-  Combo,
-  Dnd,
-  Normal,
-}
-
-#[napi]
 pub enum IosValidOrientations {
   LandscapeAndPortrait,
   Landscape,
@@ -73,10 +55,10 @@ pub struct TrayEventPayload {
 
 #[napi(object)]
 pub struct AndroidContentRect {
-  pub left: i32,
-  pub top: i32,
-  pub right: i32,
-  pub bottom: i32,
+  pub left: u32,
+  pub top: u32,
+  pub right: u32,
+  pub bottom: u32,
 }
 
 #[napi]
@@ -348,16 +330,6 @@ pub struct BrowserWindowOptions {
   pub macos_disallow_hidpi: Option<bool>,
   pub macos_has_shadow: Option<bool>,
   pub macos_tabbing_identifier: Option<String>,
-  pub x11_visual_id: Option<u32>,
-  pub x11_screen: Option<i32>,
-  pub x11_general_name: Option<String>,
-  pub x11_instance_name: Option<String>,
-  pub x11_override_redirect: Option<bool>,
-  pub x11_window_types: Option<Vec<X11WindowType>>,
-  pub x11_base_width: Option<f64>,
-  pub x11_base_height: Option<f64>,
-  pub wayland_app_id: Option<String>,
-  pub wayland_instance: Option<String>,
   pub ios_scale_factor: Option<f64>,
   pub ios_valid_orientations: Option<IosValidOrientations>,
   pub ios_prefers_home_indicator_hidden: Option<bool>,

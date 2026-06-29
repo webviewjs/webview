@@ -160,10 +160,6 @@ test('BrowserWindow exposes cross-platform extension methods', () => {
     'setHasShadow',
     'setTabbingIdentifier',
     'tabbingIdentifier',
-    'selectNextTab',
-    'selectPreviousTab',
-    'selectTabAtIndex',
-    'numTabs',
     'isDocumentEdited',
     'setDocumentEdited',
     'getWaylandSurface',
@@ -183,6 +179,10 @@ test('BrowserWindow exposes cross-platform extension methods', () => {
     'optionAsAlt',
     'setBorderlessGame',
     'isBorderlessGame',
+    'selectNextTab',
+    'selectPreviousTab',
+    'selectTabAtIndex',
+    'numTabs',
     'getWaylandXdgToplevel',
     'setPreferredStatusBarStyle',
     'recognizePinchGesture',
@@ -201,9 +201,6 @@ test('generated BrowserWindowOptions include platform creation attributes', asyn
     'windowsTaskbarIcon',
     'macosMovableByWindowBackground',
     'macosTitlebarTransparent',
-    'x11VisualId',
-    'x11WindowTypes',
-    'waylandAppId',
     'iosScaleFactor',
     'iosValidOrientations',
   ]) {
@@ -220,7 +217,17 @@ test('generated BrowserWindowOptions include platform creation attributes', asyn
     'macosAcceptsFirstMouse',
     'macosOptionAsAlt',
     'macosBorderlessGame',
+    'x11VisualId',
+    'x11Screen',
+    'x11GeneralName',
+    'x11InstanceName',
+    'x11OverrideRedirect',
+    'x11WindowTypes',
+    'x11BaseWidth',
+    'x11BaseHeight',
     'x11EmbedParentWindow',
+    'waylandAppId',
+    'waylandInstance',
     'iosStatusBarStyle',
   ]) {
     assert.doesNotMatch(declarations, new RegExp(`\\b${option}\\??:`), option);
@@ -230,12 +237,25 @@ test('generated BrowserWindowOptions include platform creation attributes', asyn
 test('BrowserWindow delegates supported platform behavior to Tao and Muda', async () => {
   const windowSource = await readFile(new URL('../src/browser_window.rs', import.meta.url), 'utf8');
   const menuSource = await readFile(new URL('../src/menu.rs', import.meta.url), 'utf8');
+  const typesSource = await readFile(new URL('../src/types.rs', import.meta.url), 'utf8');
 
   assert.match(windowSource, /self\.window\.set_progress_bar\(/);
   assert.match(windowSource, /self\.window\.monitor_from_point\(x, y\)/);
   assert.match(windowSource, /WindowExtIOS/);
   assert.match(windowSource, /WindowBuilderExtIOS/);
   assert.match(windowSource, /pub fn get_wayland_surface/);
+  assert.match(windowSource, /tao::rwh_06::\{HasWindowHandle, RawWindowHandle\}/);
+  assert.match(windowSource, /self\.window\.set_is_document_edited\(edited\)/);
+  assert.doesNotMatch(windowSource, /tao::platform::(?:x11|wayland)/);
+  assert.doesNotMatch(
+    windowSource,
+    /self\.window\.(?:select_next_tab|select_previous_tab|select_tab_at_index|num_tabs)\(/,
+  );
+  assert.doesNotMatch(typesSource, /pub x11_|pub wayland_/);
+  assert.match(
+    typesSource,
+    /pub struct AndroidContentRect \{\s+pub left: u32,\s+pub top: u32,\s+pub right: u32,\s+pub bottom: u32,/,
+  );
   assert.match(menuSource, /menu[\s\S]*?\.init_for_gtk_window\(window\.gtk_window\(\), window\.default_vbox\(\)\)/);
 });
 

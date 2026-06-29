@@ -769,4 +769,3 @@ module.exports.WebviewApplicationEvent = nativeBinding.WebviewApplicationEvent;
 module.exports.WebviewEventType = nativeBinding.WebviewEventType;
 module.exports.WindowCommand = nativeBinding.WindowCommand;
 module.exports.WindowEventType = nativeBinding.WindowEventType;
-module.exports.X11WindowType = nativeBinding.X11WindowType;

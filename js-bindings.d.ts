@@ -80,10 +80,6 @@ export declare class BrowserWindow {
   setHasShadow(value: boolean): void;
   setTabbingIdentifier(identifier: string): void;
   tabbingIdentifier(): string;
-  selectNextTab(): void;
-  selectPreviousTab(): void;
-  selectTabAtIndex(index: number): void;
-  numTabs(): number;
   isDocumentEdited(): boolean;
   setDocumentEdited(edited: boolean): void;
   getWaylandSurface(): bigint;
@@ -316,16 +312,6 @@ export interface BrowserWindowOptions {
   macosDisallowHidpi?: boolean;
   macosHasShadow?: boolean;
   macosTabbingIdentifier?: string;
-  x11VisualId?: number;
-  x11Screen?: number;
-  x11GeneralName?: string;
-  x11InstanceName?: string;
-  x11OverrideRedirect?: boolean;
-  x11WindowTypes?: Array<X11WindowType>;
-  x11BaseWidth?: number;
-  x11BaseHeight?: number;
-  waylandAppId?: string;
-  waylandInstance?: string;
   iosScaleFactor?: number;
   iosValidOrientations?: IosValidOrientations;
   iosPrefersHomeIndicatorHidden?: boolean;
@@ -722,21 +708,4 @@ export declare enum WindowEventType {
   ThemeChanged = 17,
   Ime = 18,
   Touch = 19,
-}
-
-export declare enum X11WindowType {
-  Desktop = 0,
-  Dock = 1,
-  Toolbar = 2,
-  Menu = 3,
-  Utility = 4,
-  Splash = 5,
-  Dialog = 6,
-  DropdownMenu = 7,
-  PopupMenu = 8,
-  Tooltip = 9,
-  Notification = 10,
-  Combo = 11,
-  Dnd = 12,
-  Normal = 13,
 }

@@ -171,38 +171,15 @@ win.hasShadow(): boolean
 win.setHasShadow(value: boolean): void
 win.setTabbingIdentifier(identifier: string): void
 win.tabbingIdentifier(): string
-win.selectNextTab(): void
-win.selectPreviousTab(): void
-win.selectTabAtIndex(index: number): void
-win.numTabs(): number
 win.isDocumentEdited(): boolean
 win.setDocumentEdited(edited: boolean): void
 ```
 
-### Linux creation options
+### Linux runtime extensions
 
-X11 options:
-
-```ts
-x11VisualId?: number
-x11Screen?: number
-x11GeneralName?: string
-x11InstanceName?: string
-x11OverrideRedirect?: boolean
-x11WindowTypes?: X11WindowType[]
-x11BaseWidth?: number
-x11BaseHeight?: number
-```
-
-Wayland options:
-
-```ts
-waylandAppId?: string
-waylandInstance?: string
-```
-
-`win.getWaylandSurface()` returns Tao's native Wayland surface pointer as a
-bigint, or `0n` when the window is not using Wayland.
+`win.getWaylandSurface()` uses Tao's raw-window-handle support and returns the
+native Wayland surface pointer as a bigint, or `0n` when the window is not
+using Wayland.
 
 ### iOS options and runtime extensions
 
