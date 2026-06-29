@@ -466,7 +466,7 @@ impl BrowserWindow {
       use tao::rwh_06::{HasWindowHandle, RawWindowHandle};
       if let Ok(handle) = self.window.window_handle() {
         return match handle.as_raw() {
-          RawWindowHandle::Xlib(handle) => handle.window,
+          RawWindowHandle::Xlib(handle) => handle.window as u64,
           RawWindowHandle::Wayland(handle) => handle.surface.as_ptr() as u64,
           _ => 0,
         };
