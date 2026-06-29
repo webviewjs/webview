@@ -20,8 +20,8 @@ Robust cross-platform webview library for Node.js written in Rust. It is a nativ
 
 ![preview](https://github.com/webviewjs/webview/raw/main/assets/preview.png)
 
-> [!CAUTION]
-> This library is still in development and not ready for production use. Feel free to experiment with it and report any issues you find.
+> [!NOTE]
+> This library is meant to be a lightweight system webview binding for JavaScript. It does not aim to be a full-featured framework like Electron or Tauri. Please report any issues you find, and consider contributing to the project if you need additional features.
 
 See the [full documentation](./) for API references, guides, platform
 notes, and runnable examples.
