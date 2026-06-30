@@ -2,7 +2,7 @@
 
 ![https://github.com/webviewjs/webview/actions](https://github.com/webviewjs/webview/workflows/CI/badge.svg)
 
-Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [wry](https://github.com/tauri-apps/wry) and [wry](https://github.com/tauri-apps/wry) allowing you to create native desktop windows from JavaScript and TypeScript.
+Robust cross-platform webview library for Node.js written in Rust. It is a native binding to [tao](https://github.com/tauri-apps/tao) and [wry](https://github.com/tauri-apps/wry) allowing you to easily manage cross platform windowing and webview.
 
 ## Highlights
 
@@ -12,6 +12,7 @@ Robust cross-platform webview library for Node.js written in Rust. It is a nativ
 - Typed EventEmitter APIs for applications, windows, webviews, and system tray icons.
 - Shared browser contexts for profile, cookie, cache, and storage isolation.
 - Cross-platform system tray icons with menus and runtime updates.
+- Native desktop notifications with a browser-familiar API.
 - Native Windows, macOS, X11, Wayland, iOS, and Android window extensions.
 - IPC through `window.ipc.postMessage()`, with an optional alias such as `window.bindings`.
 - Fetch-compatible asynchronous custom protocols, including Hono routing without an HTTP server.
@@ -19,8 +20,8 @@ Robust cross-platform webview library for Node.js written in Rust. It is a nativ
 
 ![preview](https://github.com/webviewjs/webview/raw/main/assets/preview.png)
 
-> [!CAUTION]
-> This library is still in development and not ready for production use. Feel free to experiment with it and report any issues you find.
+> [!NOTE]
+> This library is meant to be a lightweight system webview binding for JavaScript. It does not aim to be a full-featured framework like Electron or Tauri. Please report any issues you find, and consider contributing to the project if you need additional features.
 
 See the [full documentation](./) for API references, guides, platform
 notes, and runnable examples.
@@ -44,6 +45,7 @@ notes, and runnable examples.
 | [Webview](./api/webview)              | Embedded browser — navigation, cookies, script, bounds |
 | [WebContext](./api/web-context)       | Shared browser data, profiles, and automation          |
 | [System Tray](./api/tray)             | Tray icons, menus, updates, and pointer events         |
+| [Notification](./api/notification)    | Native desktop notifications and lifecycle events      |
 | [Menu](./api/menu)                    | Native menu bar construction                           |
 | [Types](./api/types)                  | Shared interfaces and enums                            |
 
@@ -149,7 +151,24 @@ app.whenReady().then(() => {
 ```
 
 See the [system tray reference](./api/tray) and
-[runnable tray example](../examples/tray.mjs).
+[runnable tray example](./examples/tray.mjs).
+
+## Notifications
+
+```js
+import { Notification } from '@webviewjs/webview';
+
+const notification = new Notification('Build complete', {
+  body: 'The release executable is ready.',
+});
+
+notification.on('click', () => console.log('notification clicked'));
+notification.on('error', ({ error }) => console.error(error));
+```
+
+Notification permission is always `"granted"` for native applications. See the
+[notification reference](./api/notification) and
+[runnable notification example](./examples/notification.mjs).
 
 ## IPC and exposed functions
 
@@ -202,7 +221,7 @@ window.registerProtocol('app', async (request) => {
 window.createWebview({ url: 'app://localhost/index.html' });
 ```
 
-See [Custom Protocols](./guides/custom-protocols), [IPC](./guides/ipc-messaging), and the runnable [custom protocol](../examples/custom-protocol.mjs) and [expose](../examples/expose.mjs) examples for more details.
+See [Custom Protocols](docs/guides/custom-protocols), [IPC](docs/guides/ipc-messaging), and the runnable [custom protocol](examples/custom-protocol.mjs) and [expose](examples/expose.mjs) examples.
 
 ## Menu System
 
@@ -410,13 +429,13 @@ true`, and method calls fail with a disposed error. Individual windows,
 webviews, contexts, and tray icons also support `dispose()` and
 `Symbol.dispose`.
 
-Check out [examples](../examples) directory for more examples:
+Check out [examples](./examples) directory for more examples:
 
-- **[menu-system.mjs](../examples/menu-system.mjs)** - Comprehensive menu system demonstration with all features
-- **[window-menus.mjs](../examples/window-menus.mjs)** - Window-specific vs global menu examples
-- **[http/](../examples/http/)** - Serving content from a web server to webview
-- **[transparent.mjs](../examples/transparent.mjs)** - Transparent window example
-- **[close-example.mjs](../examples/close-example.mjs)** - Graceful application closing
+- **[menu-system.mjs](./examples/menu-system.mjs)** - Comprehensive menu system demonstration with all features
+- **[window-menus.mjs](./examples/window-menus.mjs)** - Window-specific vs global menu examples
+- **[http/](./examples/http/)** - Serving content from a web server to webview
+- **[transparent.mjs](./examples/transparent.mjs)** - Transparent window example
+- **[close-example.mjs](./examples/close-example.mjs)** - Graceful application closing
 
 Run any example with: `node examples/menu-system.mjs` (after building the project)
 
