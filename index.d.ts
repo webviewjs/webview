@@ -8,6 +8,32 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 
 export type ExposedTarget = Record<string, JsonValue | ((...args: any[]) => unknown | Promise<unknown>)>;
 
+export type EventListener<TPayload> = (payload: TPayload) => void;
+
+/** Shared EventEmitter surface with payloads inferred from an event map. */
+export interface TypedEventEmitter<TEventMap extends object> {
+  on<K extends keyof TEventMap>(event: K, listener: EventListener<TEventMap[K]>): this;
+  on(event: string | symbol, listener: (...args: any[]) => void): this;
+  once<K extends keyof TEventMap>(event: K, listener: EventListener<TEventMap[K]>): this;
+  once(event: string | symbol, listener: (...args: any[]) => void): this;
+  off<K extends keyof TEventMap>(event: K, listener: EventListener<TEventMap[K]>): this;
+  off(event: string | symbol, listener: (...args: any[]) => void): this;
+  addListener<K extends keyof TEventMap>(event: K, listener: EventListener<TEventMap[K]>): this;
+  addListener(event: string | symbol, listener: (...args: any[]) => void): this;
+  removeListener<K extends keyof TEventMap>(event: K, listener: EventListener<TEventMap[K]>): this;
+  removeListener(event: string | symbol, listener: (...args: any[]) => void): this;
+  removeAllListeners(event?: string | symbol): this;
+  listenerCount<K extends keyof TEventMap>(event: K, listener?: EventListener<TEventMap[K]>): number;
+  listenerCount(event: string | symbol, listener?: (...args: any[]) => void): number;
+  listeners<K extends keyof TEventMap>(event: K): Array<EventListener<TEventMap[K]>>;
+  listeners(event: string | symbol): Function[];
+  rawListeners<K extends keyof TEventMap>(event: K): Array<EventListener<TEventMap[K]>>;
+  rawListeners(event: string | symbol): Function[];
+  emit<K extends keyof TEventMap>(event: K, payload: TEventMap[K]): boolean;
+  emit(event: string | symbol, ...args: any[]): boolean;
+  eventNames(): Array<keyof TEventMap | string | symbol>;
+}
+
 export type NotificationPermission = 'granted';
 export type NotificationDirection = 'auto' | 'ltr' | 'rtl';
 export type NotificationEventName = 'click' | 'close' | 'error' | 'show';
@@ -43,6 +69,12 @@ export interface NotificationEvent {
   error?: Error;
 }
 
+export type NotificationEventMap = {
+  [K in NotificationEventName]: NotificationEvent;
+};
+
+export interface Notification extends TypedEventEmitter<NotificationEventMap> {}
+
 export class Notification {
   constructor(title: string, options?: NotificationOptions);
   static readonly permission: NotificationPermission;
@@ -68,17 +100,6 @@ export class Notification {
   onerror: ((event: NotificationEvent) => void) | null;
   onshow: ((event: NotificationEvent) => void) | null;
   close(): void;
-  on(event: NotificationEventName, listener: (event: NotificationEvent) => void): this;
-  once(event: NotificationEventName, listener: (event: NotificationEvent) => void): this;
-  off(event: NotificationEventName, listener: (event: NotificationEvent) => void): this;
-  addListener(event: NotificationEventName, listener: (event: NotificationEvent) => void): this;
-  removeListener(event: NotificationEventName, listener: (event: NotificationEvent) => void): this;
-  removeAllListeners(event?: NotificationEventName): this;
-  listenerCount(event: NotificationEventName, listener?: (event: NotificationEvent) => void): number;
-  listeners(event: NotificationEventName): Function[];
-  rawListeners(event: NotificationEventName): Function[];
-  emit(event: NotificationEventName, eventObject: NotificationEvent): boolean;
-  eventNames(): Array<string | symbol>;
 }
 
 export interface ApplicationEventMap {
@@ -127,6 +148,8 @@ export interface WebviewDownloadEvent {
   success?: boolean;
 }
 
+export interface WebviewDownloadStartedEvent extends WebviewDownloadEvent {}
+
 export interface WebviewNavigationEvent {
   event: number;
   url?: string;
@@ -142,11 +165,15 @@ export interface WebviewEventMap {
   'page-load-started': WebviewPageLoadEvent;
   'page-load-finished': WebviewPageLoadEvent;
   'title-changed': WebviewTitleChangedEvent;
-  'download-started': WebviewDownloadEvent;
+  'download-started': WebviewDownloadStartedEvent;
   'download-completed': WebviewDownloadEvent;
-  /** Fired for every navigation attempt.  Use `navigationHandler` option to allow/deny. */
+  /** Fired for every navigation attempt. */
   navigation: WebviewNavigationEvent;
-  /** Fired when the page attempts to open a new browser window (`window.open`, `target="_blank"`, etc.). */
+  /**
+   * Fired when the page requests a new window.
+   * On Windows this event is observational because Wry dispatches it from a
+   * separate WebView2 thread.
+   */
   'new-window': WebviewNewWindowEvent;
 }
 
@@ -241,53 +268,14 @@ export interface BrowserWindowEventMap {
 }
 
 declare module './js-bindings' {
-  interface TrayIcon {
+  interface TrayIcon extends TypedEventEmitter<TrayEventMap> {
     [Symbol.dispose](): void;
-
-    on<K extends keyof TrayEventMap>(event: K, listener: (payload: TrayEventMap[K]) => void): this;
-    on(event: string, listener: (...args: any[]) => void): this;
-    once<K extends keyof TrayEventMap>(event: K, listener: (payload: TrayEventMap[K]) => void): this;
-    once(event: string, listener: (...args: any[]) => void): this;
-    off<K extends keyof TrayEventMap>(event: K, listener: (payload: TrayEventMap[K]) => void): this;
-    off(event: string, listener: (...args: any[]) => void): this;
-    addListener<K extends keyof TrayEventMap>(event: K, listener: (payload: TrayEventMap[K]) => void): this;
-    addListener(event: string, listener: (...args: any[]) => void): this;
-    removeListener<K extends keyof TrayEventMap>(event: K, listener: (payload: TrayEventMap[K]) => void): this;
-    removeListener(event: string, listener: (...args: any[]) => void): this;
-    removeAllListeners(event?: string): this;
-    listenerCount(event: string): number;
-    listeners(event: string): Function[];
-    rawListeners(event: string): Function[];
-    emit(event: string, ...args: any[]): boolean;
-    eventNames(): (string | symbol)[];
   }
 
-  interface Application {
+  interface Application extends TypedEventEmitter<ApplicationEventMap> {
     [Symbol.dispose](): void;
 
     whenReady(options?: ApplicationWhenReadyOptions): Promise<void>;
-    on<K extends keyof ApplicationEventMap>(event: K, listener: (payload: ApplicationEventMap[K]) => void): this;
-    on(event: string, listener: (...args: any[]) => void): this;
-    once<K extends keyof ApplicationEventMap>(event: K, listener: (payload: ApplicationEventMap[K]) => void): this;
-    once(event: string, listener: (...args: any[]) => void): this;
-    off<K extends keyof ApplicationEventMap>(event: K, listener: (payload: ApplicationEventMap[K]) => void): this;
-    off(event: string, listener: (...args: any[]) => void): this;
-    addListener<K extends keyof ApplicationEventMap>(
-      event: K,
-      listener: (payload: ApplicationEventMap[K]) => void,
-    ): this;
-    addListener(event: string, listener: (...args: any[]) => void): this;
-    removeListener<K extends keyof ApplicationEventMap>(
-      event: K,
-      listener: (payload: ApplicationEventMap[K]) => void,
-    ): this;
-    removeListener(event: string, listener: (...args: any[]) => void): this;
-    removeAllListeners(event?: string): this;
-    listenerCount(event: string): number;
-    listeners(event: string): Function[];
-    rawListeners(event: string): Function[];
-    emit(event: string, ...args: any[]): boolean;
-    eventNames(): (string | symbol)[];
   }
 
   interface WebviewOptions {
@@ -305,7 +293,7 @@ declare module './js-bindings' {
     navigationHandler?: (url: string) => boolean;
   }
 
-  interface BrowserWindow {
+  interface BrowserWindow extends TypedEventEmitter<BrowserWindowEventMap> {
     [Symbol.dispose](): void;
 
     /**
@@ -331,53 +319,12 @@ declare module './js-bindings' {
       name: string,
       handler: (request: Request) => Response | CustomProtocolResponse | Promise<Response | CustomProtocolResponse>,
     ): void;
-
-    on<K extends keyof BrowserWindowEventMap>(event: K, listener: (payload: BrowserWindowEventMap[K]) => void): this;
-    on(event: string, listener: (...args: any[]) => void): this;
-    once<K extends keyof BrowserWindowEventMap>(event: K, listener: (payload: BrowserWindowEventMap[K]) => void): this;
-    once(event: string, listener: (...args: any[]) => void): this;
-    off<K extends keyof BrowserWindowEventMap>(event: K, listener: (payload: BrowserWindowEventMap[K]) => void): this;
-    off(event: string, listener: (...args: any[]) => void): this;
-    addListener<K extends keyof BrowserWindowEventMap>(
-      event: K,
-      listener: (payload: BrowserWindowEventMap[K]) => void,
-    ): this;
-    addListener(event: string, listener: (...args: any[]) => void): this;
-    removeListener<K extends keyof BrowserWindowEventMap>(
-      event: K,
-      listener: (payload: BrowserWindowEventMap[K]) => void,
-    ): this;
-    removeListener(event: string, listener: (...args: any[]) => void): this;
-    removeAllListeners(event?: string): this;
-    listenerCount(event: string): number;
-    listeners(event: string): Function[];
-    rawListeners(event: string): Function[];
-    emit(event: string, ...args: any[]): boolean;
-    eventNames(): (string | symbol)[];
   }
 
-  interface Webview {
+  interface Webview extends TypedEventEmitter<WebviewEventMap> {
     [Symbol.dispose](): void;
 
     expose(name: string, target: ExposedTarget): void;
-
-    // EventEmitter — mirrors BrowserWindow events but for webview-level events.
-    on<K extends keyof WebviewEventMap>(event: K, listener: (payload: WebviewEventMap[K]) => void): this;
-    on(event: string, listener: (...args: any[]) => void): this;
-    once<K extends keyof WebviewEventMap>(event: K, listener: (payload: WebviewEventMap[K]) => void): this;
-    once(event: string, listener: (...args: any[]) => void): this;
-    off<K extends keyof WebviewEventMap>(event: K, listener: (payload: WebviewEventMap[K]) => void): this;
-    off(event: string, listener: (...args: any[]) => void): this;
-    addListener<K extends keyof WebviewEventMap>(event: K, listener: (payload: WebviewEventMap[K]) => void): this;
-    addListener(event: string, listener: (...args: any[]) => void): this;
-    removeListener<K extends keyof WebviewEventMap>(event: K, listener: (payload: WebviewEventMap[K]) => void): this;
-    removeListener(event: string, listener: (...args: any[]) => void): this;
-    removeAllListeners(event?: string): this;
-    listenerCount(event: string): number;
-    listeners(event: string): Function[];
-    rawListeners(event: string): Function[];
-    emit(event: string, ...args: any[]): boolean;
-    eventNames(): (string | symbol)[];
   }
 
   interface WebContext {

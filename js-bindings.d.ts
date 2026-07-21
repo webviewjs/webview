@@ -18,6 +18,13 @@ export declare class Application {
    * `setInterval` via the `run()` wrapper in `index.js`.
    */
   pumpEvents(): boolean;
+  /**
+   * Run Tao's native event loop continuously on the current thread.
+   *
+   * This blocks JavaScript until the application exits. Use `run()` when the
+   * Node.js event loop must remain available.
+   */
+  runSync(): void;
   /** Run the application event loop. */
   run(options?: ApplicationRunOptions | undefined | null): void;
 }

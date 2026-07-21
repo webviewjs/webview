@@ -1046,10 +1046,62 @@ impl Application {
     !state.should_exit
   }
 
+  /// Run Tao's native event loop continuously on the current thread.
+  ///
+  /// This blocks JavaScript until the application exits. Use `run()` when the
+  /// Node.js event loop must remain available.
+  #[napi]
+  pub fn run_sync(&mut self) -> Result<()> {
+    use tao::event::Event;
+    use tao::event_loop::ControlFlow;
+    use tao::platform::run_return::EventLoopExtRunReturn;
+
+    if self.state.should_exit {
+      return Ok(());
+    }
+
+    if !self.state.ready {
+      self.state.ready = true;
+      self.state.fire(ApplicationEvent {
+        event: WebviewApplicationEvent::Ready,
+        custom_menu_event: None,
+      });
+    }
+
+    let event_loop = self.event_loop.as_mut().ok_or_else(|| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        "Event loop is not initialized",
+      )
+    })?;
+    let state = &mut self.state;
+
+    event_loop.run_return(|event, _target, control_flow| {
+      *control_flow = ControlFlow::Wait;
+
+      if let Event::WindowEvent {
+        window_id,
+        event: window_event,
+        ..
+      } = event
+      {
+        handle_window_event(state, window_id, window_event);
+      }
+
+      if state.should_exit {
+        *control_flow = ControlFlow::Exit;
+      }
+    });
+
+    Ok(())
+  }
+
   /// Run the application event loop.
   #[napi]
   pub fn run(&mut self, _options: Option<ApplicationRunOptions>) -> Result<()> {
-    // Note: this is intentionally no-op in rust. The binding loader file patches this to call `pump_events()` in a `setInterval` loop.
+    // Note: this is intentionally calling pump_events() once
+    // the js side overrides this with a setInterval to keep the event loop alive.
+    self.pump_events();
     Ok(())
   }
 }

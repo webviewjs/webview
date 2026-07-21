@@ -608,14 +608,13 @@ nativeBinding.BrowserWindow.prototype.createWebview = function createWebview(opt
     if (name !== undefined) emitter.emit(name, payload);
   });
 
-  if (typeof navigationHandler === 'function') {
-    this._setPendingWebviewNavigationHandler(navigationHandler);
+  let webview;
+  try {
+    webview = _nativeCreateWebview.call(this, rustOpts, webContext);
+  } finally {
+    // Clear so subsequent createWebview calls start with a clean slate.
+    this._clearPendingWebviewHandlers();
   }
-
-  const webview = _nativeCreateWebview.call(this, rustOpts, webContext);
-
-  // Clear so subsequent createWebview calls start with a clean slate.
-  this._clearPendingWebviewHandlers();
 
   _attachWebviewEmitter(webview, emitter);
   return webview;
