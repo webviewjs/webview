@@ -23,52 +23,52 @@ Robust cross-platform webview library for Node.js written in Rust. It is a nativ
 > [!NOTE]
 > This library is meant to be a lightweight system webview binding for JavaScript. It does not aim to be a full-featured framework like Electron or Tauri. Please report any issues you find, and consider contributing to the project if you need additional features.
 
-See the [full documentation](./) for API references, guides, platform
+See the [full documentation](./docs/README.md) for API references, guides, platform
 notes, and runnable examples.
 
 # Documentation
 
 ## Getting started
 
-|                                                |                                 |
-| ---------------------------------------------- | ------------------------------- |
-| [Installation](./getting-started/installation) | System requirements and setup   |
-| [Quick Start](./getting-started/quick-start)   | Your first window in minutes    |
-| [Event Loop](./getting-started/event-loop)     | How the non-blocking pump works |
+|                                                        |                                 |
+| ------------------------------------------------------ | ------------------------------- |
+| [Installation](./docs/getting-started/installation.md) | System requirements and setup   |
+| [Quick Start](./docs/getting-started/quick-start.md)   | Your first window in minutes    |
+| [Event Loop](./docs/getting-started/event-loop.md)     | How the non-blocking pump works |
 
 ## API reference
 
-|                                       |                                                        |
-| ------------------------------------- | ------------------------------------------------------ |
-| [Application](./api/application)      | Root object — event loop, windows, menus               |
-| [BrowserWindow](./api/browser-window) | OS window, size, position, cursor, decorations         |
-| [Webview](./api/webview)              | Embedded browser — navigation, cookies, script, bounds |
-| [WebContext](./api/web-context)       | Shared browser data, profiles, and automation          |
-| [System Tray](./api/tray)             | Tray icons, menus, updates, and pointer events         |
-| [Notification](./api/notification)    | Native desktop notifications and lifecycle events      |
-| [Menu](./api/menu)                    | Native menu bar construction                           |
-| [Types](./api/types)                  | Shared interfaces and enums                            |
+|                                               |                                                        |
+| --------------------------------------------- | ------------------------------------------------------ |
+| [Application](./docs/api/application.md)      | Root object — event loop, windows, menus               |
+| [BrowserWindow](./docs/api/browser-window.md) | OS window, size, position, cursor, decorations         |
+| [Webview](./docs/api/webview.md)              | Embedded browser — navigation, cookies, script, bounds |
+| [WebContext](./docs/api/web-context.md)       | Shared browser data, profiles, and automation          |
+| [System Tray](./docs/api/tray.md)             | Tray icons, menus, updates, and pointer events         |
+| [Notification](./docs/api/notification.md)    | Native desktop notifications and lifecycle events      |
+| [Menu](./docs/api/menu.md)                    | Native menu bar construction                           |
+| [Types](./docs/api/types.md)                  | Shared interfaces and enums                            |
 
 ## Guides
 
-|                                                       |                                                 |
-| ----------------------------------------------------- | ----------------------------------------------- |
-| [Building Executables](./guides/building-executables) | Compile to `.exe` / binary with node, deno, bun |
-| [IPC Messaging](./guides/ipc-messaging)               | Page ↔ Node communication                       |
-| [Menus](./guides/menus)                               | Building menu bars with roles and accelerators  |
-| [Multiple Windows](./guides/multiple-windows)         | Managing several windows                        |
-| [Cookies & Storage](./guides/cookies-and-storage)     | Reading, writing, and clearing cookies          |
-| [Custom Protocols](./guides/custom-protocols)         | Serving local content to the webview            |
+|                                                               |                                                 |
+| ------------------------------------------------------------- | ----------------------------------------------- |
+| [Building Executables](./docs/guides/building-executables.md) | Compile to `.exe` / binary with node, deno, bun |
+| [IPC Messaging](./docs/guides/ipc-messaging.md)               | Page ↔ Node communication                       |
+| [Menus](./docs/guides/menus.md)                               | Building menu bars with roles and accelerators  |
+| [Multiple Windows](./docs/guides/multiple-windows.md)         | Managing several windows                        |
+| [Cookies & Storage](./docs/guides/cookies-and-storage.md)     | Reading, writing, and clearing cookies          |
+| [Custom Protocols](./docs/guides/custom-protocols.md)         | Serving local content to the webview            |
 
 ## Platform notes
 
-|                               |                                           |
-| ----------------------------- | ----------------------------------------- |
-| [Windows](./platform/windows) | WebView2, taskbar, DPI                    |
-| [macOS](./platform/macos)     | WebKit, main-thread requirement, app menu |
-| [Linux](./platform/linux)     | WebKitGTK, Wayland/X11, menu limitations  |
-| [iOS](./platform/ios)         | Orientation, status bar, and gestures     |
-| [Android](./platform/android) | Content rectangle and configuration       |
+|                                       |                                           |
+| ------------------------------------- | ----------------------------------------- |
+| [Windows](./docs/platform/windows.md) | WebView2, taskbar, DPI                    |
+| [macOS](./docs/platform/macos.md)     | WebKit, main-thread requirement, app menu |
+| [Linux](./docs/platform/linux.md)     | WebKitGTK, Wayland/X11, menu limitations  |
+| [iOS](./docs/platform/ios.md)         | Orientation, status bar, and gestures     |
+| [Android](./docs/platform/android.md) | Content rectangle and configuration       |
 
 # Installation
 
@@ -150,7 +150,7 @@ app.whenReady().then(() => {
 });
 ```
 
-See the [system tray reference](./api/tray) and
+See the [system tray reference](./docs/api/tray.md) and
 [runnable tray example](./examples/tray.mjs).
 
 ## Notifications
@@ -167,7 +167,7 @@ notification.on('error', ({ error }) => console.error(error));
 ```
 
 Notification permission is always `"granted"` for native applications. See the
-[notification reference](./api/notification) and
+[notification reference](./docs/api/notification.md) and
 [runnable notification example](./examples/notification.mjs).
 
 ## IPC and exposed functions
@@ -221,7 +221,7 @@ window.registerProtocol('app', async (request) => {
 window.createWebview({ url: 'app://localhost/index.html' });
 ```
 
-See [Custom Protocols](docs/guides/custom-protocols), [IPC](docs/guides/ipc-messaging), and the runnable [custom protocol](examples/custom-protocol.mjs) and [expose](examples/expose.mjs) examples.
+See [Custom Protocols](./docs/guides/custom-protocols.md), [IPC](./docs/guides/ipc-messaging.md), and the runnable [custom protocol](examples/custom-protocol.mjs) and [expose](examples/expose.mjs) examples.
 
 ## Menu System
 
@@ -290,9 +290,7 @@ app.on('custom-menu-click', ({ customMenuEvent: menuEvent }) => {
 });
 
 // Set up menu...
-app.setMenu({
-  /* ... */
-});
+app.setMenu({/* ... */});
 ```
 
 ### Window-Specific Menus
@@ -464,7 +462,7 @@ webview --build --runtime bun  --input ./src/index.ts --name my-app
 | `--name` / `-n`      | `webviewjs`   | Executable name            |
 | `--resources` / `-r` | —             | JSON asset map (node only) |
 
-For the full compilation guide including cross-compilation and code signing, see [Building Executables](./guides/building-executables).
+For the full compilation guide including cross-compilation and code signing, see [Building Executables](./docs/guides/building-executables.md).
 
 # Development
 

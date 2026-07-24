@@ -14,9 +14,7 @@ On macOS the menu bar spans the top of the entire screen and belongs to the appl
 
 ```js
 app.setMenu({
-  items: [
-    /* … */
-  ],
+  items: [/* … */],
 });
 ```
 

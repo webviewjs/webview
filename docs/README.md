@@ -290,9 +290,7 @@ app.on('custom-menu-click', ({ customMenuEvent: menuEvent }) => {
 });
 
 // Set up menu...
-app.setMenu({
-  /* ... */
-});
+app.setMenu({/* ... */});
 ```
 
 ### Window-Specific Menus

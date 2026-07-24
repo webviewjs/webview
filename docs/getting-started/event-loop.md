@@ -17,6 +17,17 @@ Each call to `pumpEvents()` drains the OS message queue without waiting, then re
 
 Because this runs inside a Node.js timer, all Node APIs (file I/O, network, child processes, etc.) work normally alongside the GUI.
 
+## Synchronous running
+
+`app.runSync()` hands control to Tao's native event loop directly and blocks JavaScript until the application exits:
+
+```js
+const app = new Application();
+app.runSync();
+```
+
+This is the lowest-level way to run the GUI loop. It is appropriate when the current thread is dedicated to the application lifecycle, but it will prevent any other JavaScript from running until the app closes.
+
 ## Application readiness
 
 `app.whenReady()` starts the event pump and resolves when Tao emits the first

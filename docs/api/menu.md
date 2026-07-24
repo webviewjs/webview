@@ -42,9 +42,7 @@ app.setMenu({
 
 ```js
 win.setMenu({
-  items: [
-    /* … */
-  ],
+  items: [/* … */],
 });
 ```
 

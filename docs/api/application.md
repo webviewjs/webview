@@ -30,6 +30,16 @@ app.run(options?: { interval?: number; ref?: boolean }): void
 | `interval` | `16`    | Pump interval in ms                             |
 | `ref`      | `true`  | If `false` the timer won't prevent process exit |
 
+### `runSync()`
+
+Run Tao's native event loop on the current thread and block JavaScript until the application exits.
+
+```ts
+app.runSync(): void
+```
+
+Use this only when you want the GUI loop to own the thread. In Node.js apps, `run()` is usually the safer default because it keeps the JS event loop available.
+
 ### `stop()`
 
 Clear the pump interval. The app object and windows remain valid.
