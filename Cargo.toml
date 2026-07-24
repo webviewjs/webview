@@ -41,6 +41,9 @@ windows-sys = { version = "0.52", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 
+[patch.crates-io]
+tao = { git = "https://github.com/webviewjs/tao", rev = "32c943587948455a34c1a7b5f6a7147ac44ec456" }
+
 [build-dependencies]
 napi-build = "2"
 serde_json = "1"

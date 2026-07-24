@@ -969,7 +969,12 @@ impl Application {
   /// `setInterval` via the `run()` wrapper in `index.js`.
   #[napi]
   pub fn pump_events(&mut self) -> bool {
-    use tao::event::{Event, StartCause};
+    use tao::event::Event;
+
+    #[cfg(target_os = "macos")]
+    use tao::platform::macos::{EventLoopExtPumpEvents, PumpStatus};
+
+    #[cfg(not(target_os = "macos"))]
     use tao::platform::run_return::EventLoopExtRunReturn;
 
     if self.state.should_exit {
@@ -1005,6 +1010,7 @@ impl Application {
     while let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
       if let Some(handler) = self.state.tray_handlers.get(&event.id().0) {
         let callback = handler.borrow();
+
         if let Some(callback) = callback.as_ref() {
           if let Ok(function) = callback.borrow_back(&self.state.env) {
             if let Some(payload) = event_payload(event) {
@@ -1015,33 +1021,84 @@ impl Application {
       }
     }
 
-    // Split borrows so the handler can mutate state independently.
+    if self.state.should_exit {
+      return false;
+    }
+
+    // Split borrows so the event handler can mutate application state.
     let event_loop = match &mut self.event_loop {
-      Some(el) => el,
+      Some(event_loop) => event_loop,
       None => return false,
     };
+
     let state = &mut self.state;
 
-    // Phase A: tao event dispatch — non-blocking via ControlFlow::Exit on MainEventsCleared.
-    event_loop.run_return(|event, _target, control_flow| {
-      use tao::event_loop::ControlFlow;
-      *control_flow = ControlFlow::Poll;
+    /*
+     * macOS
+     *
+     * Use WebviewJS's patched Tao pump API. Returning from one pump does not
+     * destroy the event loop or set ControlFlow::Exit.
+     */
+    #[cfg(target_os = "macos")]
+    {
+      let status = event_loop.pump_events(|event, _target, control_flow| {
+        use tao::event_loop::ControlFlow;
 
-      match event {
-        Event::WindowEvent {
+        *control_flow = ControlFlow::Poll;
+
+        if let Event::WindowEvent {
           window_id,
-          event: win_event,
+          event: window_event,
           ..
-        } => {
-          handle_window_event(state, window_id, win_event);
+        } = event
+        {
+          handle_window_event(state, window_id, window_event);
         }
-        Event::MainEventsCleared => {
+
+        // ControlFlow::Exit is reserved for an actual application exit.
+        if state.should_exit {
           *control_flow = ControlFlow::Exit;
         }
-        Event::NewEvents(StartCause::Poll) => {}
-        _ => {}
+      });
+
+      if let PumpStatus::Exit(_exit_code) = status {
+        state.should_exit = true;
       }
-    });
+    }
+
+    /*
+     * Other desktop platforms
+     *
+     * Continue using Tao's existing run_return implementation.
+     */
+    #[cfg(not(target_os = "macos"))]
+    {
+      use tao::{event::StartCause, event_loop::ControlFlow};
+
+      event_loop.run_return(|event, _target, control_flow| {
+        *control_flow = ControlFlow::Poll;
+
+        match event {
+          Event::WindowEvent {
+            window_id,
+            event: window_event,
+            ..
+          } => {
+            handle_window_event(state, window_id, window_event);
+          }
+
+          // On these platforms run_return still needs Exit to return control
+          // to Node.js after the current event-loop iteration.
+          Event::MainEventsCleared => {
+            *control_flow = ControlFlow::Exit;
+          }
+
+          Event::NewEvents(StartCause::Poll) => {}
+
+          _ => {}
+        }
+      });
+    }
 
     !state.should_exit
   }
