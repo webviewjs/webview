@@ -67,6 +67,39 @@ jobs:
             target: x86_64-unknown-linux-gnu
             sys_deps: pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev libxdo-dev
 
+          # Linux ia32
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            container: node:24-bookworm
+            cross_arch: i386
+            cross_sys_deps: libglib2.0-dev:i386 libwebkit2gtk-4.1-dev:i386 libsoup-3.0-dev:i386 libcairo2-dev:i386 libpango1.0-dev:i386 libatk1.0-dev:i386 libgdk-pixbuf-2.0-dev:i386 libgtk-3-dev:i386 libxdo-dev:i386
+            cross_gcc: gcc-i686-linux-gnu
+            cross_gpp: g++-i686-linux-gnu
+            cross_triplet: i686-linux-gnu
+            build_script: |
+              set -e
+              rustup target add i686-unknown-linux-gnu
+              export PKG_CONFIG_ALLOW_CROSS=1
+              export PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1
+              export PKG_CONFIG_ALLOW_SYSTEM_LIBS=1
+              export PKG_CONFIG_SYSROOT_DIR=/
+              export PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+              export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+              export PKG_CONFIG_i686_unknown_linux_gnu=pkg-config
+              export PKG_CONFIG_SYSROOT_DIR_i686_unknown_linux_gnu=/
+              export PKG_CONFIG_LIBDIR_i686_unknown_linux_gnu=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+              export PKG_CONFIG_PATH_i686_unknown_linux_gnu=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+              export CC=i686-linux-gnu-gcc
+              export CXX=i686-linux-gnu-g++
+              export AR=i686-linux-gnu-ar
+              export RANLIB=i686-linux-gnu-ranlib
+              export CC_i686_unknown_linux_gnu=i686-linux-gnu-gcc
+              export CXX_i686_unknown_linux_gnu=i686-linux-gnu-g++
+              export AR_i686_unknown_linux_gnu=i686-linux-gnu-ar
+              export RANLIB_i686_unknown_linux_gnu=i686-linux-gnu-ranlib
+              export CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER=i686-linux-gnu-gcc
+              bun run build --target i686-unknown-linux-gnu
+
           # Linux ARM64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
@@ -114,6 +147,7 @@ jobs:
             target: armv7-linux-androideabi
 
     runs-on: ${{ matrix.settings.os }}
+    container: ${{ matrix.settings.container || null }}
 
     steps:
       - name: Checkout repository
@@ -173,16 +207,57 @@ jobs:
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config
+          if command -v sudo >/dev/null 2>&1; then
+            SUDO=sudo
+          else
+            SUDO=
+          fi
+          $SUDO apt-get update
+          $SUDO apt-get install -y pkg-config
 
       - name: Install system dependencies (Linux x86_64)
         if: runner.os == 'Linux' && matrix.settings.sys_deps
         run: |
           sudo apt-get install -y ${{ matrix.settings.sys_deps }}
 
+      - name: Install cross-compilation dependencies (Linux i386)
+        if: runner.os == 'Linux' && matrix.settings.cross_arch == 'i386'
+        run: |
+          set -e
+          if command -v sudo >/dev/null 2>&1; then
+            SUDO=sudo
+          else
+            SUDO=
+          fi
+          $SUDO dpkg --add-architecture i386
+          if [ -f /etc/os-release ] && grep -q 'Ubuntu' /etc/os-release; then
+            # Some Ubuntu runner images restrict DEB822 sources to amd64. Keep
+            # Ubuntu sources multiarch-aware without enabling i386 on third-party repos.
+            $SUDO find /etc/apt/sources.list.d/ -type f -name "*.sources" -exec sh -c '
+              if grep -qE "^URIs:.*ubuntu" "$1"; then
+                if grep -q "^Architectures:" "$1"; then
+                  sed -i -E "s/^Architectures:.*/Architectures: amd64 i386/" "$1"
+                else
+                  sed -i "/^Types: deb/a Architectures: amd64 i386" "$1"
+                fi
+              fi
+            ' _ {} \;
+            $SUDO find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i -E '/ubuntu/ s/\[arch=amd64\]/[arch=amd64,i386]/' {} +
+            if [ -f /etc/apt/sources.list ]; then
+              $SUDO sed -i -E '/ubuntu/ s/\[arch=amd64\]/[arch=amd64,i386]/' /etc/apt/sources.list
+            fi
+            $SUDO rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          fi
+          $SUDO apt-get update
+          # Debian provides the i386 libxdo development package that Ubuntu
+          # does not publish for this architecture.
+          $SUDO apt-get install -y bash clang file libclang-dev \
+            ${{ matrix.settings.cross_gcc }} \
+            ${{ matrix.settings.cross_gpp }} \
+            ${{ matrix.settings.cross_sys_deps }}
+
       - name: Install cross-compilation dependencies (Linux ARM)
-        if: runner.os == 'Linux' && matrix.settings.cross_arch
+        if: runner.os == 'Linux' && matrix.settings.cross_arch && matrix.settings.cross_arch != 'i386'
         run: |
           sudo dpkg --add-architecture ${{ matrix.settings.cross_arch }}
           # Update existing sources to be amd64-only to avoid 404s on foreign arches
@@ -214,6 +289,14 @@ jobs:
 
       - name: Build
         run: ${{ matrix.settings.build_script || format('bun run build --target {0}', matrix.settings.target) }}
+        shell: bash
+
+      - name: Verify Linux ia32 addon
+        if: matrix.settings.target == 'i686-unknown-linux-gnu'
+        run: |
+          set -euo pipefail
+          test -s webview.linux-ia32-gnu.node
+          file webview.linux-ia32-gnu.node | grep -E 'ELF 32-bit.*Intel 80386'
         shell: bash
 
       - name: Upload artifact
@@ -309,6 +392,24 @@ jobs:
 
       - name: List packages
         run: ls -R ./npm
+        shell: bash
+
+      - name: Verify Linux ia32 package
+        run: |
+          set -euo pipefail
+          package_dir=npm/linux-ia32-gnu
+          package_name=$(node -p "require('./$package_dir/package.json').name")
+          package_cpu=$(node -p "require('./$package_dir/package.json').cpu[0]")
+          package_os=$(node -p "require('./$package_dir/package.json').os[0]")
+          package_libc=$(node -p "require('./$package_dir/package.json').libc[0]")
+          artifact_name=$(node -p "require('./$package_dir/package.json').main")
+          test "$package_name" = '@webviewjs/webview-linux-ia32-gnu'
+          test "$package_cpu" = 'ia32'
+          test "$package_os" = 'linux'
+          test "$package_libc" = 'glibc'
+          test "$artifact_name" = 'webview.linux-ia32-gnu.node'
+          test -s "$package_dir/$artifact_name"
+          file "$package_dir/$artifact_name" | grep -E 'ELF 32-bit.*Intel 80386'
         shell: bash
 
       - name: Extract version from commit message

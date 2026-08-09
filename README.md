@@ -88,7 +88,7 @@ npm install @webviewjs/webview
 | x86_64-unknown-linux-gnu      | Linux   | x64   | ✅                |
 | aarch64-unknown-linux-gnu     | Linux   | arm64 | ✅                |
 | armv7-unknown-linux-gnueabihf | Linux   | armv7 | ✅                |
-| i686-unknown-linux-gnu        | Linux   | x86   | ⚠️ (no CI)        |
+| i686-unknown-linux-gnu        | Linux   | x86   | ✅                |
 | aarch64-linux-android         | Android | arm64 | ⚠️ (experimental) |
 | armv7-linux-androideabi       | Android | armv7 | ⚠️ (experimental) |
 | x86_64-unknown-freebsd        | FreeBSD | x64   | ⚠️ (no CI)        |
