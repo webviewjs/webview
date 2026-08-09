@@ -1,0 +1,11 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "WebviewJS",
+      "description": "Repository workflows for developing, testing, and releasing WebviewJS.",
+      "skills": ["webviewjs"]
+    }
+  ]
+}
