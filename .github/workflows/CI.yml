@@ -255,7 +255,7 @@ jobs:
           $SUDO apt-get update
           # Debian provides the i386 libxdo development package that Ubuntu
           # does not publish for this architecture.
-          $SUDO apt-get install -y bash clang file libclang-dev \
+          $SUDO apt-get install --no-install-recommends -y file libclang-dev \
             ${{ matrix.settings.cross_gcc }} \
             ${{ matrix.settings.cross_gpp }} \
             ${{ matrix.settings.cross_sys_deps }}
@@ -270,7 +270,9 @@ jobs:
             libgdk-pixbuf-2.0-dev \
             libgtk-3-dev \
             libxdo-dev; do
-            test "$(dpkg-query -W -f='${Architecture}' "$package:i386")" = i386
+            architecture="$(dpkg-query -W -f='${Architecture}' "$package:i386")"
+            echo "$package:i386 -> $architecture"
+            test "$architecture" = i386
           done
 
           export PKG_CONFIG_ALLOW_CROSS=1
@@ -284,8 +286,11 @@ jobs:
             atk \
             gdk-pixbuf-2.0 \
             gtk+-3.0; do
+            echo "Checking $pc_file through i386 pkg-config"
             pkg-config --exists "$pc_file"
-            test "$(pkg-config --variable=pcfiledir "$pc_file")" = /usr/lib/i386-linux-gnu/pkgconfig
+            pcfiledir="$(pkg-config --variable=pcfiledir "$pc_file")"
+            echo "$pc_file -> $pcfiledir"
+            test "$pcfiledir" = /usr/lib/i386-linux-gnu/pkgconfig
           done
 
           file -L /usr/lib/i386-linux-gnu/libxdo.so | grep -E 'ELF 32-bit.*Intel 80386'
