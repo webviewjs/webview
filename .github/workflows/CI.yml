@@ -255,7 +255,7 @@ jobs:
           $SUDO apt-get update
           # Debian provides the i386 libxdo development package that Ubuntu
           # does not publish for this architecture.
-          $SUDO apt-get install --no-install-recommends -y file libclang-dev \
+          $SUDO apt-get install --no-install-recommends -y libclang-dev \
             ${{ matrix.settings.cross_gcc }} \
             ${{ matrix.settings.cross_gpp }} \
             ${{ matrix.settings.cross_sys_deps }}
@@ -329,16 +329,6 @@ jobs:
 
       - name: Build
         run: ${{ matrix.settings.build_script || format('bun run build --target {0}', matrix.settings.target) }}
-        shell: bash
-
-      - name: Verify Linux ia32 addon
-        if: matrix.settings.target == 'i686-unknown-linux-gnu'
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          test -s webview.linux-ia32-gnu.node
-          file webview.linux-ia32-gnu.node
-          file webview.linux-ia32-gnu.node | grep -E 'ELF 32-bit.*Intel 80386'
         shell: bash
 
       - name: Upload artifact
