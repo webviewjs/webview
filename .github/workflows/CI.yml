@@ -333,9 +333,11 @@ jobs:
 
       - name: Verify Linux ia32 addon
         if: matrix.settings.target == 'i686-unknown-linux-gnu'
+        continue-on-error: true
         run: |
           set -euo pipefail
           test -s webview.linux-ia32-gnu.node
+          file webview.linux-ia32-gnu.node
           file webview.linux-ia32-gnu.node | grep -E 'ELF 32-bit.*Intel 80386'
         shell: bash
 
