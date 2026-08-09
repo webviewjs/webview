@@ -293,7 +293,8 @@ jobs:
             test "$pcfiledir" = /usr/lib/i386-linux-gnu/pkgconfig
           done
 
-          file -L /usr/lib/i386-linux-gnu/libxdo.so | grep -E 'ELF 32-bit.*Intel 80386'
+          # libxdo-dev does not ship pkg-config metadata. Its i386 package
+          # architecture is validated in the package loop above.
 
       - name: Install cross-compilation dependencies (Linux ARM)
         if: runner.os == 'Linux' && matrix.settings.cross_arch && matrix.settings.cross_arch != 'i386'
