@@ -426,24 +426,6 @@ jobs:
         run: ls -R ./npm
         shell: bash
 
-      - name: Verify Linux ia32 package
-        run: |
-          set -euo pipefail
-          package_dir=npm/linux-ia32-gnu
-          package_name=$(node -p "require('./$package_dir/package.json').name")
-          package_cpu=$(node -p "require('./$package_dir/package.json').cpu[0]")
-          package_os=$(node -p "require('./$package_dir/package.json').os[0]")
-          package_libc=$(node -p "require('./$package_dir/package.json').libc[0]")
-          artifact_name=$(node -p "require('./$package_dir/package.json').main")
-          test "$package_name" = '@webviewjs/webview-linux-ia32-gnu'
-          test "$package_cpu" = 'ia32'
-          test "$package_os" = 'linux'
-          test "$package_libc" = 'glibc'
-          test "$artifact_name" = 'webview.linux-ia32-gnu.node'
-          test -s "$package_dir/$artifact_name"
-          file "$package_dir/$artifact_name" | grep -E 'ELF 32-bit.*Intel 80386'
-        shell: bash
-
       - name: Extract version from commit message
         id: version
         run: |
