@@ -283,11 +283,12 @@ jobs:
             pango \
             atk \
             gdk-pixbuf-2.0 \
-            gtk+-3.0 \
-            xdo; do
+            gtk+-3.0; do
             pkg-config --exists "$pc_file"
-            test "$(pkg-config --variable=libdir "$pc_file")" = /usr/lib/i386-linux-gnu
+            test "$(pkg-config --variable=pcfiledir "$pc_file")" = /usr/lib/i386-linux-gnu/pkgconfig
           done
+
+          file -L /usr/lib/i386-linux-gnu/libxdo.so | grep -E 'ELF 32-bit.*Intel 80386'
 
       - name: Install cross-compilation dependencies (Linux ARM)
         if: runner.os == 'Linux' && matrix.settings.cross_arch && matrix.settings.cross_arch != 'i386'
