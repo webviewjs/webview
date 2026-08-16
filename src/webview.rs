@@ -15,6 +15,7 @@ use std::sync::Arc;
 use tao::window::Window;
 use wry::{
   http::Request, NewWindowFeatures, NewWindowResponse, PageLoadEvent, Rect, WebViewBuilder,
+  WebViewBuilderExtWindows,
 };
 
 use crate::browser_window::next_protocol_id;
@@ -80,6 +81,8 @@ impl Default for WebviewOptions {
       autoplay: Some(true),
       back_forward_navigation_gestures: Some(true),
       ipc_name: None,
+      auto_normalize_load_url: Some(true),
+      use_https_scheme: Some(false),
     }
   }
 }
@@ -93,6 +96,9 @@ pub struct JsWebview {
   // expose() handlers: namespace → JS function that receives ExposeCallData.
   expose_handlers: Rc<RefCell<std::collections::HashMap<String, FunctionRef<ExposeCallData, ()>>>>,
   disposed: Rc<Cell<bool>>,
+  auto_normalize_load_url: bool,
+  protocols: Vec<String>,
+  https_scheme_enabled: bool,
 }
 
 #[napi]
@@ -121,6 +127,10 @@ impl JsWebview {
 
     if let Some(devtools) = options.enable_devtools {
       webview = webview.with_devtools(devtools);
+    }
+
+    if let Some(https_enabled) = options.use_https_scheme {
+      webview = webview.with_https_scheme(https_enabled);
     }
 
     // Only pin the webview to explicit bounds when the caller asked for it.
@@ -513,6 +523,12 @@ impl JsWebview {
       ipc_state,
       expose_handlers,
       disposed: Rc::new(Cell::new(false)),
+      auto_normalize_load_url: options.auto_normalize_load_url.unwrap_or(true),
+      protocols: protocols
+        .iter()
+        .map(|(name, _, _, _)| name.clone())
+        .collect(),
+      https_scheme_enabled: options.use_https_scheme.unwrap_or(false),
     })
   }
 
@@ -674,12 +690,39 @@ impl JsWebview {
     self.webview().close_devtools();
   }
 
+  fn normalize_url(&self, url: String) -> String {
+    if !self.auto_normalize_load_url {
+      return url;
+    }
+
+    let Some((protocol, _)) = url.split_once("://") else {
+      return url;
+    };
+
+    if !self.protocols.iter().any(|p| p == protocol) {
+      return url;
+    }
+
+    let scheme = if self.https_scheme_enabled {
+      "https"
+    } else {
+      "http"
+    };
+
+    // WebView2 doesn't reliably support custom protocols, so rewrite
+    // registered schemes to HTTP(S) before loading.
+    // See: https://github.com/MicrosoftEdge/WebView2Feedback/issues/73
+    crate::custom_protocol_workaround::apply_uri_work_around(&url, scheme, protocol)
+  }
+
   #[napi]
   pub fn load_url(&self, url: String) -> Result<()> {
-    self.webview().load_url(&url).map_err(|e| {
+    let url = self.normalize_url(url);
+
+    self.webview().load_url(&url).map_err(|error| {
       napi::Error::new(
         napi::Status::GenericFailure,
-        format!("Failed to load URL: {}", e),
+        format!("Failed to load URL: {error}"),
       )
     })
   }
@@ -785,6 +828,9 @@ impl JsWebview {
         }
       }
     }
+
+    let url = self.normalize_url(url);
+
     self
       .webview()
       .load_url_with_headers(&url, map)

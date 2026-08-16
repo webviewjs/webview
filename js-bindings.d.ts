@@ -281,6 +281,9 @@ export interface ApplicationRunOptions {
   ref?: boolean;
 }
 
+/** Conveting `{protocol}://localhost/abc` to `{http_or_https}://{protocol}.localhost/abc` */
+export declare function applyUriWorkAround(uri: string, httpOrHttps: string, protocol: string): string;
+
 export interface BrowserWindowOptions {
   menu?: MenuOptions;
   showMenu?: boolean;
@@ -449,6 +452,9 @@ export interface IpcMessage {
   uri: string;
 }
 
+/** If the URI is a work around URI for this protocol which starts with `{http_or_https}://{protocol}.` */
+export declare function isWorkAroundUri(uri: string, httpOrHttps: string, protocol: string): boolean;
+
 export interface JsProgressBar {
   state?: ProgressBarState;
   progress?: number;
@@ -498,6 +504,9 @@ export interface NotificationEventPayload {
   error?: string;
 }
 
+/** Returns `{protocol}://` */
+export declare function originalUriPrefix(protocol: string): string;
+
 export interface Position {
   x: number;
   y: number;
@@ -510,6 +519,9 @@ export declare enum ProgressBarState {
   Paused = 3,
   Error = 4,
 }
+
+/** Conveting `{http_or_https}://{protocol}.localhost/abc` back to `{protocol}://localhost/abc` */
+export declare function revertUriWorkAround(uri: string, httpOrHttps: string, protocol: string): string;
 
 export declare enum Theme {
   Light = 0,
@@ -644,6 +656,14 @@ export interface WebviewOptions {
   backForwardNavigationGestures?: boolean;
   /** Custom name for the IPC global injected by wry (default: `"ipc"`). */
   ipcName?: string;
+  /** Whether to automatically normalize URL passed to `loadUrl` or `loadUrlWithHeaders` on windows (default: true). */
+  autoNormalizeLoadUrl?: boolean;
+  /**
+   * Determines whether the custom protocols should use `https://<scheme>.path/to/page` instead of the default `http://<scheme>.path/to/page`.
+   * Using a http scheme will allow mixed content when trying to fetch http endpoints and is therefore less secure but will match the behavior
+   * of the `<scheme>://path/to/page` protocols used on macOS and Linux.
+   */
+  useHttpsScheme?: boolean;
 }
 
 export declare enum WindowCommand {
@@ -716,3 +736,6 @@ export declare enum WindowEventType {
   Ime = 18,
   Touch = 19,
 }
+
+/** Returns `{http_or_https}://{protocol}.` */
+export declare function workAroundUriPrefix(httpOrHttps: string, protocol: string): string;

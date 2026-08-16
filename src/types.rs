@@ -461,4 +461,10 @@ pub struct WebviewOptions {
   pub back_forward_navigation_gestures: Option<bool>,
   /// Custom name for the IPC global injected by wry (default: `"ipc"`).
   pub ipc_name: Option<String>,
+  /// Whether to automatically normalize URL passed to `loadUrl` or `loadUrlWithHeaders` on windows (default: true).
+  pub auto_normalize_load_url: Option<bool>,
+  /// Determines whether the custom protocols should use `https://<scheme>.path/to/page` instead of the default `http://<scheme>.path/to/page`.
+  /// Using a http scheme will allow mixed content when trying to fetch http endpoints and is therefore less secure but will match the behavior
+  /// of the `<scheme>://path/to/page` protocols used on macOS and Linux.
+  pub use_https_scheme: Option<bool>,
 }

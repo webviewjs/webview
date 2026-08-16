@@ -1,6 +1,7 @@
 #![deny(clippy::all)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+pub mod custom_protocol_workaround;
 pub mod types;
 pub mod version;
 
