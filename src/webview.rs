@@ -15,7 +15,6 @@ use std::sync::Arc;
 use tao::window::Window;
 use wry::{
   http::Request, NewWindowFeatures, NewWindowResponse, PageLoadEvent, Rect, WebViewBuilder,
-  WebViewBuilderExtWindows,
 };
 
 use crate::browser_window::next_protocol_id;
@@ -131,6 +130,7 @@ impl JsWebview {
 
     #[cfg(target_os = "windows")]
     if let Some(https_enabled) = options.use_https_scheme {
+      use wry::WebViewBuilderExtWindows;
       webview = webview.with_https_scheme(https_enabled);
     }
 
