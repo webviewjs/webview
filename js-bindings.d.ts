@@ -281,7 +281,7 @@ export interface ApplicationRunOptions {
   ref?: boolean;
 }
 
-/** Conveting `{protocol}://localhost/abc` to `{http_or_https}://{protocol}.localhost/abc` */
+/** Converting `{protocol}://localhost/abc` to `{http_or_https}://{protocol}.localhost/abc` */
 export declare function applyUriWorkAround(uri: string, httpOrHttps: string, protocol: string): string;
 
 export interface BrowserWindowOptions {
@@ -520,7 +520,7 @@ export declare enum ProgressBarState {
   Error = 4,
 }
 
-/** Conveting `{http_or_https}://{protocol}.localhost/abc` back to `{protocol}://localhost/abc` */
+/** Converting `{http_or_https}://{protocol}.localhost/abc` back to `{protocol}://localhost/abc` */
 export declare function revertUriWorkAround(uri: string, httpOrHttps: string, protocol: string): string;
 
 export declare enum Theme {

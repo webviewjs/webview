@@ -52,13 +52,13 @@ pub fn js_is_work_around_uri(uri: String, http_or_https: String, protocol: Strin
 }
 
 #[napi(js_name = "applyUriWorkAround")]
-/// Conveting `{protocol}://localhost/abc` to `{http_or_https}://{protocol}.localhost/abc`
+/// Converting `{protocol}://localhost/abc` to `{http_or_https}://{protocol}.localhost/abc`
 pub fn js_apply_uri_work_around(uri: String, http_or_https: String, protocol: String) -> String {
   apply_uri_work_around(&uri, &http_or_https, &protocol)
 }
 
 #[napi(js_name = "revertUriWorkAround")]
-/// Conveting `{http_or_https}://{protocol}.localhost/abc` back to `{protocol}://localhost/abc`
+/// Converting `{http_or_https}://{protocol}.localhost/abc` back to `{protocol}://localhost/abc`
 pub fn js_revert_uri_work_around(uri: String, http_or_https: String, protocol: String) -> String {
   revert_uri_work_around(&uri, &http_or_https, &protocol)
 }

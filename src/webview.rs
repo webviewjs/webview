@@ -129,6 +129,7 @@ impl JsWebview {
       webview = webview.with_devtools(devtools);
     }
 
+    #[cfg(target_os = "windows")]
     if let Some(https_enabled) = options.use_https_scheme {
       webview = webview.with_https_scheme(https_enabled);
     }
@@ -691,6 +692,11 @@ impl JsWebview {
   }
 
   fn normalize_url(&self, url: String) -> String {
+    #[cfg(not(target_os = "windows"))]
+    {
+      return url;
+    }
+
     if !self.auto_normalize_load_url {
       return url;
     }
