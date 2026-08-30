@@ -363,7 +363,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo pkg install -y -f curl node npm
-          sudo npm install -g bun
+          sudo npm install -g bun@1.3.14
           curl https://sh.rustup.rs -sSf --output rustup.sh
           sh rustup.sh -y --profile minimal --default-toolchain stable
 
