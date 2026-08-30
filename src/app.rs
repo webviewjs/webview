@@ -214,7 +214,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::Resized,
+          event: WindowEventType::Resized.name().to_owned(),
           width: Some(new_size.width),
           height: Some(new_size.height),
           x: None,
@@ -238,7 +238,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::Moved,
+          event: WindowEventType::Moved.name().to_owned(),
           x: Some(pos.x as f64),
           y: Some(pos.y as f64),
           width: None,
@@ -262,7 +262,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::CloseRequested,
+          event: WindowEventType::CloseRequested.name().to_owned(),
           x: None,
           y: None,
           width: None,
@@ -286,12 +286,16 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       }
       state.cursor_positions.remove(&window_id);
       state.fire(ApplicationEvent {
-        event: WebviewApplicationEvent::WindowCloseRequested,
+        event: WebviewApplicationEvent::WindowCloseRequested
+          .name()
+          .to_owned(),
         custom_menu_event: None,
       });
       if state.windows.is_empty() {
         state.fire(ApplicationEvent {
-          event: WebviewApplicationEvent::ApplicationCloseRequested,
+          event: WebviewApplicationEvent::ApplicationCloseRequested
+            .name()
+            .to_owned(),
           custom_menu_event: None,
         });
         state.shutdown();
@@ -301,11 +305,12 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: if focused {
-            WindowEventType::Focused
+          event: (if focused {
+            WindowEventType::Focused.name()
           } else {
-            WindowEventType::Blurred
-          },
+            WindowEventType::Blurred.name()
+          })
+          .to_owned(),
           x: None,
           y: None,
           width: None,
@@ -330,7 +335,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::MouseEnter,
+          event: WindowEventType::MouseEnter.name().to_owned(),
           x: pos.map(|p| p.0),
           y: pos.map(|p| p.1),
           width: None,
@@ -354,7 +359,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::MouseLeave,
+          event: WindowEventType::MouseLeave.name().to_owned(),
           x: None,
           y: None,
           width: None,
@@ -381,7 +386,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::MouseMove,
+          event: WindowEventType::MouseMove.name().to_owned(),
           x: Some(cx),
           y: Some(cy),
           width: None,
@@ -417,11 +422,12 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: if btn_state == ElementState::Pressed {
-            WindowEventType::MouseDown
+          event: (if btn_state == ElementState::Pressed {
+            WindowEventType::MouseDown.name()
           } else {
-            WindowEventType::MouseUp
-          },
+            WindowEventType::MouseUp.name()
+          })
+          .to_owned(),
           x: pos.map(|p| p.0),
           y: pos.map(|p| p.1),
           button: Some(btn_index),
@@ -450,7 +456,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::Scroll,
+          event: WindowEventType::Scroll.name().to_owned(),
           delta_x: Some(dx),
           delta_y: Some(dy),
           x: None,
@@ -481,11 +487,12 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: if key_event.state == ElementState::Pressed {
-            WindowEventType::KeyDown
+          event: (if key_event.state == ElementState::Pressed {
+            WindowEventType::KeyDown.name()
           } else {
-            WindowEventType::KeyUp
-          },
+            WindowEventType::KeyUp.name()
+          })
+          .to_owned(),
           key: logical_key_name(&key_event.logical_key),
           code: physical_key_code(&key_event.physical_key),
           modifiers: Some(mods),
@@ -510,7 +517,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::Ime,
+          event: WindowEventType::Ime.name().to_owned(),
           text: Some(text),
           phase: Some("commit".to_owned()),
           x: None,
@@ -534,7 +541,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::FileDrop,
+          event: WindowEventType::FileDrop.name().to_owned(),
           files: Some(vec![path.to_string_lossy().into_owned()]),
           x: None,
           y: None,
@@ -558,7 +565,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::FileHover,
+          event: WindowEventType::FileHover.name().to_owned(),
           files: Some(vec![path.to_string_lossy().into_owned()]),
           x: None,
           y: None,
@@ -582,7 +589,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::FileHoverCancelled,
+          event: WindowEventType::FileHoverCancelled.name().to_owned(),
           x: None,
           y: None,
           width: None,
@@ -606,7 +613,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::ScaleFactorChanged,
+          event: WindowEventType::ScaleFactorChanged.name().to_owned(),
           scale_factor: Some(scale_factor),
           x: None,
           y: None,
@@ -630,7 +637,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::ThemeChanged,
+          event: WindowEventType::ThemeChanged.name().to_owned(),
           text: Some(match theme {
             tao::window::Theme::Light => "light".to_owned(),
             tao::window::Theme::Dark => "dark".to_owned(),
@@ -665,7 +672,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.fire_window_event(
         window_id,
         WindowEventPayload {
-          event: WindowEventType::Touch,
+          event: WindowEventType::Touch.name().to_owned(),
           x: Some(touch.location.x),
           y: Some(touch.location.y),
           touch_id: Some(touch.id as f64),
@@ -985,7 +992,7 @@ impl Application {
     if !self.state.ready {
       self.state.ready = true;
       self.state.fire(ApplicationEvent {
-        event: WebviewApplicationEvent::Ready,
+        event: WebviewApplicationEvent::Ready.name().to_owned(),
         custom_menu_event: None,
       });
     }
@@ -996,7 +1003,7 @@ impl Application {
       if let Some(rx) = &self.state.menu_event_receiver {
         while let Ok(ev) = rx.try_recv() {
           self.state.fire(ApplicationEvent {
-            event: WebviewApplicationEvent::CustomMenuClick,
+            event: WebviewApplicationEvent::CustomMenuClick.name().to_owned(),
             custom_menu_event: Some(CustomMenuEvent {
               id: ev.id().0.clone(),
               window_id: 0,
@@ -1120,7 +1127,7 @@ impl Application {
     if !self.state.ready {
       self.state.ready = true;
       self.state.fire(ApplicationEvent {
-        event: WebviewApplicationEvent::Ready,
+        event: WebviewApplicationEvent::Ready.name().to_owned(),
         custom_menu_event: None,
       });
     }

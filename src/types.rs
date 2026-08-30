@@ -69,6 +69,17 @@ pub enum WebviewApplicationEvent {
   Ready,
 }
 
+impl WebviewApplicationEvent {
+  pub(crate) fn name(&self) -> &'static str {
+    match self {
+      Self::WindowCloseRequested => "window-close-requested",
+      Self::ApplicationCloseRequested => "application-close-requested",
+      Self::CustomMenuClick => "custom-menu-click",
+      Self::Ready => "ready",
+    }
+  }
+}
+
 #[napi]
 pub enum WindowEventType {
   Moved,
@@ -93,9 +104,36 @@ pub enum WindowEventType {
   Touch,
 }
 
+impl WindowEventType {
+  pub(crate) fn name(&self) -> &'static str {
+    match self {
+      Self::Moved => "move",
+      Self::Resized => "resize",
+      Self::CloseRequested => "close",
+      Self::Focused => "focus",
+      Self::Blurred => "blur",
+      Self::MouseEnter => "mouse-enter",
+      Self::MouseLeave => "mouse-leave",
+      Self::MouseMove => "mouse-move",
+      Self::MouseDown => "mouse-down",
+      Self::MouseUp => "mouse-up",
+      Self::Scroll => "scroll",
+      Self::KeyDown => "key-down",
+      Self::KeyUp => "key-up",
+      Self::FileDrop => "file-drop",
+      Self::FileHover => "file-hover",
+      Self::FileHoverCancelled => "file-hover-cancelled",
+      Self::ScaleFactorChanged => "scale-factor-changed",
+      Self::ThemeChanged => "theme-changed",
+      Self::Ime => "ime",
+      Self::Touch => "touch",
+    }
+  }
+}
+
 #[napi(object)]
 pub struct WindowEventPayload {
-  pub event: WindowEventType,
+  pub event: String,
   /// Physical x position (cursor or window).
   pub x: Option<f64>,
   /// Physical y position (cursor or window).
@@ -188,7 +226,7 @@ pub struct ApplicationOptions {
 
 #[napi(object)]
 pub struct ApplicationEvent {
-  pub event: WebviewApplicationEvent,
+  pub event: String,
   pub custom_menu_event: Option<CustomMenuEvent>,
 }
 
@@ -369,6 +407,17 @@ pub struct CustomProtocolRequest {
   pub body: Option<Buffer>,
 }
 
+/// Native request payload delivered to the JavaScript custom-protocol bridge.
+#[napi(object)]
+pub struct ProtocolRequest {
+  /// Request ID allocated by the owning BrowserWindow.
+  pub id: u32,
+  pub url: String,
+  pub method: String,
+  pub headers: Vec<HeaderData>,
+  pub body: Buffer,
+}
+
 /// Response returned by a custom-protocol handler.
 #[napi(object)]
 pub struct CustomProtocolResponse {
@@ -382,7 +431,8 @@ pub struct CustomProtocolResponse {
   pub mime_type: Option<String>,
 }
 
-/// Data sent to the expose handler when the page calls a proxied function.
+/// Legacy expose callback shape retained for generated type compatibility.
+/// The current expose bridge uses [`IpcMessage`] and dispatches in JavaScript.
 #[napi(object)]
 pub struct ExposeCallData {
   pub ns: String,
@@ -427,11 +477,25 @@ pub enum WebviewEventType {
   NewWindowRequested,
 }
 
+impl WebviewEventType {
+  pub(crate) fn name(&self) -> &'static str {
+    match self {
+      Self::PageLoadStarted => "page-load-started",
+      Self::PageLoadFinished => "page-load-finished",
+      Self::TitleChanged => "title-changed",
+      Self::DownloadStarted => "download-started",
+      Self::DownloadCompleted => "download-completed",
+      Self::NavigationStarted => "navigation",
+      Self::NewWindowRequested => "new-window",
+    }
+  }
+}
+
 /// Payload delivered to the webview event dispatch callback.
 #[napi(object)]
 #[derive(Default)]
 pub struct WebviewEventPayload {
-  pub event: WebviewEventType,
+  pub event: String,
   /// URL associated with the event (navigation, page load, download).
   pub url: Option<String>,
   /// Document title for `TitleChanged` events.

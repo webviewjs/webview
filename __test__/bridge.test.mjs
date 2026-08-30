@@ -1,17 +1,42 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import vm from 'node:vm';
 
 import webviewjs from '../index.js';
 
 const { Application, BrowserWindow, Notification, SerializationError, TrayIcon, WebContext, Webview } = webviewjs;
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
+const requireFromTest = createRequire(import.meta.url);
+
+async function loadWrapperForTest(nativeBinding) {
+  const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
+  const module = { exports: {} };
+  const context = vm.createContext({
+    Buffer,
+    clearInterval,
+    console,
+    module,
+    Promise,
+    require: (specifier) => (specifier === './js-bindings.js' ? nativeBinding : requireFromTest(specifier)),
+    setInterval,
+    setImmediate,
+  });
+
+  vm.runInContext(source.split('// Auto-generated exports by postbuild.js.')[0], context, {
+    filename: new URL('../index.js', import.meta.url).pathname,
+  });
+  return module.exports;
+}
 
 function protocolWindow() {
   return {
     completed: [],
+    callbacks: new Map(),
     _registerProtocol(_name, callback) {
+      this.callbacks.set(_name, callback);
       this.callback = callback;
     },
     _completeProtocol(id, response) {
@@ -20,11 +45,31 @@ function protocolWindow() {
   };
 }
 
+function protocolRequest(id, overrides = {}) {
+  return {
+    id,
+    url: 'app://localhost/index.html',
+    method: 'GET',
+    headers: [],
+    body: Buffer.alloc(0),
+    ...overrides,
+  };
+}
+
 function exposedWebview() {
   return {
     scripts: [],
-    _exposeInternal(_name, _statics, _functions, callback) {
-      this.callback = callback;
+    isDisposed() {
+      return false;
+    },
+    onIpcMessage(callback) {
+      this.ipcCallback = callback;
+    },
+    _exposeInternal(_name, _statics, _functions) {},
+    emitExposeCall(call) {
+      this.ipcCallback({
+        body: Buffer.from(JSON.stringify({ __e: true, ...call })),
+      });
     },
     evaluateScript(script) {
       this.scripts.push(script);
@@ -48,9 +93,9 @@ test('Application dispatches native events through named EventEmitter events', (
   Application.prototype.on.call(app, 'application-close-requested', (event) => received.push(['application', event]));
   Application.prototype.on.call(app, 'custom-menu-click', (event) => received.push(['menu', event]));
 
-  const windowEvent = { event: 0 };
-  const applicationEvent = { event: 1 };
-  const menuEvent = { event: 2, customMenuEvent: { id: 'save', windowId: 7 } };
+  const windowEvent = { event: 'window-close-requested' };
+  const applicationEvent = { event: 'application-close-requested' };
+  const menuEvent = { event: 'custom-menu-click', customMenuEvent: { id: 'save', windowId: 7 } };
   app.applicationEventCallback(windowEvent);
   app.applicationEventCallback(applicationEvent);
   app.applicationEventCallback(menuEvent);
@@ -71,6 +116,38 @@ test('Application EventEmitter methods are chainable and removable', () => {
   assert.equal(Application.prototype.listenerCount.call(app, 'window-close-requested'), 0);
 });
 
+test('BrowserWindow forwards stable native event names through one EventEmitter adapter', () => {
+  const window = {
+    _onWindowEvent(callback) {
+      this.windowEventCallback = callback;
+    },
+  };
+  const received = [];
+  const listener = (event) => received.push(event);
+
+  assert.equal(BrowserWindow.prototype.on.call(window, 'resize', listener), window);
+  window.windowEventCallback({ event: 'resize', width: 800, height: 600 });
+  assert.deepEqual(received, [{ event: 'resize', width: 800, height: 600 }]);
+  assert.equal(BrowserWindow.prototype.listenerCount.call(window, 'resize'), 1);
+  assert.equal(BrowserWindow.prototype.off.call(window, 'resize', listener), window);
+  assert.equal(BrowserWindow.prototype.listenerCount.call(window, 'resize'), 0);
+});
+
+test('TrayIcon forwards native tray events through the shared EventEmitter adapter', () => {
+  const tray = {
+    _onTrayEvent(callback) {
+      this.trayEventCallback = callback;
+    },
+  };
+  const received = [];
+
+  TrayIcon.prototype.once.call(tray, 'click', (event) => received.push(event));
+  tray.trayEventCallback({ event: 'click', id: 'tray', x: 1, y: 2 });
+  tray.trayEventCallback({ event: 'click', id: 'tray', x: 3, y: 4 });
+
+  assert.deepEqual(received, [{ event: 'click', id: 'tray', x: 1, y: 2 }]);
+});
+
 test('Application whenReady starts the event pump by default', async () => {
   const app = eventApplication();
   app.isReady = () => false;
@@ -79,7 +156,7 @@ test('Application whenReady starts the event pump by default', async () => {
 
   const ready = Application.prototype.whenReady.call(app, { interval: 32, ref: false });
 
-  app.applicationEventCallback({ event: 3 });
+  app.applicationEventCallback({ event: 'ready' });
   await ready;
 
   assert.deepEqual(runOptions, [{ interval: 32, ref: false }]);
@@ -104,7 +181,7 @@ test('Application whenReady supports manual pumping with autoRun false', async (
   app.run = () => assert.fail('run should not be called');
 
   const ready = Application.prototype.whenReady.call(app, { autoRun: false });
-  app.applicationEventCallback({ event: 3 });
+  app.applicationEventCallback({ event: 'ready' });
 
   await ready;
 });
@@ -119,6 +196,102 @@ test('Application whenReady rejects run options when autoRun is false', () => {
     /interval.*autoRun/i,
   );
   assert.throws(() => Application.prototype.whenReady.call(app, { autoRun: false, ref: false }), /ref.*autoRun/i);
+});
+
+test('createWebview forwards navigationHandler and uses its decision', async () => {
+  class MockApplication {
+    pumpEvents() {
+      return true;
+    }
+
+    exit() {}
+
+    onEvent() {}
+  }
+
+  class MockWebContext {
+    dispose() {}
+
+    isDisposed() {
+      return false;
+    }
+  }
+
+  class MockTrayIcon {
+    dispose() {}
+
+    isDisposed() {
+      return false;
+    }
+
+    _onTrayEvent() {}
+  }
+
+  class MockWebview {
+    dispose() {}
+
+    isDisposed() {
+      return false;
+    }
+
+    _exposeInternal() {}
+
+    evaluateScript() {}
+  }
+
+  class MockBrowserWindow {
+    dispose() {}
+
+    isDisposed() {
+      return false;
+    }
+
+    _onWindowEvent() {}
+
+    createWebview(_options, _webContext, eventHandler, navigationHandler) {
+      const url = 'app://blocked';
+      const creation = { eventHandler, navigationAllowed: navigationHandler?.(url) ?? true };
+      this.creations ??= [];
+      this.creations.push(creation);
+      return new MockWebview();
+    }
+  }
+
+  const wrappedBinding = await loadWrapperForTest({
+    Application: MockApplication,
+    BrowserWindow: MockBrowserWindow,
+    TrayIcon: MockTrayIcon,
+    WebContext: MockWebContext,
+    Webview: MockWebview,
+  });
+  const window = new wrappedBinding.BrowserWindow();
+  const navigationUrls = [];
+
+  const firstWebview = wrappedBinding.BrowserWindow.prototype.createWebview.call(window, {
+    navigationHandler(url) {
+      navigationUrls.push(url);
+      return false;
+    },
+  });
+  const secondWebview = wrappedBinding.BrowserWindow.prototype.createWebview.call(window, {
+    navigationHandler() {
+      return true;
+    },
+  });
+
+  assert.deepEqual(navigationUrls, ['app://blocked']);
+  assert.equal(window.creations[0].navigationAllowed, false);
+  assert.equal(window.creations[1].navigationAllowed, true);
+
+  const firstEvents = [];
+  const secondEvents = [];
+  firstWebview.on('navigation', (event) => firstEvents.push(event));
+  secondWebview.on('navigation', (event) => secondEvents.push(event));
+  window.creations[0].eventHandler(null, { event: 'navigation', url: 'app://first' });
+  window.creations[1].eventHandler(null, { event: 'navigation', url: 'app://second' });
+
+  assert.deepEqual(firstEvents, [{ event: 'navigation', url: 'app://first' }]);
+  assert.deepEqual(secondEvents, [{ event: 'navigation', url: 'app://second' }]);
 });
 
 test('closing the final window runs the same native resource cleanup as app.exit()', async () => {
@@ -394,35 +567,50 @@ test('README uses standard responses, EventEmitter events, and strong-reference 
 test('webview event callback handles the ThreadsafeFunction error-first signature', async () => {
   const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
 
-  assert.match(source, /_setPendingWebviewEventCallback\(function \(error, payload\)/);
+  assert.match(source, /const eventHandler = function \(error, payload\)/);
   assert.match(source, /if \(error\) throw error;/);
+  assert.doesNotMatch(source, /_setPendingWebview(?:EventCallback|NavigationHandler)|_clearPendingWebviewHandlers/);
 });
 
-test('created webviews take ownership of their pending event handlers', async () => {
+test('created webviews receive callbacks directly instead of pending handlers', async () => {
   const source = await readFile(new URL('../src/browser_window.rs', import.meta.url), 'utf8');
 
-  assert.match(
-    source,
-    /let event_handler = Rc::new\(RefCell::new\(\s*self\.pending_webview_event_handler\.borrow_mut\(\)\.take\(\),?\s*\)\)/,
-  );
-  assert.match(
-    source,
-    /let nav_handler = Rc::new\(RefCell::new\(self\.pending_nav_handler\.borrow_mut\(\)\.take\(\)\)\)/,
-  );
+  assert.match(source, /event_handler: Option<ThreadsafeFunction<WebviewEventPayload>>/);
+  assert.match(source, /navigation_handler: Option<FunctionRef<String, bool>>/);
+  assert.doesNotMatch(source, /pending_webview_event_handler|pending_nav_handler|_setPendingWebview/);
+});
+
+test('generated declarations match the direct callback and transport plumbing', async () => {
+  const declarations = await readFile(new URL('../js-bindings.d.ts', import.meta.url), 'utf8');
+
+  assert.match(declarations, /_registerProtocol\(name: string, handler: \(arg: ProtocolRequest\) => void\)/);
+  assert.match(declarations, /eventHandler\?: \(\(err: Error \| null, arg: WebviewEventPayload\) => any\)/);
+  assert.match(declarations, /navigationHandler\?: \(\(arg: string\) => boolean\)/);
+  assert.match(declarations, /_exposeInternal\(name: string, staticsJson: string, funcNames: Array<string>\)/);
+  assert.doesNotMatch(declarations, /_setPendingWebview|_clearPendingWebview/);
+  assert.doesNotMatch(declarations, /handler: \(arg: ExposeCallData\)/);
 });
 
 test('registerProtocol completes an asynchronous handler response', async () => {
   const win = protocolWindow();
+  let receivedRequest;
 
-  BrowserWindow.prototype.registerProtocol.call(win, 'app', async (request) => ({
-    statusCode: 200,
-    body: Buffer.from(request.url),
-    mimeType: 'text/plain',
-  }));
+  BrowserWindow.prototype.registerProtocol.call(win, 'app', async (request) => {
+    receivedRequest = request;
+    return {
+      statusCode: 200,
+      body: Buffer.from(request.url),
+      mimeType: 'text/plain',
+    };
+  });
 
-  win.callback(JSON.stringify({ id: 9, url: 'app://localhost/index.html', method: 'GET', headers: [], body: null }));
+  win.callback(protocolRequest(9));
   await flush();
 
+  assert.equal(receivedRequest.url, 'app://localhost/index.html');
+  assert.equal(receivedRequest.method, 'GET');
+  assert.deepEqual([...receivedRequest.headers], []);
+  assert.equal(receivedRequest.body, null);
   assert.deepEqual(win.completed, [
     [
       9,
@@ -442,13 +630,131 @@ test('registerProtocol maps a rejected asynchronous handler to a text 500 respon
     throw new Error('read failed');
   });
 
-  win.callback(JSON.stringify({ id: 10, url: 'app://localhost/missing', method: 'GET', headers: [], body: null }));
+  win.callback(protocolRequest(10, { url: 'app://localhost/missing' }));
   await flush();
 
   assert.equal(win.completed[0][0], 10);
   assert.equal(win.completed[0][1].statusCode, 500);
   assert.equal(win.completed[0][1].mimeType, 'text/plain');
   assert.equal(win.completed[0][1].body.toString(), 'read failed');
+});
+
+test('registerProtocol maps synchronous handler throws to a text 500 response', async () => {
+  const win = protocolWindow();
+
+  BrowserWindow.prototype.registerProtocol.call(win, 'app', () => {
+    throw new Error('sync failed');
+  });
+
+  win.callback(protocolRequest(11));
+  await flush();
+
+  assert.equal(win.completed[0][0], 11);
+  assert.equal(win.completed[0][1].statusCode, 500);
+  assert.equal(win.completed[0][1].body.toString(), 'sync failed');
+});
+
+test('registerProtocol forwards POST bodies and request headers', async () => {
+  const win = protocolWindow();
+  let receivedRequest;
+
+  BrowserWindow.prototype.registerProtocol.call(win, 'app', async (request) => {
+    receivedRequest = request;
+    return { body: Buffer.from('ok') };
+  });
+
+  win.callback(
+    protocolRequest(12, {
+      method: 'POST',
+      headers: [
+        { key: 'Content-Type', value: 'application/octet-stream' },
+        { key: 'X-Request', value: 'yes' },
+      ],
+      body: Buffer.from([0, 255, 1]),
+    }),
+  );
+  await flush();
+
+  assert.equal(receivedRequest.method, 'POST');
+  assert.equal(receivedRequest.headers.get('content-type'), 'application/octet-stream');
+  assert.equal(receivedRequest.headers.get('x-request'), 'yes');
+  assert.deepEqual(Buffer.from(await receivedRequest.arrayBuffer()), Buffer.from([0, 255, 1]));
+});
+
+test('registerProtocol leaves GET and HEAD requests bodyless', async () => {
+  const win = protocolWindow();
+  const requests = [];
+
+  BrowserWindow.prototype.registerProtocol.call(win, 'app', async (request) => {
+    requests.push(request);
+    return { body: Buffer.alloc(0) };
+  });
+
+  win.callback(protocolRequest(13, { method: 'GET', body: Buffer.from('ignored') }));
+  win.callback(protocolRequest(14, { method: 'HEAD', body: Buffer.from('ignored') }));
+  await flush();
+
+  assert.deepEqual(
+    requests.map((request) => [request.method, request.body]),
+    [
+      ['GET', null],
+      ['HEAD', null],
+    ],
+  );
+});
+
+test('registerProtocol converts Response headers and binary bodies', async () => {
+  const win = protocolWindow();
+
+  BrowserWindow.prototype.registerProtocol.call(win, 'app', async () => {
+    return new Response(new Uint8Array([0, 255, 2]), {
+      status: 206,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Response': 'yes',
+      },
+    });
+  });
+
+  win.callback(protocolRequest(15));
+  await flush();
+
+  assert.equal(win.completed[0][1].statusCode, 206);
+  assert.equal(win.completed[0][1].mimeType, 'application/octet-stream');
+  assert.deepEqual(win.completed[0][1].body, Buffer.from([0, 255, 2]));
+  assert.deepEqual(win.completed[0][1].headers, [{ key: 'x-response', value: 'yes' }]);
+});
+
+test('registered protocols share concurrent dispatch without crossing responses', async () => {
+  const win = protocolWindow();
+  const seen = [];
+
+  BrowserWindow.prototype.registerProtocol.call(win, 'app', async (request) => {
+    await flush();
+    seen.push(['app', request.url]);
+    return { body: Buffer.from('app') };
+  });
+  BrowserWindow.prototype.registerProtocol.call(win, 'asset', async (request) => {
+    seen.push(['asset', request.url]);
+    return { body: Buffer.from('asset') };
+  });
+
+  win.callbacks.get('app')(protocolRequest(16, { url: 'app://one' }));
+  win.callbacks.get('asset')(protocolRequest(17, { url: 'asset://two' }));
+  await flush();
+  await flush();
+
+  assert.deepEqual(seen, [
+    ['asset', 'asset://two'],
+    ['app', 'app://one'],
+  ]);
+  assert.deepEqual(
+    win.completed.map(([id, response]) => [id, response.body.toString()]),
+    [
+      [17, 'asset'],
+      [16, 'app'],
+    ],
+  );
 });
 
 test('expose rejects circular static values with SerializationError', () => {
@@ -471,17 +777,94 @@ test('expose resolves asynchronous Node functions in the page bridge', async () 
   const webview = exposedWebview();
 
   Webview.prototype.expose.call(webview, 'native', { answer: async () => 42, isCool: true });
-  webview.callback({ ns: 'native', method: 'answer', id: 1, argsJson: '[]' });
+  webview.emitExposeCall({ ns: 'native', method: 'answer', id: 1, args: [] });
   await flush();
 
   assert.match(webview.scripts.at(-1), /resolve\(1,42\)/);
+});
+
+test('expose dispatches synchronous functions through the generic IPC transport', async () => {
+  const webview = exposedWebview();
+
+  Webview.prototype.expose.call(webview, 'native', {
+    add(a, b) {
+      return a + b;
+    },
+  });
+  webview.emitExposeCall({ ns: 'native', method: 'add', id: 3, args: [2, 4] });
+  await flush();
+
+  assert.match(webview.scripts.at(-1), /resolve\(3,6\)/);
+});
+
+test('expose reports rejected methods back to the page', async () => {
+  const webview = exposedWebview();
+
+  Webview.prototype.expose.call(webview, 'native', {
+    fail: async () => {
+      throw new Error('method failed');
+    },
+  });
+  webview.emitExposeCall({ ns: 'native', method: 'fail', id: 4, args: [] });
+  await flush();
+
+  assert.match(webview.scripts.at(-1), /method failed/);
+  assert.match(webview.scripts.at(-1), /reject\(4/);
+});
+
+test('expose reports malformed arguments as SerializationError', async () => {
+  const webview = exposedWebview();
+
+  Webview.prototype.expose.call(webview, 'native', { method: () => true });
+  webview.emitExposeCall({ ns: 'native', method: 'method', id: 5, args: { invalid: true } });
+  await flush();
+
+  assert.match(webview.scripts.at(-1), /SerializationError/);
+});
+
+test('expose leaves generic IPC messages with the user handler', async () => {
+  const webview = exposedWebview();
+  const received = [];
+
+  Webview.prototype.onIpcMessage.call(webview, (message) => received.push(message));
+  Webview.prototype.expose.call(webview, 'native', { method: () => true });
+
+  const genericMessage = { body: Buffer.from('not an expose call') };
+  webview.ipcCallback(genericMessage);
+  webview.emitExposeCall({ ns: 'native', method: 'method', id: 6, args: [] });
+  await flush();
+
+  assert.deepEqual(received, [genericMessage]);
+  assert.match(webview.scripts.at(-1), /resolve\(6,true\)/);
+});
+
+test('expose still works after clearing a user IPC handler', async () => {
+  const webview = exposedWebview();
+
+  Webview.prototype.onIpcMessage.call(webview, () => {});
+  Webview.prototype.onIpcMessage.call(webview, null);
+  Webview.prototype.onIpcMessage.call(webview, () => {});
+  Webview.prototype.expose.call(webview, 'native', { answer: () => 7 });
+  webview.emitExposeCall({ ns: 'native', method: 'answer', id: 7, args: [] });
+  await flush();
+
+  assert.match(webview.scripts.at(-1), /resolve\(7,7\)/);
+});
+
+test('expose and IPC methods reject disposed webviews', () => {
+  const webview = {
+    isDisposed: () => true,
+  };
+
+  assert.throws(() => Webview.prototype.expose.call(webview, 'native', {}), /disposed/);
+  assert.throws(() => Webview.prototype.onIpcMessage.call(webview, () => {}), /disposed/);
 });
 
 test('expose sends a SerializationError name to the page for non-serializable results', async () => {
   const webview = exposedWebview();
 
   Webview.prototype.expose.call(webview, 'native', { broken: () => 1n });
-  webview.callback({ ns: 'native', method: 'broken', id: 2, argsJson: '[]' });
+  webview.emitExposeCall({ ns: 'native', method: 'broken', id: 2, args: [] });
   await flush();
 
   assert.match(webview.scripts.at(-1), /SerializationError/);

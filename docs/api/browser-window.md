@@ -231,8 +231,8 @@ Register a URL-scheme handler before creating the webview. Must be called before
 ```ts
 win.registerProtocol(
   name: string,
-  handler: (request: CustomProtocolRequest) =>
-    CustomProtocolResponse | Promise<CustomProtocolResponse>
+  handler: (request: Request) =>
+    Response | CustomProtocolResponse | Promise<Response | CustomProtocolResponse>
 ): void
 ```
 

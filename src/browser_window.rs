@@ -9,7 +9,7 @@ use napi_derive::*;
 #[cfg(not(target_os = "android"))]
 use rfd::FileDialog;
 use std::cell::{Cell, RefCell};
-use std::collections::hash_map::DefaultHasher;
+use std::collections::{hash_map::DefaultHasher, HashMap};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -25,8 +25,8 @@ use tao::platform::windows::WindowExtWindows;
 #[cfg(not(target_os = "android"))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
 use crate::webview::{
-  JsWebview, ProtocolCounterRef, ProtocolHandlerRef, ProtocolPendingMap, WebviewBoolHandlerRef,
-  WebviewEventHandlerRef, WebviewResource,
+  protocol_error_response, JsWebview, ProtocolCounterRef, ProtocolPendingMap, ProtocolRegistration,
+  WebviewCreateContext, WebviewResource,
 };
 
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
@@ -113,20 +113,12 @@ pub struct BrowserWindow {
   window_menu: Option<Menu>,
   webviews: Rc<RefCell<Vec<WebviewResource>>>,
   event_handler: Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>>,
-  pending_protocols: Vec<PendingProtocol>,
+  protocols: Vec<ProtocolRegistration>,
+  protocol_responders: ProtocolPendingMap,
   protocol_next_id: ProtocolCounterRef,
-  pending_webview_event_handler: WebviewEventHandlerRef,
-  pending_nav_handler: WebviewBoolHandlerRef,
   disposed: Rc<Cell<bool>>,
   webview_lifecycles: Rc<RefCell<Vec<Rc<Cell<bool>>>>>,
 }
-
-type PendingProtocol = (
-  String,
-  ProtocolHandlerRef,
-  ProtocolPendingMap,
-  ProtocolCounterRef,
-);
 
 #[napi]
 impl BrowserWindow {
@@ -344,10 +336,9 @@ impl BrowserWindow {
       window_menu,
       webviews: Rc::new(RefCell::new(Vec::new())),
       event_handler: Rc::new(RefCell::new(None)),
-      pending_protocols: Vec::new(),
-      protocol_next_id: Rc::new(RefCell::new(0)),
-      pending_webview_event_handler: Rc::new(RefCell::new(None)),
-      pending_nav_handler: Rc::new(RefCell::new(None)),
+      protocols: Vec::new(),
+      protocol_responders: Rc::new(RefCell::new(HashMap::new())),
+      protocol_next_id: Rc::new(Cell::new(0)),
       disposed: Rc::new(Cell::new(false)),
       webview_lifecycles: Rc::new(RefCell::new(Vec::new())),
     })
@@ -366,25 +357,26 @@ impl BrowserWindow {
   }
 
   #[napi(js_name = "_registerProtocol")]
-  pub fn register_protocol_raw(&mut self, name: String, handler: FunctionRef<String, ()>) {
-    self.pending_protocols.push((
+  pub fn register_protocol_raw(&mut self, name: String, handler: FunctionRef<ProtocolRequest, ()>) {
+    self.protocols.push(ProtocolRegistration {
       name,
-      Rc::new(RefCell::new(Some(handler))),
-      Rc::new(RefCell::new(std::collections::HashMap::new())),
-      Rc::clone(&self.protocol_next_id),
-    ));
+      handler: Rc::new(RefCell::new(Some(handler))),
+    });
   }
 
+  // Wry gives each request a one-shot responder. Keep one ID-indexed map for
+  // every scheme and webview owned by this window so completion has one lookup
+  // and disposal can resolve all outstanding requests in one place.
   #[napi(js_name = "_completeProtocol")]
-  pub fn complete_protocol(&self, id: f64, response: CustomProtocolResponse) -> Result<()> {
-    let id = id as u64;
-    for (_, _, responders, _) in &self.pending_protocols {
-      let mut map = responders.borrow_mut();
-      if let Some(responder) = map.remove(&id) {
-        let http = build_wry_response(response)?;
-        responder.respond(http);
-        return Ok(());
-      }
+  pub fn complete_protocol(&self, id: u32, response: CustomProtocolResponse) -> Result<()> {
+    let responder = self.protocol_responders.borrow_mut().remove(&id);
+    let Some(responder) = responder else {
+      return Ok(());
+    };
+
+    match build_wry_response(response) {
+      Ok(http) => responder.respond(http),
+      Err(error) => responder.respond(protocol_error_response(&error.to_string())),
     }
     Ok(())
   }
@@ -395,6 +387,8 @@ impl BrowserWindow {
     env: Env,
     options: Option<WebviewOptions>,
     web_context: Option<&mut crate::web_context::JsWebContext>,
+    event_handler: Option<ThreadsafeFunction<WebviewEventPayload>>,
+    navigation_handler: Option<FunctionRef<String, bool>>,
   ) -> Result<JsWebview> {
     if self.disposed.get() {
       return Err(napi::Error::new(
@@ -402,18 +396,18 @@ impl BrowserWindow {
         "BrowserWindow has been disposed",
       ));
     }
-    let event_handler = Rc::new(RefCell::new(
-      self.pending_webview_event_handler.borrow_mut().take(),
-    ));
-    let nav_handler = Rc::new(RefCell::new(self.pending_nav_handler.borrow_mut().take()));
     let webview = JsWebview::create(
       &env,
       &self.window,
       options.unwrap_or_default(),
       web_context,
-      &self.pending_protocols,
-      event_handler,
-      nav_handler,
+      WebviewCreateContext {
+        protocols: &self.protocols,
+        protocol_responders: Rc::clone(&self.protocol_responders),
+        protocol_next_id: Rc::clone(&self.protocol_next_id),
+        event_handler,
+        navigation_handler,
+      },
     )?;
     self
       .webviews
@@ -424,25 +418,6 @@ impl BrowserWindow {
       .borrow_mut()
       .push(webview.lifecycle_shared());
     Ok(webview)
-  }
-
-  #[napi(js_name = "_setPendingWebviewEventCallback")]
-  pub fn set_pending_webview_event_callback(
-    &mut self,
-    handler: ThreadsafeFunction<WebviewEventPayload>,
-  ) {
-    *self.pending_webview_event_handler.borrow_mut() = Some(Arc::new(handler));
-  }
-
-  #[napi(js_name = "_setPendingWebviewNavigationHandler")]
-  pub fn set_pending_webview_navigation_handler(&mut self, handler: FunctionRef<String, bool>) {
-    *self.pending_nav_handler.borrow_mut() = Some(handler);
-  }
-
-  #[napi(js_name = "_clearPendingWebviewHandlers")]
-  pub fn clear_pending_webview_handlers(&mut self) {
-    *self.pending_webview_event_handler.borrow_mut() = None;
-    *self.pending_nav_handler.borrow_mut() = None;
   }
 
   #[napi(getter)]
@@ -459,7 +434,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      return self.window.ns_view() as u64;
+      self.window.ns_view() as u64
     }
     #[cfg(target_os = "linux")]
     {
@@ -715,13 +690,18 @@ impl BrowserWindow {
     }
     self.webview_lifecycles.borrow_mut().clear();
     self.event_handler.borrow_mut().take();
-    self.pending_webview_event_handler.borrow_mut().take();
-    self.pending_nav_handler.borrow_mut().take();
-    for (_, handler, responders, _) in &self.pending_protocols {
-      handler.borrow_mut().take();
-      responders.borrow_mut().clear();
+    for protocol in &self.protocols {
+      protocol.handler.borrow_mut().take();
     }
-    self.pending_protocols.clear();
+    for responder in self
+      .protocol_responders
+      .borrow_mut()
+      .drain()
+      .map(|(_, responder)| responder)
+    {
+      responder.respond(protocol_error_response("BrowserWindow has been disposed"));
+    }
+    self.protocols.clear();
     #[cfg(not(target_os = "android"))]
     self.window_menu.take();
   }
@@ -861,7 +841,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      return self.window.simple_fullscreen();
+      self.window.simple_fullscreen()
     }
     #[cfg(not(target_os = "macos"))]
     false
@@ -872,7 +852,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      return self.window.set_simple_fullscreen(fullscreen);
+      self.window.set_simple_fullscreen(fullscreen)
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -886,7 +866,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      return self.window.has_shadow();
+      self.window.has_shadow()
     }
     #[cfg(not(target_os = "macos"))]
     false
@@ -919,7 +899,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      return self.window.tabbing_identifier();
+      self.window.tabbing_identifier()
     }
     #[cfg(not(target_os = "macos"))]
     String::new()
@@ -930,7 +910,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      return self.window.is_document_edited();
+      self.window.is_document_edited()
     }
     #[cfg(not(target_os = "macos"))]
     false
@@ -1383,10 +1363,9 @@ pub(crate) fn build_wry_response(
   })
 }
 
-pub(crate) fn next_protocol_id(counter: &ProtocolCounterRef) -> u64 {
-  let mut value = counter.borrow_mut();
-  let id = *value;
-  *value += 1;
+pub(crate) fn next_protocol_id(counter: &ProtocolCounterRef) -> u32 {
+  let id = counter.get();
+  counter.set(id.checked_add(1).expect("protocol request ID exhausted"));
   id
 }
 
@@ -1422,7 +1401,7 @@ mod tests {
 
   #[test]
   fn protocol_ids_are_unique_when_protocols_share_a_counter() {
-    let counter = Rc::new(RefCell::new(0));
+    let counter = Rc::new(Cell::new(0));
     let first_protocol_counter = Rc::clone(&counter);
     let second_protocol_counter = Rc::clone(&counter);
 

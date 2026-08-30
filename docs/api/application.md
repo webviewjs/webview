@@ -135,19 +135,20 @@ app.onEvent(handler: (event: ApplicationEvent) => void): void
 
 ```ts
 interface ApplicationEvent {
-  event: WebviewApplicationEvent; // enum value
+  event: string; // e.g. "application-close-requested"
   customMenuEvent?: { id: string; windowId: number };
 }
 ```
 
-`WebviewApplicationEvent` values:
+`WebviewApplicationEvent` remains exported for native enum compatibility, but
+event payloads use these stable string names:
 
-| Value                       | Fired when                                               |
-| --------------------------- | -------------------------------------------------------- |
-| `WindowCloseRequested`      | User clicks the OS close button on a window              |
-| `ApplicationCloseRequested` | The last window was closed                               |
-| `CustomMenuClick`           | A custom menu item was clicked; see `customMenuEvent.id` |
-| `Ready`                     | The native event loop emitted its first resume event     |
+| Event name                    | Fired when                                               |
+| ----------------------------- | -------------------------------------------------------- |
+| `window-close-requested`      | User clicks the OS close button on a window              |
+| `application-close-requested` | The last window was closed                               |
+| `custom-menu-click`           | A custom menu item was clicked; see `customMenuEvent.id` |
+| `ready`                       | The native event loop emitted its first resume event     |
 
 ### `createBrowserWindow(options?)`
 
@@ -186,12 +187,11 @@ app.setMenu(options?: MenuOptions): void
 
 See [Menus guide](../guides/menus) for the full options shape.
 
-This API remains supported. Compare its numeric event value with the exported
-enum:
+This API remains supported. Match the stable string event name directly:
 
 ```js
 app.onEvent((event) => {
-  if (event.event === WebviewApplicationEvent.ApplicationCloseRequested) {
+  if (event.event === 'application-close-requested') {
     app.exit();
   }
 });

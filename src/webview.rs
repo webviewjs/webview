@@ -1,5 +1,6 @@
 use std::{
   cell::{Cell, Ref, RefCell},
+  collections::HashMap,
   rc::Rc,
 };
 // wry::WebView is not Send, so Rc (not Arc) is correct here — everything
@@ -51,13 +52,41 @@ fn call_bool_handler(handler: &WebviewBoolHandlerRef, env: Env, url: String) -> 
     .unwrap_or(true)
 }
 
+pub(crate) fn protocol_error_response(
+  message: &str,
+) -> wry::http::Response<std::borrow::Cow<'static, [u8]>> {
+  wry::http::Response::builder()
+    .status(500)
+    .header("Content-Type", "text/plain")
+    .body(std::borrow::Cow::Owned(message.as_bytes().to_vec()))
+    .expect("static protocol fallback response is valid")
+}
+
+pub(crate) fn respond_protocol_error(responders: &ProtocolPendingMap, id: u32, message: &str) {
+  if let Some(responder) = responders.borrow_mut().remove(&id) {
+    responder.respond(protocol_error_response(message));
+  }
+}
+
 /// Internal type alias for async protocol pending-responder maps.
-pub(crate) type ProtocolPendingMap =
-  Rc<RefCell<std::collections::HashMap<u64, wry::RequestAsyncResponder>>>;
+pub(crate) type ProtocolPendingMap = Rc<RefCell<HashMap<u32, wry::RequestAsyncResponder>>>;
 /// Internal type alias for async protocol JS handler.
-pub(crate) type ProtocolHandlerRef = Rc<RefCell<Option<FunctionRef<String, ()>>>>;
+pub(crate) type ProtocolHandlerRef = Rc<RefCell<Option<FunctionRef<ProtocolRequest, ()>>>>;
 /// Internal type alias for async protocol ID counter.
-pub(crate) type ProtocolCounterRef = Rc<RefCell<u64>>;
+pub(crate) type ProtocolCounterRef = Rc<Cell<u32>>;
+
+pub(crate) struct ProtocolRegistration {
+  pub(crate) name: String,
+  pub(crate) handler: ProtocolHandlerRef,
+}
+
+pub(crate) struct WebviewCreateContext<'a> {
+  pub(crate) protocols: &'a [ProtocolRegistration],
+  pub(crate) protocol_responders: ProtocolPendingMap,
+  pub(crate) protocol_next_id: ProtocolCounterRef,
+  pub(crate) event_handler: Option<ThreadsafeFunction<WebviewEventPayload>>,
+  pub(crate) navigation_handler: Option<FunctionRef<String, bool>>,
+}
 
 impl Default for WebviewOptions {
   fn default() -> Self {
@@ -92,31 +121,33 @@ pub struct JsWebview {
   // even if JS garbage-collects this handle.
   pub(crate) webview_inner: WebviewResource,
   ipc_state: Rc<RefCell<Option<FunctionRef<IpcMessage, ()>>>>,
-  // expose() handlers: namespace → JS function that receives ExposeCallData.
-  expose_handlers: Rc<RefCell<std::collections::HashMap<String, FunctionRef<ExposeCallData, ()>>>>,
   disposed: Rc<Cell<bool>>,
+  #[cfg(target_os = "windows")]
   auto_normalize_load_url: bool,
+  #[cfg(target_os = "windows")]
   protocols: Vec<String>,
+  #[cfg(target_os = "windows")]
   https_scheme_enabled: bool,
 }
 
 #[napi]
 impl JsWebview {
-  pub fn create(
+  pub(crate) fn create(
     env: &Env,
     window: &Arc<Window>,
     options: WebviewOptions,
     web_context: Option<&mut crate::web_context::JsWebContext>,
-    // (scheme, js_handler_ref, pending_responders, id_counter)
-    protocols: &[(
-      String,
-      ProtocolHandlerRef,
-      ProtocolPendingMap,
-      ProtocolCounterRef,
-    )],
-    event_handler: WebviewEventHandlerRef,
-    nav_handler: WebviewBoolHandlerRef,
+    create_context: WebviewCreateContext<'_>,
   ) -> Result<Self> {
+    let WebviewCreateContext {
+      protocols,
+      protocol_responders,
+      protocol_next_id,
+      event_handler,
+      navigation_handler,
+    } = create_context;
+    let event_handler = Rc::new(RefCell::new(event_handler.map(Arc::new)));
+    let nav_handler = Rc::new(RefCell::new(navigation_handler));
     let mut context = web_context.map(JsWebContext::inner).transpose()?;
     let mut webview = if let Some(ctx) = context.as_mut() {
       WebViewBuilder::new_with_web_context(&mut *ctx)
@@ -250,7 +281,7 @@ impl JsWebview {
         dispatch_event(
           &ev_rc,
           WebviewEventPayload {
-            event: WebviewEventType::NavigationStarted,
+            event: WebviewEventType::NavigationStarted.name().to_owned(),
             url: Some(url.clone()),
             ..Default::default()
           },
@@ -270,7 +301,7 @@ impl JsWebview {
         dispatch_event(
           &ev_rc,
           WebviewEventPayload {
-            event: ev_type,
+            event: ev_type.name().to_owned(),
             url: Some(url),
             ..Default::default()
           },
@@ -285,7 +316,7 @@ impl JsWebview {
         dispatch_event(
           &ev_rc,
           WebviewEventPayload {
-            event: WebviewEventType::TitleChanged,
+            event: WebviewEventType::TitleChanged.name().to_owned(),
             title: Some(title),
             ..Default::default()
           },
@@ -301,7 +332,7 @@ impl JsWebview {
           dispatch_event(
             &ev_rc,
             WebviewEventPayload {
-              event: WebviewEventType::DownloadStarted,
+              event: WebviewEventType::DownloadStarted.name().to_owned(),
               url: Some(url),
               ..Default::default()
             },
@@ -319,7 +350,7 @@ impl JsWebview {
           dispatch_event(
             &ev_rc,
             WebviewEventPayload {
-              event: WebviewEventType::DownloadCompleted,
+              event: WebviewEventType::DownloadCompleted.name().to_owned(),
               url: Some(url),
               success: Some(success),
               ..Default::default()
@@ -341,7 +372,7 @@ impl JsWebview {
           move |url: String, _features: NewWindowFeatures| -> NewWindowResponse {
             let _ = tsf.call(
               Ok(WebviewEventPayload {
-                event: WebviewEventType::NewWindowRequested,
+                event: WebviewEventType::NewWindowRequested.name().to_owned(),
                 url: Some(url),
                 ..Default::default()
               }),
@@ -357,123 +388,60 @@ impl JsWebview {
     // wry's with_asynchronous_custom_protocol closure is NOT required to be
     // Send, so Rc<RefCell<>> is safe — everything runs on the main thread.
     let env_copy = *env;
-    for (name, handler_ref, responders_rc, counter_rc) in protocols {
-      let handler_rc = Rc::clone(handler_ref);
-      let resp_rc = Rc::clone(responders_rc);
-      let ctr_rc = Rc::clone(counter_rc);
+    for protocol in protocols {
+      let name = protocol.name.clone();
+      let handler_rc = Rc::clone(&protocol.handler);
+      let resp_rc = Rc::clone(&protocol_responders);
+      let ctr_rc = Rc::clone(&protocol_next_id);
       let env_c = env_copy;
 
-      webview =
-        webview.with_asynchronous_custom_protocol(name.clone(), move |_id, req, responder| {
-          // Assign a unique ID for this request
-          let id = next_protocol_id(&ctr_rc);
-          resp_rc.borrow_mut().insert(id, responder);
+      webview = webview.with_asynchronous_custom_protocol(name, move |_id, req, responder| {
+        let id = next_protocol_id(&ctr_rc);
+        resp_rc.borrow_mut().insert(id, responder);
 
-          // Build JSON payload for the JS handler
-          let headers_json = req
-            .headers()
-            .iter()
-            .map(|(k, v)| serde_json::json!({ "key": k.as_str(), "value": v.to_str().ok() }))
-            .collect::<Vec<_>>();
-
-          let body_bytes = req.body();
-          let body_value = if body_bytes.is_empty() {
-            serde_json::Value::Null
-          } else {
-            serde_json::Value::Array(
-              body_bytes
-                .iter()
-                .map(|&b| serde_json::Value::Number(b.into()))
-                .collect(),
-            )
-          };
-
-          let payload = serde_json::json!({
-            "id":      id as f64,
-            "url":     req.uri().to_string(),
-            "method":  req.method().to_string(),
-            "headers": headers_json,
-            "body":    body_value,
+        let headers = req
+          .headers()
+          .iter()
+          .map(|(key, value)| HeaderData {
+            key: key.as_str().to_owned(),
+            value: value.to_str().ok().map(str::to_owned),
           })
-          .to_string();
+          .collect();
+        let request = ProtocolRequest {
+          id,
+          url: req.uri().to_string(),
+          method: req.method().to_string(),
+          headers,
+          body: req.body().to_vec().into(),
+        };
 
-          // Call the JS handler — safe because we're on the main thread
-          let borrowed = handler_rc.borrow();
-          let callback_result = borrowed
-            .as_ref()
-            .ok_or("Protocol handler is not registered")
-            .and_then(|func_ref| {
-              func_ref
-                .borrow_back(&env_c)
-                .map_err(|_| "Protocol handler is unavailable")
-            })
-            .and_then(|func| {
-              func
-                .call(payload)
-                .map_err(|_| "Protocol handler invocation failed")
-            });
+        let borrowed = handler_rc.borrow();
+        let callback_result = borrowed
+          .as_ref()
+          .ok_or("Protocol handler is not registered")
+          .and_then(|func_ref| {
+            func_ref
+              .borrow_back(&env_c)
+              .map_err(|_| "Protocol handler is unavailable")
+          })
+          .and_then(|func| {
+            func
+              .call(request)
+              .map_err(|_| "Protocol handler invocation failed")
+          });
 
-          if let Err(message) = callback_result {
-            if let Some(responder) = resp_rc.borrow_mut().remove(&id) {
-              let response = wry::http::Response::builder()
-                .status(500)
-                .header("Content-Type", "text/plain")
-                .body(std::borrow::Cow::Owned(message.as_bytes().to_vec()))
-                .expect("static protocol fallback response is valid");
-              responder.respond(response);
-            }
-          }
-        });
+        if let Err(message) = callback_result {
+          respond_protocol_error(&resp_rc, id, message);
+        }
+      });
     }
 
-    // ── IPC (with expose routing) ─────────────────────────────────────────────
+    // ── IPC transport ─────────────────────────────────────────────────────────
     let ipc_state = Rc::new(RefCell::new(None::<FunctionRef<IpcMessage, ()>>));
     let ipc_state_clone = ipc_state.clone();
-    let expose_handlers: Rc<
-      RefCell<std::collections::HashMap<String, FunctionRef<ExposeCallData, ()>>>,
-    > = Rc::new(RefCell::new(std::collections::HashMap::new()));
-    let expose_handlers_clone = Rc::clone(&expose_handlers);
     let env_copy = *env;
 
     let ipc_handler = move |req: Request<String>| {
-      let body_str = req.body().as_str();
-
-      // Check for expose() proxy calls before forwarding to user handler.
-      // The page-side script always sets __e:true for these messages.
-      if let Ok(v) = serde_json::from_str::<serde_json::Value>(body_str) {
-        if v.get("__e").and_then(|x| x.as_bool()) == Some(true) {
-          let ns = v
-            .get("ns")
-            .and_then(|x| x.as_str())
-            .unwrap_or("")
-            .to_string();
-          let method = v
-            .get("method")
-            .and_then(|x| x.as_str())
-            .unwrap_or("")
-            .to_string();
-          let id = v.get("id").and_then(|x| x.as_f64()).unwrap_or(0.0);
-          let args_json = v
-            .get("args")
-            .map(|x| x.to_string())
-            .unwrap_or_else(|| "[]".to_string());
-
-          let borrowed = expose_handlers_clone.borrow();
-          if let Some(func_ref) = borrowed.get(&ns) {
-            if let Ok(func) = func_ref.borrow_back(&env_copy) {
-              let _ = func.call(ExposeCallData {
-                ns,
-                method,
-                id,
-                args_json,
-              });
-            }
-          }
-          return; // consume — do not forward to user handler
-        }
-      }
-
-      // User IPC handler
       let borrowed = RefCell::borrow(&ipc_state_clone);
       if let Some(func) = borrowed.as_ref() {
         let Ok(on_ipc_msg) = func.borrow_back(&env_copy) else {
@@ -522,13 +490,15 @@ impl JsWebview {
     Ok(Self {
       webview_inner: Rc::new(RefCell::new(Some(Rc::new(built)))),
       ipc_state,
-      expose_handlers,
       disposed: Rc::new(Cell::new(false)),
+      #[cfg(target_os = "windows")]
       auto_normalize_load_url: options.auto_normalize_load_url.unwrap_or(true),
+      #[cfg(target_os = "windows")]
       protocols: protocols
         .iter()
-        .map(|(name, _, _, _)| name.clone())
+        .map(|protocol| protocol.name.clone())
         .collect(),
+      #[cfg(target_os = "windows")]
       https_scheme_enabled: options.use_https_scheme.unwrap_or(false),
     })
   }
@@ -566,7 +536,6 @@ impl JsWebview {
       let _ = webview.set_visible(false);
     }
     self.ipc_state.borrow_mut().take();
-    self.expose_handlers.borrow_mut().clear();
   }
 
   #[napi]
@@ -580,25 +549,17 @@ impl JsWebview {
   ///
   /// Injects a page script that creates `window[name]` as an object with:
   /// - static values from `statics_json` (a JSON object string)
-  /// - async function stubs for each name in `func_names`
+  /// - async function stubs for each name in `func_names`.
   ///
-  /// When the page calls one of the stubs the call is routed back here via
-  /// the internal IPC channel and dispatched to `handler`.  `handler` is
-  /// responsible for calling `evaluateScript` to send the response.
+  /// The generated page calls are delivered through the generic IPC transport;
+  /// the JavaScript wrapper owns namespace dispatch and Promise completion.
   #[napi(js_name = "_exposeInternal")]
   pub fn expose_internal(
     &mut self,
     name: String,
     statics_json: String,
     func_names: Vec<String>,
-    handler: FunctionRef<ExposeCallData, ()>,
   ) -> Result<()> {
-    // Register the handler so the IPC router can find it
-    self
-      .expose_handlers
-      .borrow_mut()
-      .insert(name.clone(), handler);
-
     // Generate the page-side bootstrap script.
     // We create window.__webviewjs__ once (idempotent) and then build the
     // namespace proxy for this specific `name`.
@@ -691,12 +652,13 @@ impl JsWebview {
     self.webview().close_devtools();
   }
 
+  #[cfg(not(target_os = "windows"))]
   fn normalize_url(&self, url: String) -> String {
-    #[cfg(not(target_os = "windows"))]
-    {
-      return url;
-    }
+    url
+  }
 
+  #[cfg(target_os = "windows")]
+  fn normalize_url(&self, url: String) -> String {
     if !self.auto_normalize_load_url {
       return url;
     }

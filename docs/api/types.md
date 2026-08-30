@@ -98,30 +98,33 @@ See the [WebContext reference](./web-context).
 
 ## Webview event payloads
 
+The `event` field contains the stable string name of the event. It is the same
+name used with `webview.on()`, so no Rust enum ordinal mapping is needed.
+
 ```ts
 interface WebviewPageLoadEvent {
-  event: number;
+  event: string;
   url?: string;
 }
 
 interface WebviewTitleChangedEvent {
-  event: number;
+  event: string;
   title?: string;
 }
 
 interface WebviewDownloadEvent {
-  event: number;
+  event: string;
   url?: string;
   success?: boolean;
 }
 
 interface WebviewNavigationEvent {
-  event: number;
+  event: string;
   url?: string;
 }
 
 interface WebviewNewWindowEvent {
-  event: number;
+  event: string;
   url?: string;
 }
 ```
@@ -169,7 +172,7 @@ interface VideoMode {
 
 ```ts
 interface ApplicationEvent {
-  event: WebviewApplicationEvent;
+  event: string;
   customMenuEvent?: CustomMenuEvent;
 }
 
@@ -185,9 +188,10 @@ interface CustomMenuEvent {
 
 ```ts
 enum WebviewApplicationEvent {
-  WindowCloseRequested = 'WindowCloseRequested',
-  ApplicationCloseRequested = 'ApplicationCloseRequested',
-  CustomMenuClick = 'CustomMenuClick',
+  WindowCloseRequested = 0,
+  ApplicationCloseRequested = 1,
+  CustomMenuClick = 2,
+  Ready = 3,
 }
 ```
 
@@ -227,39 +231,38 @@ See [BrowserWindow cursor section](./browser-window#cursor) for the full list.
 
 ### `WindowEventType`
 
-Numeric discriminant of the `event` field in each `BrowserWindowEventMap`
-payload. Values correspond to the order declared in the Rust `WindowEventType`
-enum and are mapped to string event names by the JS layer — normal user code
-should key on the string name, not the integer.
+The `event` field in each `BrowserWindowEventMap` payload contains the stable
+string event name. The exported enum remains available for native enum
+compatibility, but event names do not depend on its declaration order.
 
-| Value | String name   | Payload fields                                |
-| ----- | ------------- | --------------------------------------------- |
-| 0     | `move`        | `x`, `y` (physical px, outer window position) |
-| 1     | `resize`      | `width`, `height` (physical px, inner size)   |
-| 2     | `close`       | —                                             |
-| 3     | `focus`       | —                                             |
-| 4     | `blur`        | —                                             |
-| 5     | `mouse-enter` | `x`, `y` (physical px, last cursor position)  |
-| 6     | `mouse-leave` | —                                             |
-| 7     | `mouse-move`  | `x`, `y` (physical px)                        |
-| 8     | `mouse-down`  | `x`, `y`, `button` (0=left 1=middle 2=right)  |
-| 9     | `mouse-up`    | `x`, `y`, `button`                            |
-| 10    | `scroll`      | `deltaX`, `deltaY` (physical px)              |
+| String name   | Payload fields                                |
+| ------------- | --------------------------------------------- |
+| `move`        | `x`, `y` (physical px, outer window position) |
+| `resize`      | `width`, `height` (physical px, inner size)   |
+| `close`       | —                                             |
+| `focus`       | —                                             |
+| `blur`        | —                                             |
+| `mouse-enter` | `x`, `y` (physical px, last cursor position)  |
+| `mouse-leave` | —                                             |
+| `mouse-move`  | `x`, `y` (physical px)                        |
+| `mouse-down`  | `x`, `y`, `button` (0=left 1=middle 2=right)  |
+| `mouse-up`    | `x`, `y`, `button`                            |
+| `scroll`      | `deltaX`, `deltaY` (physical px)              |
 
 ### `BrowserWindowEventMap`
 
 ```ts
 interface BrowserWindowEventMap {
-  move: { event: number; x: number; y: number };
-  resize: { event: number; width: number; height: number };
-  close: { event: number };
-  focus: { event: number };
-  blur: { event: number };
-  'mouse-enter': { event: number; x: number; y: number };
-  'mouse-leave': { event: number };
-  'mouse-move': { event: number; x: number; y: number };
-  'mouse-down': { event: number; x: number; y: number; button: number };
-  'mouse-up': { event: number; x: number; y: number; button: number };
-  scroll: { event: number; deltaX: number; deltaY: number };
+  move: { event: string; x: number; y: number };
+  resize: { event: string; width: number; height: number };
+  close: { event: string };
+  focus: { event: string };
+  blur: { event: string };
+  'mouse-enter': { event: string; x: number; y: number };
+  'mouse-leave': { event: string };
+  'mouse-move': { event: string; x: number; y: number };
+  'mouse-down': { event: string; x: number; y: number; button: number };
+  'mouse-up': { event: string; x: number; y: number; button: number };
+  scroll: { event: string; deltaX: number; deltaY: number };
 }
 ```

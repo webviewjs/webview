@@ -30,12 +30,14 @@ export declare class Application {
 }
 
 export declare class BrowserWindow {
-  _registerProtocol(name: string, handler: (arg: string) => void): void;
+  _registerProtocol(name: string, handler: (arg: ProtocolRequest) => void): void;
   _completeProtocol(id: number, response: CustomProtocolResponse): void;
-  createWebview(options?: WebviewOptions | undefined | null, webContext?: JsWebContext | undefined | null): JsWebview;
-  _setPendingWebviewEventCallback(handler: (err: Error | null, arg: WebviewEventPayload) => any): void;
-  _setPendingWebviewNavigationHandler(handler: (arg: string) => boolean): void;
-  _clearPendingWebviewHandlers(): void;
+  createWebview(
+    options?: WebviewOptions | undefined | null,
+    webContext?: JsWebContext | undefined | null,
+    eventHandler?: ((err: Error | null, arg: WebviewEventPayload) => any) | undefined | null,
+    navigationHandler?: ((arg: string) => boolean) | undefined | null,
+  ): JsWebview;
   get isChild(): boolean;
   getNativeHandle(): bigint;
   isFocused(): boolean;
@@ -188,18 +190,12 @@ export declare class Webview {
    *
    * Injects a page script that creates `window[name]` as an object with:
    * - static values from `statics_json` (a JSON object string)
-   * - async function stubs for each name in `func_names`
+   * - async function stubs for each name in `func_names`.
    *
-   * When the page calls one of the stubs the call is routed back here via
-   * the internal IPC channel and dispatched to `handler`.  `handler` is
-   * responsible for calling `evaluateScript` to send the response.
+   * The generated page calls are delivered through the generic IPC transport;
+   * the JavaScript wrapper owns namespace dispatch and Promise completion.
    */
-  _exposeInternal(
-    name: string,
-    staticsJson: string,
-    funcNames: Array<string>,
-    handler: (arg: ExposeCallData) => void,
-  ): void;
+  _exposeInternal(name: string, staticsJson: string, funcNames: Array<string>): void;
   print(): void;
   zoom(scaleFactor: number): void;
   setWebviewVisibility(visible: boolean): void;
@@ -264,7 +260,7 @@ export interface AndroidContentRect {
 }
 
 export interface ApplicationEvent {
-  event: WebviewApplicationEvent;
+  event: string;
   customMenuEvent?: CustomMenuEvent;
 }
 
@@ -407,7 +403,10 @@ export interface Dimensions {
   height: number;
 }
 
-/** Data sent to the expose handler when the page calls a proxied function. */
+/**
+ * Legacy expose callback shape retained for generated type compatibility.
+ * The current expose bridge uses [`IpcMessage`] and dispatches in JavaScript.
+ */
 export interface ExposeCallData {
   ns: string;
   method: string;
@@ -520,6 +519,16 @@ export declare enum ProgressBarState {
   Error = 4,
 }
 
+/** Native request payload delivered to the JavaScript custom-protocol bridge. */
+export interface ProtocolRequest {
+  /** Request ID allocated by the owning BrowserWindow. */
+  id: number;
+  url: string;
+  method: string;
+  headers: Array<HeaderData>;
+  body: Buffer;
+}
+
 /** Converting `{http_or_https}://{protocol}.localhost/abc` back to `{protocol}://localhost/abc` */
 export declare function revertUriWorkAround(uri: string, httpOrHttps: string, protocol: string): string;
 
@@ -612,7 +621,7 @@ export interface WebviewCookie {
 
 /** Payload delivered to the webview event dispatch callback. */
 export interface WebviewEventPayload {
-  event: WebviewEventType;
+  event: string;
   /** URL associated with the event (navigation, page load, download). */
   url?: string;
   /** Document title for `TitleChanged` events. */
@@ -673,7 +682,7 @@ export declare enum WindowCommand {
 }
 
 export interface WindowEventPayload {
-  event: WindowEventType;
+  event: string;
   /** Physical x position (cursor or window). */
   x?: number;
   /** Physical y position (cursor or window). */

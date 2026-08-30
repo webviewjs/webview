@@ -132,17 +132,17 @@ export type ApplicationWhenReadyOptions =
 // ── Webview events ────────────────────────────────────────────────────────────
 
 export interface WebviewPageLoadEvent {
-  event: number;
+  event: string;
   url?: string;
 }
 
 export interface WebviewTitleChangedEvent {
-  event: number;
+  event: string;
   title?: string;
 }
 
 export interface WebviewDownloadEvent {
-  event: number;
+  event: string;
   url?: string;
   /** Only set for `download-completed` events. */
   success?: boolean;
@@ -151,12 +151,12 @@ export interface WebviewDownloadEvent {
 export interface WebviewDownloadStartedEvent extends WebviewDownloadEvent {}
 
 export interface WebviewNavigationEvent {
-  event: number;
+  event: string;
   url?: string;
 }
 
 export interface WebviewNewWindowEvent {
-  event: number;
+  event: string;
   url?: string;
 }
 
@@ -178,19 +178,19 @@ export interface WebviewEventMap {
 }
 
 export interface WindowMoveEvent {
-  event: number;
+  event: string;
   x: number;
   y: number;
 }
 
 export interface WindowResizeEvent {
-  event: number;
+  event: string;
   width: number;
   height: number;
 }
 
 export interface WindowMouseEvent {
-  event: number;
+  event: string;
   x: number;
   y: number;
   button?: number;
@@ -198,17 +198,17 @@ export interface WindowMouseEvent {
 }
 
 export interface WindowScrollEvent {
-  event: number;
+  event: string;
   deltaX: number;
   deltaY: number;
 }
 
 export interface WindowBaseEvent {
-  event: number;
+  event: string;
 }
 
 export interface WindowKeyEvent {
-  event: number;
+  event: string;
   key?: string;
   code?: string;
   modifiers?: number;
@@ -216,28 +216,28 @@ export interface WindowKeyEvent {
 }
 
 export interface WindowFileEvent {
-  event: number;
+  event: string;
   files?: string[];
 }
 
 export interface WindowScaleEvent {
-  event: number;
+  event: string;
   scaleFactor: number;
 }
 
 export interface WindowThemeEvent {
-  event: number;
+  event: string;
   text: 'light' | 'dark';
 }
 
 export interface WindowImeEvent {
-  event: number;
+  event: string;
   text?: string;
   phase: 'enabled' | 'preedit' | 'commit' | 'disabled';
 }
 
 export interface WindowTouchEvent {
-  event: number;
+  event: string;
   x: number;
   y: number;
   touchId: number;
