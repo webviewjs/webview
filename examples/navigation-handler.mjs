@@ -13,6 +13,7 @@ const webview = window.createWebview({
       <h1>Navigation handler</h1>
       <p><a href="https://example.com">Allowed navigation</a></p>
       <p><a href="https://blocked.example">Blocked navigation</a></p>
+      <p><a href="https://blocked.example/popup" target="_blank">Blocked new window</a></p>
     </main>
   `,
   navigationHandler(url) {

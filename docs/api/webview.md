@@ -40,9 +40,10 @@ webview.reload(): void
 webview.url(): string | null          // currently displayed URL
 ```
 
-`navigationHandler` runs synchronously before each navigation. Return `false`
-to cancel it. Keep the callback fast and do not return a Promise. A
-`navigation` event is emitted whether the navigation is allowed or cancelled.
+`navigationHandler` runs synchronously before each navigation, including
+`window.open()` and `target="_blank"` requests. Return `false` to cancel it.
+Keep the callback fast and do not return a Promise. A `navigation` or
+`new-window` event is emitted whether the request is allowed or cancelled.
 
 See the runnable [navigation handler example](../../examples/navigation-handler.mjs).
 
@@ -63,7 +64,8 @@ webview.on('new-window', ({ url }) => {});
 
 The `new-window` event observes attempts from `window.open`,
 `target="_blank"`, and equivalent browser actions. The request is allowed
-after dispatch. Download events are observational and do not cancel downloads.
+after dispatch unless `navigationHandler` returns `false`. Download events are
+observational and do not cancel downloads.
 
 See the runnable [webview events example](../../examples/webview-events.mjs).
 

@@ -361,24 +361,34 @@ impl JsWebview {
     }
 
     // ── New window request handler ────────────────────────────────────────────
-    // wry requires `Send + Sync` here because WebView2 on Windows invokes this
-    // from a COM event thread.  `ThreadsafeFunction` satisfies the `Send + Sync`
-    // requirement, while `Arc` provides an owned, cheaply cloned handle.
-    // We always return `Allow`; callers observe the URL via the `new-window` event.
+    // Wry requires this callback for `window.open` / `target="_blank"` requests.
+    // On Windows Wry executes the callback through its message-loop dispatcher
+    // after the WebView2 COM event returns, so the synchronous navigation guard
+    // can be called here without crossing the COM callback directly into JS.
+    // The ThreadsafeFunction remains necessary for the observational event.
     {
       let tsf_clone = event_handler.borrow().as_ref().map(Arc::clone);
-      if let Some(tsf) = tsf_clone {
+      let nav_rc = Rc::clone(&nav_handler);
+      let env_c = *env;
+      if tsf_clone.is_some() || nav_handler.borrow().is_some() {
         webview = webview.with_new_window_req_handler(
           move |url: String, _features: NewWindowFeatures| -> NewWindowResponse {
-            let _ = tsf.call(
-              Ok(WebviewEventPayload {
-                event: WebviewEventType::NewWindowRequested.name().to_owned(),
-                url: Some(url),
-                ..Default::default()
-              }),
-              ThreadsafeFunctionCallMode::NonBlocking,
-            );
-            NewWindowResponse::Allow
+            if let Some(tsf) = &tsf_clone {
+              let _ = tsf.call(
+                Ok(WebviewEventPayload {
+                  event: WebviewEventType::NewWindowRequested.name().to_owned(),
+                  url: Some(url.clone()),
+                  ..Default::default()
+                }),
+                ThreadsafeFunctionCallMode::NonBlocking,
+              );
+            }
+
+            if call_bool_handler(&nav_rc, env_c, url) {
+              NewWindowResponse::Allow
+            } else {
+              NewWindowResponse::Deny
+            }
           },
         );
       }

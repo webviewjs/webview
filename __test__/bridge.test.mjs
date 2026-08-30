@@ -574,10 +574,18 @@ test('webview event callback handles the ThreadsafeFunction error-first signatur
 
 test('created webviews receive callbacks directly instead of pending handlers', async () => {
   const source = await readFile(new URL('../src/browser_window.rs', import.meta.url), 'utf8');
+  const webviewSource = await readFile(new URL('../src/webview.rs', import.meta.url), 'utf8');
 
   assert.match(source, /event_handler: Option<ThreadsafeFunction<WebviewEventPayload>>/);
   assert.match(source, /navigation_handler: Option<FunctionRef<String, bool>>/);
   assert.doesNotMatch(source, /pending_webview_event_handler|pending_nav_handler|_setPendingWebview/);
+
+  const newWindowHandler = webviewSource.slice(
+    webviewSource.indexOf('// ── New window request handler'),
+    webviewSource.indexOf('// ── Custom protocols'),
+  );
+  assert.match(newWindowHandler, /call_bool_handler\(&nav_rc, env_c, url\)/);
+  assert.match(newWindowHandler, /NewWindowResponse::Deny/);
 });
 
 test('generated declarations match the direct callback and transport plumbing', async () => {
