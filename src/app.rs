@@ -200,14 +200,17 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
 
   match event {
     WindowEvent::Resized(new_size) => {
-      if let Some(views) = state.webviews.get(&window_id) {
-        let rect = wry::Rect {
-          position: ::dpi::PhysicalPosition::new(0_i32, 0_i32).into(),
-          size: ::dpi::PhysicalSize::new(new_size.width, new_size.height).into(),
-        };
-        for resource in views.borrow().iter() {
-          if let Some(webview) = resource.borrow().as_ref() {
-            let _ = webview.set_bounds(rect);
+      #[cfg(not(target_os = "linux"))]
+      {
+        if let Some(views) = state.webviews.get(&window_id) {
+          let rect = wry::Rect {
+            position: ::dpi::PhysicalPosition::new(0_i32, 0_i32).into(),
+            size: ::dpi::PhysicalSize::new(new_size.width, new_size.height).into(),
+          };
+          for resource in views.borrow().iter() {
+            if let Some(webview) = resource.borrow().as_ref() {
+              let _ = webview.set_bounds(rect);
+            }
           }
         }
       }

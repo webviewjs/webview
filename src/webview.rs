@@ -22,6 +22,12 @@ use crate::browser_window::next_protocol_id;
 use crate::types::*;
 use crate::web_context::JsWebContext;
 
+#[cfg(target_os = "linux")]
+use tao::platform::unix::WindowExtUnix;
+
+#[cfg(target_os = "linux")]
+use wry::WebViewBuilderExtUnix;
+
 /// Shared reference to the webview event dispatch callback.
 /// The `Arc<ThreadsafeFunction>` wrapper lets us cheaply clone the pointer into
 /// `Send + Sync` closures (e.g. `with_new_window_req_handler`).
@@ -490,7 +496,23 @@ impl JsWebview {
     // Tao's native content view rather than replacing the NSWindow contentView.
     #[cfg(target_os = "macos")]
     let built = webview.build_as_child(window).map_err(err)?;
-    #[cfg(not(target_os = "macos"))]
+
+    #[cfg(target_os = "linux")]
+    let built = if options.child.unwrap_or(false) {
+      // Keep existing child behavior for this experiment.
+      webview.build_as_child(window).map_err(err)?
+    } else {
+      let container = window.default_vbox().ok_or_else(|| {
+        napi::Error::new(
+          napi::Status::GenericFailure,
+          "Tao window has no default GTK container",
+        )
+      })?;
+
+      webview.build_gtk(container).map_err(err)?
+    };
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
     let built = if options.child.unwrap_or(false) {
       webview.build_as_child(window).map_err(err)
     } else {
