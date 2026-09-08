@@ -283,7 +283,6 @@ nativeBinding.Application.prototype.stop = function stop() {
 
 const _nativeExit = nativeBinding.Application.prototype.exit;
 nativeBinding.Application.prototype.exit = function exit() {
-  this.stop();
   return _nativeExit.call(this);
 };
 

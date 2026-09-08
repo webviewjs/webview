@@ -35,7 +35,7 @@ export declare class BrowserWindow {
   createWebview(
     options?: WebviewOptions | undefined | null,
     webContext?: JsWebContext | undefined | null,
-    eventHandler?: ((err: Error | null, arg: WebviewEventPayload) => any) | undefined | null,
+    eventHandler?: WebviewEventThreadsafeFunction | undefined | null,
     navigationHandler?: ((arg: string) => boolean) | undefined | null,
   ): JsWebview;
   get isChild(): boolean;
@@ -134,7 +134,7 @@ export declare class BrowserWindow {
 }
 
 export declare class NativeNotification {
-  constructor(options: NativeNotificationOptions, callback: (err: Error | null, arg: NotificationEventPayload) => any);
+  constructor(options: NativeNotificationOptions, callback: NotificationEventThreadsafeFunction);
   close(): void;
 }
 export type JsNotification = NativeNotification;
@@ -205,7 +205,7 @@ export declare class Webview {
   loadUrl(url: string): void;
   loadHtml(html: string): void;
   evaluateScript(js: string): void;
-  evaluateScriptWithCallback(js: string, callback: (err: Error | null, arg: string) => any): void;
+  evaluateScriptWithCallback(js: string, callback: WebviewScriptThreadsafeFunction): void;
   reload(): void;
   /** The URL the webview is currently showing. */
   url(): string | null;

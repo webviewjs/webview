@@ -32,5 +32,8 @@ const timer = setInterval(() => {
 }, 1000).unref();
 
 window.once('close', () => clearInterval(timer));
+app.once('application-close-requested', () => {
+  console.log('APP CLOSE');
+});
 
 app.run();

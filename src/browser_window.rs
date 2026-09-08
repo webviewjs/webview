@@ -4,11 +4,11 @@ use image::GenericImageView;
 #[cfg(not(target_os = "android"))]
 use muda::Menu;
 use napi::Either;
-use napi::{bindgen_prelude::FunctionRef, threadsafe_function::ThreadsafeFunction, Env, Result};
+use napi::{bindgen_prelude::FunctionRef, Env, Result};
 use napi_derive::*;
 #[cfg(not(target_os = "android"))]
 use rfd::FileDialog;
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, Ref, RefCell};
 use std::collections::{hash_map::DefaultHasher, HashMap};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -19,6 +19,8 @@ use tao::{
   window::{CursorIcon, Fullscreen, Icon, Window, WindowBuilder, WindowId},
 };
 
+pub(crate) type WindowResource = Rc<RefCell<Option<Arc<Window>>>>;
+
 #[cfg(target_os = "windows")]
 use tao::platform::windows::WindowExtWindows;
 
@@ -26,7 +28,7 @@ use tao::platform::windows::WindowExtWindows;
 use crate::menu::{create_menu_from_options, init_menu_for_window};
 use crate::webview::{
   protocol_error_response, JsWebview, ProtocolCounterRef, ProtocolPendingMap, ProtocolRegistration,
-  WebviewCreateContext, WebviewResource,
+  WebviewCreateContext, WebviewEventThreadsafeFunction, WebviewResource,
 };
 
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
@@ -107,7 +109,7 @@ impl Default for BrowserWindowOptions {
 #[napi]
 pub struct BrowserWindow {
   is_child_window: bool,
-  pub(crate) window: Arc<Window>,
+  pub(crate) window: WindowResource,
   window_id: u32,
   #[cfg(not(target_os = "android"))]
   window_menu: Option<Menu>,
@@ -328,8 +330,10 @@ impl BrowserWindow {
       None
     };
 
+    let window = Arc::new(window);
+
     Ok(Self {
-      window: Arc::new(window),
+      window: Rc::new(RefCell::new(Some(window))),
       is_child_window: child,
       window_id,
       #[cfg(not(target_os = "android"))]
@@ -346,6 +350,10 @@ impl BrowserWindow {
 
   pub(crate) fn webviews_shared(&self) -> Rc<RefCell<Vec<WebviewResource>>> {
     Rc::clone(&self.webviews)
+  }
+
+  fn window(&self) -> Ref<'_, Arc<Window>> {
+    Ref::filter_map(self.window.borrow(), Option::as_ref).expect("BrowserWindow has been disposed")
   }
 
   pub(crate) fn lifecycle_shared(&self) -> Rc<Cell<bool>> {
@@ -387,7 +395,7 @@ impl BrowserWindow {
     env: Env,
     options: Option<WebviewOptions>,
     web_context: Option<&mut crate::web_context::JsWebContext>,
-    event_handler: Option<ThreadsafeFunction<WebviewEventPayload>>,
+    event_handler: Option<WebviewEventThreadsafeFunction>,
     navigation_handler: Option<FunctionRef<String, bool>>,
   ) -> Result<JsWebview> {
     if self.disposed.get() {
@@ -396,9 +404,10 @@ impl BrowserWindow {
         "BrowserWindow has been disposed",
       ));
     }
+    let window = self.window();
     let webview = JsWebview::create(
       &env,
-      &self.window,
+      &window,
       options.unwrap_or_default(),
       web_context,
       WebviewCreateContext {
@@ -429,17 +438,17 @@ impl BrowserWindow {
   pub fn get_native_handle(&self) -> u64 {
     #[cfg(target_os = "windows")]
     {
-      self.window.hwnd() as u64
+      self.window().hwnd() as u64
     }
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      self.window.ns_view() as u64
+      self.window().ns_view() as u64
     }
     #[cfg(target_os = "linux")]
     {
       use tao::rwh_06::{HasWindowHandle, RawWindowHandle};
-      if let Ok(handle) = self.window.window_handle() {
+      if let Ok(handle) = self.window().window_handle() {
         return match handle.as_raw() {
           RawWindowHandle::Xlib(handle) => handle.window as u64,
           RawWindowHandle::Wayland(handle) => handle.surface.as_ptr() as u64,
@@ -454,87 +463,89 @@ impl BrowserWindow {
 
   #[napi]
   pub fn is_focused(&self) -> bool {
-    self.window.is_focused()
+    self.window().is_focused()
   }
 
   #[napi]
   pub fn is_visible(&self) -> bool {
-    self.window.is_visible()
+    self.window().is_visible()
   }
 
   #[napi]
   pub fn is_decorated(&self) -> bool {
-    self.window.is_decorated()
+    self.window().is_decorated()
   }
 
   #[napi]
   pub fn is_closable(&self) -> bool {
-    self.window.is_closable()
+    self.window().is_closable()
   }
 
   #[napi]
   pub fn is_maximizable(&self) -> bool {
-    self.window.is_maximizable()
+    self.window().is_maximizable()
   }
 
   #[napi]
   pub fn is_minimizable(&self) -> bool {
-    self.window.is_minimizable()
+    self.window().is_minimizable()
   }
 
   #[napi]
   pub fn is_maximized(&self) -> bool {
-    self.window.is_maximized()
+    self.window().is_maximized()
   }
 
   #[napi]
   pub fn is_minimized(&self) -> bool {
-    self.window.is_minimized()
+    self.window().is_minimized()
   }
 
   #[napi]
   pub fn is_resizable(&self) -> bool {
-    self.window.is_resizable()
+    self.window().is_resizable()
   }
 
   #[napi]
   pub fn set_title(&self, title: String) {
-    self.window.set_title(&title);
+    self.window().set_title(&title);
   }
 
   #[napi(getter)]
   pub fn get_title(&self) -> String {
-    self.window.title()
+    self.window().title()
   }
 
   #[napi]
   pub fn set_closable(&self, closable: bool) {
-    self.window.set_closable(closable);
+    self.window().set_closable(closable);
   }
 
   #[napi]
   pub fn set_maximizable(&self, maximizable: bool) {
-    self.window.set_maximizable(maximizable);
+    self.window().set_maximizable(maximizable);
   }
 
   #[napi]
   pub fn set_minimizable(&self, minimizable: bool) {
-    self.window.set_minimizable(minimizable);
+    self.window().set_minimizable(minimizable);
   }
 
   #[napi]
   pub fn set_resizable(&self, resizable: bool) {
-    self.window.set_resizable(resizable);
+    self.window().set_resizable(resizable);
   }
 
   #[napi]
   pub fn set_size(&self, width: u32, height: u32, logical: Option<bool>) -> Option<Dimensions> {
     if logical == Some(true) {
       self
-        .window
+        .window()
         .set_inner_size(LogicalSize::new(width as f64, height as f64));
     } else {
-      self.window.set_inner_size(PhysicalSize::new(width, height));
+      self
+        .window()
+        .set_inner_size(PhysicalSize::new(width, height));
     }
     // tao's set_inner_size is void — return None to indicate async application
     None
@@ -543,25 +554,26 @@ impl BrowserWindow {
   #[napi]
   pub fn set_min_size(&self, width: u32, height: u32, logical: Option<bool>) {
     if width == 0 && height == 0 {
-      self.window.set_min_inner_size(None::<Size>);
+      self.window().set_min_inner_size(None::<Size>);
       return;
     }
     if logical == Some(true) {
       self
-        .window
+        .window()
         .set_min_inner_size(Some(LogicalSize::new(width, height)));
     } else {
       self
-        .window
+        .window()
         .set_min_inner_size(Some(PhysicalSize::new(width, height)));
     }
   }
 
   #[napi]
   pub fn get_inner_size(&self, logical: Option<bool>) -> Dimensions {
-    let size = self.window.inner_size();
+    let window = self.window();
+    let size = window.inner_size();
     if logical == Some(true) {
-      let logical_size = size.to_logical::<f64>(self.window.scale_factor());
+      let logical_size = size.to_logical::<f64>(window.scale_factor());
       return Dimensions {
         width: logical_size.width as u32,
         height: logical_size.height as u32,
@@ -576,25 +588,26 @@ impl BrowserWindow {
   #[napi]
   pub fn set_max_size(&self, width: u32, height: u32, logical: Option<bool>) {
     if width == 0 && height == 0 {
-      self.window.set_max_inner_size(None::<Size>);
+      self.window().set_max_inner_size(None::<Size>);
       return;
     }
     if logical == Some(true) {
       self
-        .window
+        .window()
         .set_max_inner_size(Some(LogicalSize::new(width, height)));
     } else {
       self
-        .window
+        .window()
         .set_max_inner_size(Some(PhysicalSize::new(width, height)));
     }
   }
 
   #[napi]
   pub fn get_outer_size(&self, logical: Option<bool>) -> Dimensions {
-    let size = self.window.outer_size();
+    let window = self.window();
+    let size = window.outer_size();
     if logical == Some(true) {
-      let logical_size = size.to_logical::<f64>(self.window.scale_factor());
+      let logical_size = size.to_logical::<f64>(window.scale_factor());
       return Dimensions {
         width: logical_size.width as u32,
         height: logical_size.height as u32,
@@ -664,7 +677,7 @@ impl BrowserWindow {
 
   /// Returns the underlying tao WindowId (for internal tracking).
   pub fn tao_window_id(&self) -> WindowId {
-    self.window.id()
+    self.window().id()
   }
 
   pub(crate) fn event_handler_shared(
@@ -678,7 +691,7 @@ impl BrowserWindow {
     if self.disposed.replace(true) {
       return;
     }
-    self.window.set_visible(false);
+    self.window.borrow_mut().take();
     for resource in self.webviews.borrow().iter() {
       if let Some(webview) = resource.borrow_mut().take() {
         let _ = webview.set_visible(false);
@@ -718,7 +731,7 @@ impl BrowserWindow {
 
   #[napi(getter)]
   pub fn get_theme(&self) -> Theme {
-    match self.window.theme() {
+    match self.window().theme() {
       tao::window::Theme::Light => Theme::Light,
       tao::window::Theme::Dark => Theme::Dark,
       _ => Theme::System,
@@ -732,7 +745,7 @@ impl BrowserWindow {
       Theme::Dark => Some(tao::window::Theme::Dark),
       _ => None,
     };
-    self.window.set_theme(t);
+    self.window().set_theme(t);
   }
 
   #[napi]
@@ -772,19 +785,19 @@ impl BrowserWindow {
         format!("Failed to create icon: {}", e),
       )
     })?;
-    self.window.set_window_icon(Some(ico));
+    self.window().set_window_icon(Some(ico));
     Ok(())
   }
 
   #[napi]
   pub fn remove_window_icon(&self) {
-    self.window.set_window_icon(None);
+    self.window().set_window_icon(None);
   }
 
   #[napi]
   pub fn set_enable(&self, enabled: bool) {
     #[cfg(target_os = "windows")]
-    self.window.set_enable(enabled);
+    self.window().set_enable(enabled);
     #[cfg(not(target_os = "windows"))]
     let _ = enabled;
   }
@@ -805,7 +818,7 @@ impl BrowserWindow {
       let (rgba, width, height) = decode_icon(icon_bytes, width, height)?;
       let icon = Icon::from_rgba(rgba, width, height)
         .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
-      self.window.set_taskbar_icon(Some(icon));
+      self.window().set_taskbar_icon(Some(icon));
     }
     #[cfg(not(target_os = "windows"))]
     let _ = (icon, width, height);
@@ -815,13 +828,13 @@ impl BrowserWindow {
   #[napi]
   pub fn remove_taskbar_icon(&self) {
     #[cfg(target_os = "windows")]
-    self.window.set_taskbar_icon(None);
+    self.window().set_taskbar_icon(None);
   }
 
   #[napi]
   pub fn set_undecorated_shadow(&self, shadow: bool) {
     #[cfg(target_os = "windows")]
-    self.window.set_undecorated_shadow(shadow);
+    self.window().set_undecorated_shadow(shadow);
     #[cfg(not(target_os = "windows"))]
     let _ = shadow;
   }
@@ -830,7 +843,7 @@ impl BrowserWindow {
   pub fn get_native_handle_any_thread(&self) -> u64 {
     #[cfg(target_os = "windows")]
     {
-      self.window.hwnd() as u64
+      self.window().hwnd() as u64
     }
     #[cfg(not(target_os = "windows"))]
     0
@@ -841,7 +854,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      self.window.simple_fullscreen()
+      self.window().simple_fullscreen()
     }
     #[cfg(not(target_os = "macos"))]
     false
@@ -852,7 +865,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      self.window.set_simple_fullscreen(fullscreen)
+      self.window().set_simple_fullscreen(fullscreen)
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -866,7 +879,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      self.window.has_shadow()
+      self.window().has_shadow()
     }
     #[cfg(not(target_os = "macos"))]
     false
@@ -877,7 +890,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      self.window.set_has_shadow(value);
+      self.window().set_has_shadow(value);
     }
     #[cfg(not(target_os = "macos"))]
     let _ = value;
@@ -888,7 +901,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      self.window.set_tabbing_identifier(&identifier);
+      self.window().set_tabbing_identifier(&identifier);
     }
     #[cfg(not(target_os = "macos"))]
     let _ = identifier;
@@ -899,7 +912,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      self.window.tabbing_identifier()
+      self.window().tabbing_identifier()
     }
     #[cfg(not(target_os = "macos"))]
     String::new()
@@ -910,7 +923,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      self.window.is_document_edited()
+      self.window().is_document_edited()
     }
     #[cfg(not(target_os = "macos"))]
     false
@@ -921,7 +934,7 @@ impl BrowserWindow {
     #[cfg(target_os = "macos")]
     {
       use tao::platform::macos::WindowExtMacOS;
-      self.window.set_is_document_edited(edited);
+      self.window().set_is_document_edited(edited);
     }
     #[cfg(not(target_os = "macos"))]
     let _ = edited;
@@ -933,7 +946,7 @@ impl BrowserWindow {
     {
       use tao::rwh_06::{HasWindowHandle, RawWindowHandle};
       return self
-        .window
+        .window()
         .window_handle()
         .ok()
         .and_then(|handle| match handle.as_raw() {
@@ -951,7 +964,7 @@ impl BrowserWindow {
     #[cfg(target_os = "ios")]
     {
       use tao::platform::ios::WindowExtIOS;
-      self.window.set_scale_factor(value);
+      self.window().set_scale_factor(value);
     }
     #[cfg(not(target_os = "ios"))]
     let _ = value;
@@ -967,7 +980,7 @@ impl BrowserWindow {
         IosValidOrientations::Landscape => ValidOrientations::Landscape,
         IosValidOrientations::Portrait => ValidOrientations::Portrait,
       };
-      self.window.set_valid_orientations(value);
+      self.window().set_valid_orientations(value);
     }
     #[cfg(not(target_os = "ios"))]
     let _ = value;
@@ -978,7 +991,7 @@ impl BrowserWindow {
     #[cfg(target_os = "ios")]
     {
       use tao::platform::ios::WindowExtIOS;
-      self.window.set_prefers_home_indicator_hidden(value);
+      self.window().set_prefers_home_indicator_hidden(value);
     }
     #[cfg(not(target_os = "ios"))]
     let _ = value;
@@ -1004,7 +1017,7 @@ impl BrowserWindow {
     #[cfg(target_os = "ios")]
     {
       use tao::platform::ios::WindowExtIOS;
-      self.window.set_prefers_status_bar_hidden(value);
+      self.window().set_prefers_status_bar_hidden(value);
     }
     #[cfg(not(target_os = "ios"))]
     let _ = value;
@@ -1015,7 +1028,7 @@ impl BrowserWindow {
     #[cfg(target_os = "android")]
     {
       use tao::platform::android::WindowExtAndroid;
-      let rect = self.window.content_rect();
+      let rect = self.window().content_rect();
       return AndroidContentRect {
         left: rect.left,
         top: rect.top,
@@ -1037,7 +1050,7 @@ impl BrowserWindow {
     #[cfg(target_os = "android")]
     {
       use tao::platform::android::WindowExtAndroid;
-      return format!("{:?}", self.window.config());
+      return format!("{:?}", self.window().config());
     }
     #[cfg(not(target_os = "android"))]
     String::new()
@@ -1045,7 +1058,7 @@ impl BrowserWindow {
 
   #[napi]
   pub fn set_visible(&self, visible: bool) {
-    self.window.set_visible(visible);
+    self.window().set_visible(visible);
   }
 
   #[napi]
@@ -1060,7 +1073,7 @@ impl BrowserWindow {
       JsProgressBarState::Paused => ProgressState::Paused,
       JsProgressBarState::Error => ProgressState::Error,
     });
-    self.window.set_progress_bar(ProgressBarState {
+    self.window().set_progress_bar(ProgressBarState {
       state: progress_state,
       progress,
       desktop_filename: None,
@@ -1069,23 +1082,23 @@ impl BrowserWindow {
 
   #[napi]
   pub fn set_maximized(&self, value: bool) {
-    self.window.set_maximized(value);
+    self.window().set_maximized(value);
   }
 
   #[napi]
   pub fn set_minimized(&self, value: bool) {
-    self.window.set_minimized(value);
+    self.window().set_minimized(value);
   }
 
   #[napi]
   pub fn focus(&self) {
-    self.window.set_focus();
+    self.window().set_focus();
   }
 
   #[napi]
   pub fn get_available_monitors(&self) -> Vec<Monitor> {
     self
-      .window
+      .window()
       .available_monitors()
       .map(monitor_to_js)
       .collect()
@@ -1093,42 +1106,42 @@ impl BrowserWindow {
 
   #[napi]
   pub fn get_current_monitor(&self) -> Option<Monitor> {
-    self.window.current_monitor().map(monitor_to_js)
+    self.window().current_monitor().map(monitor_to_js)
   }
 
   #[napi]
   pub fn get_primary_monitor(&self) -> Option<Monitor> {
-    self.window.primary_monitor().map(monitor_to_js)
+    self.window().primary_monitor().map(monitor_to_js)
   }
 
   #[napi]
   pub fn get_monitor_from_point(&self, x: f64, y: f64) -> Option<Monitor> {
-    self.window.monitor_from_point(x, y).map(monitor_to_js)
+    self.window().monitor_from_point(x, y).map(monitor_to_js)
   }
 
   #[napi]
   pub fn set_content_protection(&self, enabled: bool) {
-    self.window.set_content_protection(enabled);
+    self.window().set_content_protection(enabled);
   }
 
   #[napi]
   pub fn set_always_on_top(&self, enabled: bool) {
-    self.window.set_always_on_top(enabled);
+    self.window().set_always_on_top(enabled);
   }
 
   #[napi]
   pub fn set_always_on_bottom(&self, enabled: bool) {
-    self.window.set_always_on_bottom(enabled);
+    self.window().set_always_on_bottom(enabled);
   }
 
   #[napi]
   pub fn set_decorations(&self, enabled: bool) {
-    self.window.set_decorations(enabled);
+    self.window().set_decorations(enabled);
   }
 
   #[napi(getter)]
   pub fn get_fullscreen(&self) -> Option<FullscreenType> {
-    match self.window.fullscreen() {
+    match self.window().fullscreen() {
       None => None,
       Some(Fullscreen::Borderless(_)) => Some(FullscreenType::Borderless),
       Some(Fullscreen::Exclusive(_)) => Some(FullscreenType::Exclusive),
@@ -1140,48 +1153,50 @@ impl BrowserWindow {
   pub fn set_fullscreen(&self, fullscreen_type: Option<FullscreenType>) {
     let fs = match fullscreen_type {
       Some(FullscreenType::Exclusive) => self
-        .window
+        .window()
         .current_monitor()
         .and_then(|m| m.video_modes().next())
         .map(Fullscreen::Exclusive),
       Some(FullscreenType::Borderless) => Some(Fullscreen::Borderless(None)),
       None => None,
     };
-    self.window.set_fullscreen(fs);
+    self.window().set_fullscreen(fs);
   }
 
   #[napi]
-  pub fn close(&self) {
-    self.window.set_visible(false);
+  pub fn close(&mut self) {
+    self.dispose();
   }
 
   #[napi]
   pub fn hide(&self) {
-    self.window.set_visible(false);
+    self.window().set_visible(false);
   }
 
   #[napi]
   pub fn show(&self) {
-    self.window.set_visible(true);
+    self.window().set_visible(true);
   }
 
   #[napi]
   pub fn set_position(&self, x: i32, y: i32, logical: Option<bool>) {
     if logical == Some(true) {
-      self.window.set_outer_position(LogicalPosition::new(x, y));
+      self.window().set_outer_position(LogicalPosition::new(x, y));
     } else {
-      self.window.set_outer_position(PhysicalPosition::new(x, y));
+      self
+        .window()
+        .set_outer_position(PhysicalPosition::new(x, y));
     }
   }
 
   #[napi]
   pub fn get_position(&self, logical: Option<bool>) -> Position {
     let position = self
-      .window
+      .window()
       .outer_position()
       .unwrap_or(PhysicalPosition::new(0, 0));
     if logical == Some(true) {
-      let logical_position = position.to_logical::<f64>(self.window.scale_factor());
+      let logical_position = position.to_logical::<f64>(self.window().scale_factor());
       return Position {
         x: logical_position.x as i32,
         y: logical_position.y as i32,
@@ -1195,30 +1210,32 @@ impl BrowserWindow {
 
   #[napi]
   pub fn center(&self) {
-    if let Some(monitor) = self.window.current_monitor() {
+    if let Some(monitor) = self.window().current_monitor() {
       let mpos = monitor.position();
       let msize = monitor.size();
-      let wsize = self.window.outer_size();
+      let wsize = self.window().outer_size();
       let x = mpos.x + (msize.width as i32 - wsize.width as i32) / 2;
       let y = mpos.y + (msize.height as i32 - wsize.height as i32) / 2;
-      self.window.set_outer_position(PhysicalPosition::new(x, y));
+      self
+        .window()
+        .set_outer_position(PhysicalPosition::new(x, y));
     }
   }
 
   #[napi(getter)]
   pub fn width(&self) -> u32 {
-    self.window.inner_size().width
+    self.window().inner_size().width
   }
 
   #[napi(getter)]
   pub fn height(&self) -> u32 {
-    self.window.inner_size().height
+    self.window().inner_size().height
   }
 
   #[napi(getter)]
   pub fn x(&self) -> i32 {
     self
-      .window
+      .window()
       .outer_position()
       .unwrap_or(PhysicalPosition::new(0, 0))
       .x
@@ -1227,7 +1244,7 @@ impl BrowserWindow {
   #[napi(getter)]
   pub fn y(&self) -> i32 {
     self
-      .window
+      .window()
       .outer_position()
       .unwrap_or(PhysicalPosition::new(0, 0))
       .y
@@ -1235,23 +1252,23 @@ impl BrowserWindow {
 
   #[napi]
   pub fn scale_factor(&self) -> f64 {
-    self.window.scale_factor()
+    self.window().scale_factor()
   }
 
   #[napi]
   pub fn set_cursor(&self, cursor: CursorType) {
-    self.window.set_cursor_icon(cursor.into());
+    self.window().set_cursor_icon(cursor.into());
   }
 
   #[napi]
   pub fn set_cursor_visible(&self, visible: bool) {
-    self.window.set_cursor_visible(visible);
+    self.window().set_cursor_visible(visible);
   }
 
   #[napi]
   pub fn set_cursor_position(&self, x: f64, y: f64) -> Result<()> {
     self
-      .window
+      .window()
       .set_cursor_position(LogicalPosition::new(x, y))
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -1259,7 +1276,7 @@ impl BrowserWindow {
   #[napi]
   pub fn set_ignore_cursor_events(&self, ignore: bool) -> Result<()> {
     self
-      .window
+      .window()
       .set_ignore_cursor_events(ignore)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
@@ -1269,12 +1286,12 @@ impl BrowserWindow {
     #[cfg(target_os = "windows")]
     {
       use tao::platform::windows::WindowExtWindows;
-      let _ = self.window.set_skip_taskbar(skip);
+      let _ = self.window().set_skip_taskbar(skip);
     }
     #[cfg(target_os = "linux")]
     {
       use tao::platform::unix::WindowExtUnix;
-      let _ = self.window.set_skip_taskbar(skip);
+      let _ = self.window().set_skip_taskbar(skip);
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     let _ = skip;
@@ -1282,7 +1299,7 @@ impl BrowserWindow {
 
   #[napi]
   pub fn request_redraw(&self) {
-    self.window.request_redraw();
+    self.window().request_redraw();
   }
 }
 

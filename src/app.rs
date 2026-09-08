@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use crate::browser_window::BrowserWindow;
+use crate::browser_window::{BrowserWindow, WindowResource};
 #[cfg(target_os = "android")]
 use crate::tray::JsTrayIcon;
 #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
@@ -20,7 +20,7 @@ use tao::{
   event::{ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
   event_loop::EventLoop,
   keyboard::{Key, KeyCode, ModifiersState},
-  window::{Window, WindowId},
+  window::WindowId,
 };
 
 #[napi]
@@ -56,9 +56,10 @@ struct AppState {
   handler: Rc<RefCell<Option<FunctionRef<ApplicationEvent, ()>>>>,
   env: Env,
   should_exit: bool,
+  exit_requested: bool,
   ready: bool,
-  /// Tracks open windows so we can hide them on close without dropping BrowserWindow.
-  windows: HashMap<WindowId, Arc<Window>>,
+  /// Shared disposable native window resources tracked by the event loop.
+  windows: HashMap<WindowId, WindowResource>,
   /// Shared handle into each BrowserWindow's webview list.  Tao swallows
   /// WM_SIZE without forwarding to wry's subclass proc, so we resize manually
   /// when WindowEvent::Resized arrives.
@@ -81,7 +82,40 @@ struct AppState {
 }
 
 impl AppState {
-  fn shutdown(&mut self) {
+  fn begin_close_window(&mut self, window_id: WindowId) {
+    if let Some(views) = self.webviews.get(&window_id) {
+      for resource in views.borrow().iter() {
+        resource.borrow_mut().take();
+      }
+    }
+    if let Some(resource) = self.windows.get(&window_id) {
+      resource.borrow_mut().take();
+    }
+  }
+
+  fn finish_destroyed_window(&mut self, window_id: WindowId) {
+    self.windows.remove(&window_id);
+    self.webviews.remove(&window_id);
+
+    if let Some(handler) = self.window_handlers.remove(&window_id) {
+      handler.borrow_mut().take();
+    }
+
+    if let Some(lifecycle) = self.window_lifecycles.remove(&window_id) {
+      lifecycle.set(true);
+    }
+
+    if let Some(lifecycles) = self.webview_lifecycles.remove(&window_id) {
+      for lifecycle in lifecycles.borrow().iter() {
+        lifecycle.set(true);
+      }
+      lifecycles.borrow_mut().clear();
+    }
+
+    self.cursor_positions.remove(&window_id);
+  }
+
+  fn finalize_shutdown(&mut self) {
     if self.should_exit {
       return;
     }
@@ -92,34 +126,6 @@ impl AppState {
       }
       self.tray_handlers.clear();
     }
-    for views in self.webviews.values() {
-      for resource in views.borrow().iter() {
-        if let Some(view) = resource.borrow_mut().take() {
-          let _ = view.set_visible(false);
-        }
-      }
-    }
-    for win in self.windows.values() {
-      win.set_visible(false);
-    }
-    self.windows.clear();
-    self.webviews.clear();
-    for handler in self.window_handlers.values() {
-      handler.borrow_mut().take();
-    }
-    self.window_handlers.clear();
-    for lifecycle in self.window_lifecycles.values() {
-      lifecycle.set(true);
-    }
-    self.window_lifecycles.clear();
-    for lifecycles in self.webview_lifecycles.values() {
-      for lifecycle in lifecycles.borrow().iter() {
-        lifecycle.set(true);
-      }
-      lifecycles.borrow_mut().clear();
-    }
-    self.webview_lifecycles.clear();
-    self.cursor_positions.clear();
     for context in self.web_contexts.drain(..) {
       context.borrow_mut().take();
     }
@@ -284,24 +290,27 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
           phase: None,
         },
       );
-      if let Some(win) = state.windows.remove(&window_id) {
-        win.set_visible(false);
-      }
-      state.cursor_positions.remove(&window_id);
       state.fire(ApplicationEvent {
         event: WebviewApplicationEvent::WindowCloseRequested
           .name()
           .to_owned(),
         custom_menu_event: None,
       });
+
+      state.begin_close_window(window_id);
+    }
+    WindowEvent::Destroyed => {
+      state.finish_destroyed_window(window_id);
       if state.windows.is_empty() {
-        state.fire(ApplicationEvent {
-          event: WebviewApplicationEvent::ApplicationCloseRequested
-            .name()
-            .to_owned(),
-          custom_menu_event: None,
-        });
-        state.shutdown();
+        if !state.exit_requested {
+          state.fire(ApplicationEvent {
+            event: WebviewApplicationEvent::ApplicationCloseRequested
+              .name()
+              .to_owned(),
+            custom_menu_event: None,
+          });
+        }
+        state.finalize_shutdown();
       }
     }
     WindowEvent::Focused(focused) => {
@@ -738,6 +747,7 @@ impl Application {
         handler: Rc::new(RefCell::new(None)),
         env,
         should_exit: false,
+        exit_requested: false,
         ready: false,
         windows: HashMap::new(),
         webviews: HashMap::new(),
@@ -788,11 +798,25 @@ impl Application {
 
   #[napi]
   pub fn exit(&mut self) {
-    self.state.shutdown();
-    #[cfg(not(target_os = "android"))]
-    self.global_menu.borrow_mut().take();
+    if self.state.should_exit || self.state.exit_requested {
+      return;
+    }
+
+    self.state.exit_requested = true;
     if let Ok(mut ids) = self.window_ids.lock() {
       ids.clear();
+    }
+
+    let window_ids: Vec<_> = self.state.windows.keys().copied().collect();
+    if window_ids.is_empty() {
+      self.state.finalize_shutdown();
+      #[cfg(not(target_os = "android"))]
+      self.global_menu.borrow_mut().take();
+      return;
+    }
+
+    for window_id in window_ids {
+      self.state.begin_close_window(window_id);
     }
   }
 
@@ -875,10 +899,10 @@ impl Application {
       ids.insert(format!("{:?}", window.tao_window_id()), window.id());
     }
 
-    // Track the window so pump_events can hide it on CloseRequested and resize
-    // its webviews on Resized (tao bypasses wry's WM_SIZE subclass proc).
+    // Track the window so pump_events can dispose it on CloseRequested and
+    // resize its webviews on Resized (tao bypasses wry's WM_SIZE subclass proc).
     let wid = window.tao_window_id();
-    self.state.windows.insert(wid, Arc::clone(&window.window));
+    self.state.windows.insert(wid, Rc::clone(&window.window));
     self.state.webviews.insert(wid, window.webviews_shared());
     self
       .state
@@ -920,7 +944,7 @@ impl Application {
     let window = BrowserWindow::new(event_loop, options, true, Rc::new(RefCell::new(None)))?;
 
     let wid = window.tao_window_id();
-    self.state.windows.insert(wid, Arc::clone(&window.window));
+    self.state.windows.insert(wid, Rc::clone(&window.window));
     self.state.webviews.insert(wid, window.webviews_shared());
     self
       .state

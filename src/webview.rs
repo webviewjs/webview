@@ -29,10 +29,9 @@ use tao::platform::unix::WindowExtUnix;
 use wry::WebViewBuilderExtUnix;
 
 /// Shared reference to the webview event dispatch callback.
-/// The `Arc<ThreadsafeFunction>` wrapper lets us cheaply clone the pointer into
+/// The `Arc<WebviewEventThreadsafeFunction>` wrapper lets us cheaply clone the pointer into
 /// `Send + Sync` closures (e.g. `with_new_window_req_handler`).
-pub(crate) type WebviewEventHandlerRef =
-  Rc<RefCell<Option<Arc<ThreadsafeFunction<WebviewEventPayload>>>>>;
+pub(crate) type WebviewEventHandlerRef = Rc<RefCell<Option<Arc<WebviewEventThreadsafeFunction>>>>;
 pub(crate) type WebviewResource = Rc<RefCell<Option<Rc<wry::WebView>>>>;
 
 /// Shared reference to a sync bool-returning JS function (navigation guard).
@@ -86,11 +85,28 @@ pub(crate) struct ProtocolRegistration {
   pub(crate) handler: ProtocolHandlerRef,
 }
 
+pub(crate) type WebviewEventThreadsafeFunction = ThreadsafeFunction<
+  WebviewEventPayload,
+  (),
+  WebviewEventPayload,
+  napi::Status,
+  true, // CalleeHandled
+  true, // Weak
+>;
+pub(crate) type WebviewScriptThreadsafeFunction = ThreadsafeFunction<
+  String,
+  (),
+  String,
+  napi::Status,
+  true, // CalleeHandled
+  true, // Weak
+>;
+
 pub(crate) struct WebviewCreateContext<'a> {
   pub(crate) protocols: &'a [ProtocolRegistration],
   pub(crate) protocol_responders: ProtocolPendingMap,
   pub(crate) protocol_next_id: ProtocolCounterRef,
-  pub(crate) event_handler: Option<ThreadsafeFunction<WebviewEventPayload>>,
+  pub(crate) event_handler: Option<WebviewEventThreadsafeFunction>,
   pub(crate) navigation_handler: Option<FunctionRef<String, bool>>,
 }
 
@@ -749,7 +765,7 @@ impl JsWebview {
   pub fn evaluate_script_with_callback(
     &self,
     js: String,
-    callback: ThreadsafeFunction<String>,
+    callback: WebviewScriptThreadsafeFunction,
   ) -> Result<()> {
     self
       .webview()

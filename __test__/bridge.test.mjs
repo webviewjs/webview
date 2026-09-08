@@ -297,9 +297,11 @@ test('createWebview forwards navigationHandler and uses its decision', async () 
 test('closing the final window runs the same native resource cleanup as app.exit()', async () => {
   const source = await readFile(new URL('../src/app.rs', import.meta.url), 'utf8');
 
-  assert.match(source, /impl AppState \{[\s\S]*?fn shutdown\(&mut self\)/);
-  assert.match(source, /if state\.windows\.is_empty\(\) \{[\s\S]*?state\.shutdown\(\);[\s\S]*?\}/);
-  assert.match(source, /pub fn exit\(&mut self\) \{[\s\S]*?self\.state\.shutdown\(\);/);
+  assert.match(source, /fn begin_close_window\(&mut self, window_id: WindowId\)/);
+  assert.match(source, /fn finish_destroyed_window\(&mut self, window_id: WindowId\)/);
+  assert.match(source, /fn finalize_shutdown\(&mut self\)/);
+  assert.match(source, /WindowEvent::Destroyed =>/);
+  assert.match(source, /pub fn exit\(&mut self\) \{[\s\S]*?begin_close_window/);
 });
 
 test('BrowserWindow exposes the complete Windows extension surface', () => {

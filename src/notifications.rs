@@ -1,5 +1,14 @@
-use napi::{bindgen_prelude::Buffer, threadsafe_function::ThreadsafeFunction, Env, Result};
+use napi::{bindgen_prelude::Buffer, threadsafe_function::ThreadsafeFunction, Result};
 use napi_derive::napi;
+
+type NotificationEventThreadsafeFunction = ThreadsafeFunction<
+  NotificationEventPayload,
+  (),
+  NotificationEventPayload,
+  napi::Status,
+  true, // CalleeHandled
+  true, // Weak
+>;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use napi::threadsafe_function::ThreadsafeFunctionCallMode;
@@ -57,7 +66,7 @@ pub struct NotificationEventPayload {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn emit(
-  callback: &ThreadsafeFunction<NotificationEventPayload>,
+  callback: &NotificationEventThreadsafeFunction,
   event: &str,
   action: Option<String>,
   error: Option<String>,
@@ -103,7 +112,7 @@ fn windows_notifications_enabled() -> bool {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn emit_response(
-  callback: &ThreadsafeFunction<NotificationEventPayload>,
+  callback: &NotificationEventThreadsafeFunction,
   response: &notify_rust::NotificationResponse,
 ) {
   use notify_rust::NotificationResponse;
@@ -125,16 +134,10 @@ pub struct JsNotification {
 #[napi]
 impl JsNotification {
   #[napi(constructor)]
-  #[allow(deprecated)]
   pub fn new(
-    env: Env,
     options: NativeNotificationOptions,
-    mut callback: ThreadsafeFunction<NotificationEventPayload>,
+    callback: NotificationEventThreadsafeFunction,
   ) -> Result<Self> {
-    if !options.persistent {
-      callback.unref(&env)?;
-    }
-
     #[cfg(target_os = "windows")]
     if !windows_notifications_enabled() {
       emit(
