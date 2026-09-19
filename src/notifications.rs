@@ -35,10 +35,10 @@ pub struct NativeNotificationOptions {
   pub actions: Vec<NativeNotificationAction>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 struct TemporaryNotificationImage(tempfile::NamedTempFile);
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 impl TemporaryNotificationImage {
   fn from_image(image: &image::DynamicImage) -> std::result::Result<Self, String> {
     let mut file = tempfile::Builder::new()
@@ -157,7 +157,7 @@ impl JsNotification {
       #[cfg(any(target_os = "windows", target_os = "macos"))]
       let mut temporary_image: Option<TemporaryNotificationImage> = None;
       #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-      let temporary_image: Option<TemporaryNotificationImage> = None;
+      let temporary_image = None::<()>;
       notification.summary(&options.title);
       for action in &options.actions {
         notification.action(&action.action, &action.title);
