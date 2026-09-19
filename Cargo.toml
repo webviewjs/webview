@@ -1,5 +1,5 @@
 [package]
-authors = ["LongYinan <lynweklm@gmail.com>"]
+authors = ["Twilight <hello@twlite.dev>"]
 edition = "2021"
 name = "webview"
 version = "0.1.0"
