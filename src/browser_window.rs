@@ -21,6 +21,47 @@ use tao::{
 
 pub(crate) type WindowResource = Rc<RefCell<Option<Arc<Window>>>>;
 
+/// Synchronous state for the close request currently being dispatched.
+///
+/// The event loop begins and finishes this state around each native close
+/// request, and the JS close event calls `prevent()` through the internal N-API
+/// method. This state is separate from the disposable window resource, so a
+/// canceled close retains the exact same native window and webviews.
+pub(crate) struct CloseRequestState {
+  active: Cell<bool>,
+  prevented: Cell<bool>,
+}
+
+impl CloseRequestState {
+  pub(crate) fn new() -> Self {
+    Self {
+      active: Cell::new(false),
+      prevented: Cell::new(false),
+    }
+  }
+
+  pub(crate) fn begin(&self) {
+    self.active.set(true);
+    self.prevented.set(false);
+  }
+
+  pub(crate) fn finish(&self) -> bool {
+    let prevented = self.prevented.get();
+    self.active.set(false);
+    prevented
+  }
+
+  pub(crate) fn prevent(&self) -> bool {
+    if !self.active.get() {
+      return false;
+    }
+    self.prevented.set(true);
+    true
+  }
+}
+
+pub(crate) type WindowCloseState = Rc<CloseRequestState>;
+
 #[cfg(target_os = "windows")]
 use tao::platform::windows::WindowExtWindows;
 
@@ -118,6 +159,7 @@ pub struct BrowserWindow {
   protocols: Vec<ProtocolRegistration>,
   protocol_responders: ProtocolPendingMap,
   protocol_next_id: ProtocolCounterRef,
+  close_state: WindowCloseState,
   disposed: Rc<Cell<bool>>,
   webview_lifecycles: Rc<RefCell<Vec<Rc<Cell<bool>>>>>,
 }
@@ -343,6 +385,7 @@ impl BrowserWindow {
       protocols: Vec::new(),
       protocol_responders: Rc::new(RefCell::new(HashMap::new())),
       protocol_next_id: Rc::new(Cell::new(0)),
+      close_state: Rc::new(CloseRequestState::new()),
       disposed: Rc::new(Cell::new(false)),
       webview_lifecycles: Rc::new(RefCell::new(Vec::new())),
     })
@@ -362,6 +405,10 @@ impl BrowserWindow {
 
   pub(crate) fn webview_lifecycles_shared(&self) -> Rc<RefCell<Vec<Rc<Cell<bool>>>>> {
     Rc::clone(&self.webview_lifecycles)
+  }
+
+  pub(crate) fn close_state_shared(&self) -> WindowCloseState {
+    Rc::clone(&self.close_state)
   }
 
   #[napi(js_name = "_registerProtocol")]
@@ -722,6 +769,13 @@ impl BrowserWindow {
   #[napi]
   pub fn is_disposed(&self) -> bool {
     self.disposed.get()
+  }
+
+  /// Internal bridge used by the JavaScript close event. It is intentionally
+  /// not part of the documented BrowserWindow API.
+  #[napi(js_name = "_preventClose")]
+  pub fn prevent_close(&self) -> bool {
+    self.close_state.prevent()
   }
 
   #[napi(js_name = "_onWindowEvent")]

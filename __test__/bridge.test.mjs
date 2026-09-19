@@ -133,6 +133,119 @@ test('BrowserWindow forwards stable native event names through one EventEmitter 
   assert.equal(BrowserWindow.prototype.listenerCount.call(window, 'resize'), 0);
 });
 
+test('BrowserWindow close events support synchronous cancellation', () => {
+  const window = {
+    preventCalls: 0,
+    _onWindowEvent(callback) {
+      this.windowEventCallback = callback;
+    },
+    _preventClose() {
+      this.preventCalls += 1;
+      return true;
+    },
+  };
+  const observed = [];
+
+  BrowserWindow.prototype.on.call(window, 'close', (event) => {
+    observed.push([event.event, event.defaultPrevented]);
+    event.preventDefault();
+    observed.push(event.defaultPrevented);
+    event.preventDefault();
+  });
+
+  window.windowEventCallback({ event: 'close' });
+
+  assert.deepEqual(observed, [['close', false], true]);
+  assert.equal(window.preventCalls, 1);
+});
+
+test('BrowserWindow close events remain compatible without preventDefault', () => {
+  const window = {
+    preventCalls: 0,
+    _onWindowEvent(callback) {
+      this.windowEventCallback = callback;
+    },
+    _preventClose() {
+      this.preventCalls += 1;
+      return true;
+    },
+  };
+  let received;
+
+  BrowserWindow.prototype.on.call(window, 'close', (event) => {
+    received = event;
+  });
+
+  window.windowEventCallback({ event: 'close' });
+
+  assert.equal(received.event, 'close');
+  assert.equal(received.defaultPrevented, false);
+  assert.equal(window.preventCalls, 0);
+});
+
+test('BrowserWindow close cancellation follows listener ordering and resets', () => {
+  const window = {
+    preventCalls: 0,
+    _onWindowEvent(callback) {
+      this.windowEventCallback = callback;
+    },
+    _preventClose() {
+      this.preventCalls += 1;
+      return true;
+    },
+  };
+  const observed = [];
+  let preventNext = true;
+  let retained;
+
+  BrowserWindow.prototype.on.call(window, 'close', (event) => {
+    retained ??= event;
+    observed.push(['first', event.defaultPrevented]);
+    if (preventNext) {
+      event.preventDefault();
+      preventNext = false;
+    }
+  });
+  BrowserWindow.prototype.on.call(window, 'close', (event) => {
+    observed.push(['second', event.defaultPrevented]);
+  });
+
+  window.windowEventCallback({ event: 'close' });
+  window.windowEventCallback({ event: 'close' });
+  retained.preventDefault();
+
+  assert.deepEqual(observed, [
+    ['first', false],
+    ['second', true],
+    ['first', false],
+    ['second', false],
+  ]);
+  assert.equal(window.preventCalls, 1);
+});
+
+test('BrowserWindow close cancellation permits reentrant hide calls', () => {
+  const window = {
+    hidden: false,
+    _onWindowEvent(callback) {
+      this.windowEventCallback = callback;
+    },
+    _preventClose() {
+      return true;
+    },
+    hide() {
+      this.hidden = true;
+    },
+  };
+
+  BrowserWindow.prototype.on.call(window, 'close', (event) => {
+    event.preventDefault();
+    window.hide();
+  });
+
+  assert.doesNotThrow(() => window.windowEventCallback({ event: 'close' }));
+  assert.equal(window.hidden, true);
+});
+
 test('TrayIcon forwards native tray events through the shared EventEmitter adapter', () => {
   const tray = {
     _onTrayEvent(callback) {
@@ -548,11 +661,12 @@ test('root-created wrappers expose explicit disposal', () => {
   }
 });
 
-test('tray example retains its icon and relies on whenReady auto-run', async () => {
+test('tray example retains its icon and demonstrates close-to-tray behavior', async () => {
   const source = await readFile(new URL('../examples/tray.mjs', import.meta.url), 'utf8');
 
-  assert.match(source, /let tray = null/);
-  assert.match(source, /app\.whenReady\(\)\.then\(\(\) => \{[\s\S]*tray = app\.createTrayIcon/);
+  assert.match(source, /let tray;/);
+  assert.match(source, /await app\.whenReady\(\);[\s\S]*tray = app\.createTrayIcon/);
+  assert.match(source, /window\.on\('close', \(event\) => \{[\s\S]*event\.preventDefault\(\)/);
   assert.doesNotMatch(source, /app\.run\(/);
 });
 

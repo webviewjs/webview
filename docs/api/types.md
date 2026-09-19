@@ -255,7 +255,7 @@ compatibility, but event names do not depend on its declaration order.
 interface BrowserWindowEventMap {
   move: { event: string; x: number; y: number };
   resize: { event: string; width: number; height: number };
-  close: { event: string };
+  close: { event: 'close'; defaultPrevented: boolean; preventDefault(): void };
   focus: { event: string };
   blur: { event: string };
   'mouse-enter': { event: string; x: number; y: number };

@@ -207,6 +207,12 @@ export interface WindowBaseEvent {
   event: string;
 }
 
+export interface BrowserWindowCloseEvent extends WindowBaseEvent {
+  readonly event: 'close';
+  readonly defaultPrevented: boolean;
+  preventDefault(): void;
+}
+
 export interface WindowKeyEvent {
   event: string;
   key?: string;
@@ -247,7 +253,7 @@ export interface WindowTouchEvent {
 export interface BrowserWindowEventMap {
   move: WindowMoveEvent;
   resize: WindowResizeEvent;
-  close: WindowBaseEvent;
+  close: BrowserWindowCloseEvent;
   focus: WindowBaseEvent;
   blur: WindowBaseEvent;
   'mouse-enter': WindowMouseEvent;

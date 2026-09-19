@@ -109,12 +109,12 @@ app.on('custom-menu-click', ({ customMenuEvent }) => {
 });
 ```
 
-| Event                         | Fired when                              |
-| ----------------------------- | --------------------------------------- |
-| `window-close-requested`      | A user requests that a window be closed |
-| `application-close-requested` | The last window has been closed         |
-| `custom-menu-click`           | A custom menu item is selected          |
-| `ready`                       | The native event loop is ready          |
+| Event                         | Fired when                                                                |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `window-close-requested`      | A user requests a window close after the window's `close` event allows it |
+| `application-close-requested` | The last window has been closed                                           |
+| `custom-menu-click`           | A custom menu item is selected                                            |
+| `ready`                       | The native event loop is ready                                            |
 
 The usual `on`, `once`, `off`, `addListener`, `removeListener`,
 `removeAllListeners`, `listenerCount`, `listeners`, `rawListeners`, `emit`, and
@@ -145,7 +145,7 @@ event payloads use these stable string names:
 
 | Event name                    | Fired when                                               |
 | ----------------------------- | -------------------------------------------------------- |
-| `window-close-requested`      | User clicks the OS close button on a window              |
+| `window-close-requested`      | A window's `close` event allows the OS close request     |
 | `application-close-requested` | The last window was closed                               |
 | `custom-menu-click`           | A custom menu item was clicked; see `customMenuEvent.id` |
 | `ready`                       | The native event loop emitted its first resume event     |

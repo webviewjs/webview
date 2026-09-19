@@ -312,7 +312,7 @@ win.isResizable(): boolean
 ```ts
 win.on('resize',      ({ width, height }) => { … })
 win.on('move',        ({ x, y })          => { … })
-win.on('close',       ()                  => { … })
+win.on('close',       (event)             => { event.preventDefault(); win.hide(); })
 win.on('focus',       ()                  => { … })
 win.on('blur',        ()                  => { … })
 win.on('mouse-enter', ({ x, y })          => { … })
@@ -331,6 +331,12 @@ win.on('theme-changed', ({ text }) => { … })
 win.on('ime',         ({ text, phase }) => { … })
 win.on('touch',       ({ x, y, touchId, phase }) => { … })
 ```
+
+The `close` event is cancelable. Call `event.preventDefault()` synchronously
+to keep the native window, its webviews, and their browser context alive. A
+close event without prevention follows the normal disposal path. The event
+object's `preventDefault()` has no effect after synchronous event dispatch has
+finished.
 
 All positional values (`x`, `y`, `width`, `height`, `deltaX`, `deltaY`) are in
 **physical pixels** at the current DPI. Divide by `win.scaleFactor()` to

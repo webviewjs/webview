@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use crate::browser_window::{BrowserWindow, WindowResource};
+use crate::browser_window::{BrowserWindow, WindowCloseState, WindowResource};
 #[cfg(target_os = "android")]
 use crate::tray::JsTrayIcon;
 #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
@@ -66,6 +66,8 @@ struct AppState {
   webviews: HashMap<WindowId, Rc<RefCell<Vec<WebviewResource>>>>,
   /// Per-window event handlers shared with each BrowserWindow instance.
   window_handlers: HashMap<WindowId, WindowEventHandler>,
+  /// Close-request cancellation state shared with each BrowserWindow.
+  window_close_states: HashMap<WindowId, WindowCloseState>,
   window_lifecycles: HashMap<WindowId, Rc<Cell<bool>>>,
   webview_lifecycles: HashMap<WindowId, WebviewLifecycles>,
   /// Last known physical cursor position per window (for edge-resize hit testing).
@@ -96,6 +98,7 @@ impl AppState {
   fn finish_destroyed_window(&mut self, window_id: WindowId) {
     self.windows.remove(&window_id);
     self.webviews.remove(&window_id);
+    self.window_close_states.remove(&window_id);
 
     if let Some(handler) = self.window_handlers.remove(&window_id) {
       handler.borrow_mut().take();
@@ -268,6 +271,11 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       );
     }
     WindowEvent::CloseRequested => {
+      let close_state = state.window_close_states.get(&window_id).cloned();
+      if let Some(close_state) = close_state.as_ref() {
+        close_state.begin();
+      }
+
       state.fire_window_event(
         window_id,
         WindowEventPayload {
@@ -290,6 +298,16 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
           phase: None,
         },
       );
+
+      // A BrowserWindow close listener can veto this request synchronously.
+      // Do not fire the legacy application-level close notification or take
+      // any native resources when the request was canceled. The native Tao
+      // handlers already consume the platform close request, so the window
+      // remains available for hide/show on every supported desktop backend.
+      if close_state.is_some_and(|state| state.finish()) {
+        return;
+      }
+
       state.fire(ApplicationEvent {
         event: WebviewApplicationEvent::WindowCloseRequested
           .name()
@@ -752,6 +770,7 @@ impl Application {
         windows: HashMap::new(),
         webviews: HashMap::new(),
         window_handlers: HashMap::new(),
+        window_close_states: HashMap::new(),
         window_lifecycles: HashMap::new(),
         webview_lifecycles: HashMap::new(),
         cursor_positions: HashMap::new(),
@@ -910,6 +929,10 @@ impl Application {
       .insert(wid, window.event_handler_shared());
     self
       .state
+      .window_close_states
+      .insert(wid, window.close_state_shared());
+    self
+      .state
       .window_lifecycles
       .insert(wid, window.lifecycle_shared());
     self
@@ -950,6 +973,10 @@ impl Application {
       .state
       .window_handlers
       .insert(wid, window.event_handler_shared());
+    self
+      .state
+      .window_close_states
+      .insert(wid, window.close_state_shared());
     self
       .state
       .window_lifecycles
@@ -1206,6 +1233,7 @@ impl Drop for Application {
 #[cfg(test)]
 mod tests {
   use super::dispatch_reentrant;
+  use crate::browser_window::CloseRequestState;
   use std::cell::RefCell;
 
   #[test]
@@ -1237,5 +1265,40 @@ mod tests {
     );
 
     assert_eq!(*slot.borrow(), Some(2));
+  }
+
+  #[test]
+  fn close_request_state_resets_between_requests() {
+    let state = CloseRequestState::new();
+
+    state.begin();
+    assert!(state.prevent());
+    assert!(state.finish());
+
+    state.begin();
+    assert!(!state.finish());
+  }
+
+  #[test]
+  fn close_request_state_prevention_is_idempotent() {
+    let state = CloseRequestState::new();
+
+    state.begin();
+    assert!(state.prevent());
+    assert!(state.prevent());
+
+    assert!(state.finish());
+  }
+
+  #[test]
+  fn close_request_state_rejects_prevention_outside_dispatch() {
+    let state = CloseRequestState::new();
+
+    assert!(!state.prevent());
+
+    state.begin();
+    assert!(state.prevent());
+    assert!(state.finish());
+    assert!(!state.prevent());
   }
 }

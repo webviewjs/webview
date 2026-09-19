@@ -340,7 +340,15 @@ const EVENT_METHODS = [
   'eventNames',
 ];
 
-function installEventEmitter(Type, subscribe, getEventName = (payload) => payload.event) {
+function installEventEmitter(
+  Type,
+  subscribe,
+  getEventName = (payload) => payload.event,
+  dispatchEvent = (emitter, _instance, payload) => {
+    const eventName = getEventName(payload);
+    if (eventName !== undefined) emitter.emit(eventName, payload);
+  },
+) {
   const emitters = new WeakMap();
 
   function getEmitter(instance, initialEmitter) {
@@ -351,8 +359,7 @@ function installEventEmitter(Type, subscribe, getEventName = (payload) => payloa
     emitters.set(instance, emitter);
     if (subscribe !== undefined) {
       subscribe(instance, (payload) => {
-        const eventName = getEventName(payload);
-        if (eventName !== undefined) emitter.emit(eventName, payload);
+        dispatchEvent(emitter, instance, payload);
       });
     }
     return emitter;
@@ -405,9 +412,41 @@ nativeBinding.Application.prototype.whenReady = function whenReady(options = {})
   return ready;
 };
 
-const _getWindowEmitter = installEventEmitter(nativeBinding.BrowserWindow, (win, dispatch) => {
-  win._onWindowEvent(dispatch);
-});
+const _getWindowEmitter = installEventEmitter(
+  nativeBinding.BrowserWindow,
+  (win, dispatch) => {
+    win._onWindowEvent((payload) => dispatch(payload));
+  },
+  undefined,
+  (emitter, win, payload) => {
+    if (payload?.event !== 'close') {
+      const eventName = payload?.event;
+      if (eventName !== undefined) emitter.emit(eventName, payload);
+      return;
+    }
+
+    let active = true;
+    let prevented = false;
+    const event = {
+      ...payload,
+      get defaultPrevented() {
+        return prevented;
+      },
+      preventDefault() {
+        // A retained close event is only meaningful during this synchronous
+        // dispatch. This prevents a delayed callback from vetoing a later close.
+        if (!active || prevented) return;
+        if (win._preventClose()) prevented = true;
+      },
+    };
+
+    try {
+      emitter.emit('close', event);
+    } finally {
+      active = false;
+    }
+  },
+);
 
 // ── BrowserWindow.registerProtocol ───────────────────────────────────────────
 // Wraps the low-level `_registerProtocol(name, (request) => void)` native
