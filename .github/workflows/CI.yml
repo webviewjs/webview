@@ -332,16 +332,12 @@ jobs:
           fi
           $SUDO dpkg --add-architecture ${{ matrix.settings.cross_arch }}
           $SUDO apt-get update
-          $SUDO apt-cache policy \
-          libglib2.0-dev:arm64 \
-          libglib2.0-dev-bin:arm64 \
-          libgio-2.0-dev:arm64 \
-          girepository-tools:arm64
-
-          apt-cache madison libglib2.0-dev:arm64 || true
-          apt-cache madison libglib2.0-dev-bin:arm64 || true
-
-          $SUDO apt-get install --no-install-recommends -y \
+          # Debian Trixie's foreign libpsl-dev package can contain a different
+          # shared manpage from the native package, which dpkg otherwise
+          # rejects during multiarch installation.
+          $SUDO apt-get \
+            -o Dpkg::Options::=--force-overwrite \
+            install --no-install-recommends -y \
             ${{ matrix.settings.cross_gcc }} \
             ${{ matrix.settings.cross_gpp }} \
             ${{ matrix.settings.cross_sys_deps }}
