@@ -18,7 +18,7 @@ use napi::Result;
 use napi_derive::napi;
 use tao::{
   event::{ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
-  event_loop::EventLoop,
+  event_loop::{DeviceEventFilter, EventLoop},
   keyboard::{Key, KeyCode, ModifiersState},
   window::WindowId,
 };
@@ -742,6 +742,11 @@ impl Application {
   #[napi(constructor)]
   pub fn new(env: Env, _options: Option<ApplicationOptions>) -> Result<Self> {
     let event_loop = EventLoop::new();
+
+    // Nothing here ever consumes a tao DeviceEvent (the pump closure drops
+    // them), so leaving raw input registered is pure cost - on Windows it
+    // delayed input into the WebView2 child by seconds while a key was held.
+    event_loop.set_device_event_filter(DeviceEventFilter::Always);
 
     // On macOS install a default app menu immediately so the menu bar is
     // functional from the start.  Store it in global_menu so the ObjC delegate
