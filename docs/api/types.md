@@ -119,13 +119,23 @@ interface WebviewDownloadEvent {
 }
 
 interface WebviewNavigationEvent {
-  event: string;
+  event: 'navigation';
   url?: string;
+  target: 'current';
 }
 
+type WebviewNavigationTarget = 'current' | 'new-window';
+
 interface WebviewNewWindowEvent {
-  event: string;
+  event: 'new-window';
   url?: string;
+  target: 'new-window';
+  windowFeatures?: WebviewNewWindowFeatures;
+}
+
+interface WebviewNewWindowFeatures {
+  size?: { width: number; height: number };
+  position?: { x: number; y: number };
 }
 ```
 

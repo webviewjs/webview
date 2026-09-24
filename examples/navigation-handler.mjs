@@ -12,18 +12,24 @@ const webview = window.createWebview({
     <main>
       <h1>Navigation handler</h1>
       <p><a href="https://example.com">Allowed navigation</a></p>
-      <p><a href="https://blocked.example">Blocked navigation</a></p>
+      <p><a href="https://blocked.example/navigation">Blocked navigation</a></p>
       <p><a href="https://blocked.example/popup" target="_blank">Blocked new window</a></p>
     </main>
   `,
   navigationHandler(url) {
-    const allowed = !url.startsWith('https://blocked.example');
-    console.log(allowed ? 'allow' : 'block', url);
-    return allowed;
+    console.log('navigation request', url);
+    return !url.startsWith('https://blocked.example/navigation');
+  },
+  newWindowHandler(event) {
+    console.log('new window request', event.target, event.url, event.windowFeatures);
+    return !event.url?.startsWith('https://blocked.example/popup');
   },
 });
 
-webview.on('navigation', ({ url }) => console.log('navigation attempted', url));
+webview.on('navigation', ({ url, target }) => console.log('navigation attempted', target, url));
+webview.on('new-window', ({ url, target, windowFeatures }) =>
+  console.log('new window attempted', target, url, windowFeatures),
+);
 
 app.on('application-close-requested', () => app.exit());
 

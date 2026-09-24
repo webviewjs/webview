@@ -150,14 +150,22 @@ export interface WebviewDownloadEvent {
 
 export interface WebviewDownloadStartedEvent extends WebviewDownloadEvent {}
 
+export type WebviewNavigationTarget = 'current' | 'new-window';
+
 export interface WebviewNavigationEvent {
-  event: string;
+  event: 'navigation';
   url?: string;
+  /** Requested browsing context, not the HTML target attribute value. */
+  target: 'current';
 }
 
 export interface WebviewNewWindowEvent {
-  event: string;
+  event: 'new-window';
   url?: string;
+  /** Requested browsing context, not the HTML target attribute value. */
+  target: 'new-window';
+  /** Browser-provided hints for a new-window request. */
+  windowFeatures?: import('./js-bindings').WebviewNewWindowFeatures;
 }
 
 /** Maps Webview event names to their typed payloads. */
@@ -294,9 +302,16 @@ declare module './js-bindings' {
      * Synchronous navigation guard.  Called with the target URL before every
      * navigation; return `true` to allow, `false` to cancel.
      *
-     * A `navigation` event is **always** emitted regardless of this handler.
+     * A matching `navigation` or `new-window` event is emitted regardless of
+     * this handler.
      */
     navigationHandler?: (url: string) => boolean;
+    /**
+     * Synchronous guard for new-window requests such as `window.open` and
+     * `target="_blank"`. Return `false` to cancel. The `new-window` event
+     * remains observational and is dispatched asynchronously.
+     */
+    newWindowHandler?: (event: WebviewNewWindowEvent) => boolean;
   }
 
   interface BrowserWindow extends TypedEventEmitter<BrowserWindowEventMap> {

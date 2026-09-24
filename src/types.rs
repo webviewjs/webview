@@ -493,15 +493,41 @@ impl WebviewEventType {
 
 /// Payload delivered to the webview event dispatch callback.
 #[napi(object)]
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct WebviewEventPayload {
   pub event: String,
   /// URL associated with the event (navigation, page load, download).
   pub url: Option<String>,
+  /// Requested browsing context for navigation and new-window events.
+  pub target: Option<String>,
+  /// Browser-provided size and position hints for a new-window request.
+  pub window_features: Option<WebviewNewWindowFeatures>,
   /// Document title for `TitleChanged` events.
   pub title: Option<String>,
   /// Download success flag for `DownloadCompleted` events.
   pub success: Option<bool>,
+}
+
+/// Optional size and position hints supplied for a new-window request.
+#[napi(object)]
+#[derive(Clone, Default)]
+pub struct WebviewNewWindowFeatures {
+  pub size: Option<WebviewWindowSize>,
+  pub position: Option<WebviewWindowPosition>,
+}
+
+#[napi(object)]
+#[derive(Clone, Default)]
+pub struct WebviewWindowSize {
+  pub width: f64,
+  pub height: f64,
+}
+
+#[napi(object)]
+#[derive(Clone, Default)]
+pub struct WebviewWindowPosition {
+  pub x: f64,
+  pub y: f64,
 }
 
 #[napi(object)]

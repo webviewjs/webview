@@ -37,6 +37,7 @@ export declare class BrowserWindow {
     webContext?: JsWebContext | undefined | null,
     eventHandler?: WebviewEventThreadsafeFunction | undefined | null,
     navigationHandler?: ((arg: string) => boolean) | undefined | null,
+    newWindowHandler?: ((arg: WebviewEventPayload) => boolean) | undefined | null,
   ): JsWebview;
   get isChild(): boolean;
   getNativeHandle(): bigint;
@@ -629,6 +630,10 @@ export interface WebviewEventPayload {
   event: string;
   /** URL associated with the event (navigation, page load, download). */
   url?: string;
+  /** Requested browsing context for navigation and new-window events. */
+  target?: string;
+  /** Browser-provided size and position hints for a new-window request. */
+  windowFeatures?: WebviewNewWindowFeatures;
   /** Document title for `TitleChanged` events. */
   title?: string;
   /** Download success flag for `DownloadCompleted` events. */
@@ -648,6 +653,12 @@ export declare enum WebviewEventType {
    * (`window.open`, `target="_blank"`, etc.).
    */
   NewWindowRequested = 6,
+}
+
+/** Optional size and position hints supplied for a new-window request. */
+export interface WebviewNewWindowFeatures {
+  size?: WebviewWindowSize;
+  position?: WebviewWindowPosition;
 }
 
 export interface WebviewOptions {
@@ -678,6 +689,16 @@ export interface WebviewOptions {
    * of the `<scheme>://path/to/page` protocols used on macOS and Linux.
    */
   useHttpsScheme?: boolean;
+}
+
+export interface WebviewWindowPosition {
+  x: number;
+  y: number;
+}
+
+export interface WebviewWindowSize {
+  width: number;
+  height: number;
 }
 
 export declare enum WindowCommand {

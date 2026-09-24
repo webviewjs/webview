@@ -515,13 +515,13 @@ const _getWebviewEmitter = installEventEmitter(nativeBinding.Webview);
 
 // ── BrowserWindow.createWebview wrapper ──────────────────────────────────────
 // Intercepts `createWebview(options)` to:
-//  - Extract `webContext` and `navigationHandler` from options
+//  - Extract callback options from options
 //  - Pass event dispatch and sync guard callbacks directly to native construction
 //  - Attach an EventEmitter to the returned Webview
 const _nativeCreateWebview = nativeBinding.BrowserWindow.prototype.createWebview;
 
 nativeBinding.BrowserWindow.prototype.createWebview = function createWebview(opts) {
-  const { webContext = null, navigationHandler = null, ...rustOpts } = opts ?? {};
+  const { webContext = null, navigationHandler = null, newWindowHandler = null, ...rustOpts } = opts ?? {};
 
   const emitter = new EventEmitter();
 
@@ -531,7 +531,14 @@ nativeBinding.BrowserWindow.prototype.createWebview = function createWebview(opt
     if (eventName !== undefined) emitter.emit(eventName, payload);
   };
 
-  const webview = _nativeCreateWebview.call(this, rustOpts, webContext, eventHandler, navigationHandler);
+  const webview = _nativeCreateWebview.call(
+    this,
+    rustOpts,
+    webContext,
+    eventHandler,
+    navigationHandler,
+    newWindowHandler,
+  );
   _getWebviewEmitter(webview, emitter);
   return webview;
 };

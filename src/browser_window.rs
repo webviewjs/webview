@@ -444,6 +444,7 @@ impl BrowserWindow {
     web_context: Option<&mut crate::web_context::JsWebContext>,
     event_handler: Option<WebviewEventThreadsafeFunction>,
     navigation_handler: Option<FunctionRef<String, bool>>,
+    new_window_handler: Option<FunctionRef<WebviewEventPayload, bool>>,
   ) -> Result<JsWebview> {
     if self.disposed.get() {
       return Err(napi::Error::new(
@@ -463,6 +464,7 @@ impl BrowserWindow {
         protocol_next_id: Rc::clone(&self.protocol_next_id),
         event_handler,
         navigation_handler,
+        new_window_handler,
       },
     )?;
     self

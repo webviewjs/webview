@@ -34,9 +34,10 @@ use wry::WebViewBuilderExtUnix;
 pub(crate) type WebviewEventHandlerRef = Rc<RefCell<Option<Arc<WebviewEventThreadsafeFunction>>>>;
 pub(crate) type WebviewResource = Rc<RefCell<Option<Rc<wry::WebView>>>>;
 
-/// Shared reference to a sync bool-returning JS function (navigation guard).
 /// `with_navigation_handler` doesn't require `Send`, so `FunctionRef` is fine.
 pub(crate) type WebviewBoolHandlerRef = Rc<RefCell<Option<FunctionRef<String, bool>>>>;
+pub(crate) type WebviewNewWindowHandlerRef =
+  Rc<RefCell<Option<FunctionRef<WebviewEventPayload, bool>>>>;
 
 /// Fire a `WebviewEventPayload` via the TSF event dispatch.  Non-blocking: the
 /// call is queued to libuv and executed on the JS thread.
@@ -54,6 +55,20 @@ fn call_bool_handler(handler: &WebviewBoolHandlerRef, env: Env, url: String) -> 
     .as_ref()
     .and_then(|func_ref| func_ref.borrow_back(&env).ok())
     .and_then(|func| func.call(url).ok())
+    .unwrap_or(true)
+}
+
+/// Call a sync new-window guard; returns `true` (allow) on missing handler or error.
+fn call_new_window_handler(
+  handler: &WebviewNewWindowHandlerRef,
+  env: Env,
+  event: WebviewEventPayload,
+) -> bool {
+  let borrowed = handler.borrow();
+  borrowed
+    .as_ref()
+    .and_then(|func_ref| func_ref.borrow_back(&env).ok())
+    .and_then(|func| func.call(event).ok())
     .unwrap_or(true)
 }
 
@@ -108,6 +123,7 @@ pub(crate) struct WebviewCreateContext<'a> {
   pub(crate) protocol_next_id: ProtocolCounterRef,
   pub(crate) event_handler: Option<WebviewEventThreadsafeFunction>,
   pub(crate) navigation_handler: Option<FunctionRef<String, bool>>,
+  pub(crate) new_window_handler: Option<FunctionRef<WebviewEventPayload, bool>>,
 }
 
 impl Default for WebviewOptions {
@@ -167,9 +183,11 @@ impl JsWebview {
       protocol_next_id,
       event_handler,
       navigation_handler,
+      new_window_handler,
     } = create_context;
     let event_handler = Rc::new(RefCell::new(event_handler.map(Arc::new)));
     let nav_handler = Rc::new(RefCell::new(navigation_handler));
+    let new_window_handler = Rc::new(RefCell::new(new_window_handler));
     let mut context = web_context.map(JsWebContext::inner).transpose()?;
     let mut webview = if let Some(ctx) = context.as_mut() {
       WebViewBuilder::new_with_web_context(&mut *ctx)
@@ -300,14 +318,13 @@ impl JsWebview {
       let ev_rc = Rc::clone(&event_handler);
       let env_c = *env;
       webview = webview.with_navigation_handler(move |url: String| -> bool {
-        dispatch_event(
-          &ev_rc,
-          WebviewEventPayload {
-            event: WebviewEventType::NavigationStarted.name().to_owned(),
-            url: Some(url.clone()),
-            ..Default::default()
-          },
-        );
+        let details = WebviewEventPayload {
+          event: WebviewEventType::NavigationStarted.name().to_owned(),
+          url: Some(url.clone()),
+          target: Some("current".to_owned()),
+          ..Default::default()
+        };
+        dispatch_event(&ev_rc, details);
         call_bool_handler(&nav_rc, env_c, url)
       });
     }
@@ -391,22 +408,44 @@ impl JsWebview {
     {
       let tsf_clone = event_handler.borrow().as_ref().map(Arc::clone);
       let nav_rc = Rc::clone(&nav_handler);
+      let new_window_rc = Rc::clone(&new_window_handler);
       let env_c = *env;
-      if tsf_clone.is_some() || nav_handler.borrow().is_some() {
+      if tsf_clone.is_some()
+        || nav_handler.borrow().is_some()
+        || new_window_handler.borrow().is_some()
+      {
         webview = webview.with_new_window_req_handler(
-          move |url: String, _features: NewWindowFeatures| -> NewWindowResponse {
+          move |url: String, features: NewWindowFeatures| -> NewWindowResponse {
+            let window_features = WebviewNewWindowFeatures {
+              size: features.size.map(|size| WebviewWindowSize {
+                width: size.width,
+                height: size.height,
+              }),
+              position: features.position.map(|position| WebviewWindowPosition {
+                x: position.x,
+                y: position.y,
+              }),
+            };
+            let event = WebviewEventPayload {
+              event: WebviewEventType::NewWindowRequested.name().to_owned(),
+              url: Some(url.clone()),
+              target: Some("new-window".to_owned()),
+              window_features: if window_features.size.is_some()
+                || window_features.position.is_some()
+              {
+                Some(window_features)
+              } else {
+                None
+              },
+              ..Default::default()
+            };
             if let Some(tsf) = &tsf_clone {
-              let _ = tsf.call(
-                Ok(WebviewEventPayload {
-                  event: WebviewEventType::NewWindowRequested.name().to_owned(),
-                  url: Some(url.clone()),
-                  ..Default::default()
-                }),
-                ThreadsafeFunctionCallMode::NonBlocking,
-              );
+              let _ = tsf.call(Ok(event.clone()), ThreadsafeFunctionCallMode::NonBlocking);
             }
 
-            if call_bool_handler(&nav_rc, env_c, url) {
+            let navigation_allowed = call_bool_handler(&nav_rc, env_c, url);
+            let new_window_allowed = call_new_window_handler(&new_window_rc, env_c, event);
+            if navigation_allowed && new_window_allowed {
               NewWindowResponse::Allow
             } else {
               NewWindowResponse::Deny

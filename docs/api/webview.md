@@ -25,6 +25,7 @@ interface WebviewOptions {
   ipcName?: string; // Alias for window.ipc, for example window.bindings
   webContext?: WebContext; // Shared browser data context
   navigationHandler?: (url: string) => boolean; // allow or cancel navigation
+  newWindowHandler?: (event: WebviewNewWindowEvent) => boolean; // allow or cancel new windows
 }
 ```
 
@@ -40,10 +41,19 @@ webview.reload(): void
 webview.url(): string | null          // currently displayed URL
 ```
 
-`navigationHandler` runs synchronously before each navigation, including
-`window.open()` and `target="_blank"` requests. Return `false` to cancel it.
-Keep the callback fast and do not return a Promise. A `navigation` or
-`new-window` event is emitted whether the request is allowed or cancelled.
+`navigationHandler` runs synchronously before each navigation and new-window
+request. It receives the URL and can return `false` to cancel it.
+
+`newWindowHandler` is a synchronous guard for new-window requests. It receives
+the `new-window` event payload, including the URL and any browser-provided
+window size or position hints, and can return `false` to cancel. When both
+guards are set, both must allow the request. Keep either callback fast and do
+not return a Promise. The `navigation` or `new-window` event is still emitted
+whether the request is allowed or cancelled.
+
+Navigation events include `target: 'current'`; new-window events include
+`target: 'new-window'`. This identifies the requested browsing context. Wry
+does not expose the original HTML `target` attribute value.
 
 See the runnable [navigation handler example](../../examples/navigation-handler.mjs).
 
@@ -58,14 +68,14 @@ webview.on('page-load-finished', ({ url }) => {});
 webview.on('title-changed', ({ title }) => {});
 webview.on('download-started', ({ url }) => {});
 webview.on('download-completed', ({ url, success }) => {});
-webview.on('navigation', ({ url }) => {});
-webview.on('new-window', ({ url }) => {});
+webview.on('navigation', ({ url, target }) => {});
+webview.on('new-window', ({ url, target, windowFeatures }) => {});
 ```
 
 The `new-window` event observes attempts from `window.open`,
-`target="_blank"`, and equivalent browser actions. The request is allowed
-after dispatch unless `navigationHandler` returns `false`. Download events are
-observational and do not cancel downloads.
+`target="_blank"`, and equivalent browser actions. It is dispatched
+asynchronously, so use `newWindowHandler` or `navigationHandler` to cancel a
+request. Download events are observational and do not cancel downloads.
 
 See the runnable [webview events example](../../examples/webview-events.mjs).
 

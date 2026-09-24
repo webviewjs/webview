@@ -44,8 +44,8 @@ Keep the returned `Webview` in application state for as long as the view is
 needed. Do not rely on a discarded temporary wrapper.
 
 Pass `options.webContext` to share browser data with other webviews. Pass
-`options.navigationHandler` to synchronously allow or reject navigation. See
-the [Webview reference](./webview).
+`options.navigationHandler` or `options.newWindowHandler` to synchronously
+allow or reject navigation requests. See the [Webview reference](./webview).
 
 ### Window state
 
