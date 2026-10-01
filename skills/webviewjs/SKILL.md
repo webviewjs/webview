@@ -108,18 +108,19 @@ but it cannot make a native addon portable.
 
 ## Build a standalone executable
 
-The `webview --build` CLI delegates to the selected JavaScript runtime:
+Use `webview build <entry>`; Node.js SEA is the default runtime:
 
-- Node.js uses Node's Single Executable Application (SEA) workflow.
-- Deno uses `deno compile`.
-- Bun uses `bun build --compile`.
+```bash
+webview build src/main.ts
+webview build src/main.ts --runtime bun
+webview build src/main.ts --runtime deno
+```
 
-This CLI is not a desktop installer builder, package manager, or general
-application bundler. It does not perform cross-compilation. Build on the
-target operating system and architecture so the matching WebviewJS `.node`
-addon is available, or prepare that addon and its runtime toolchain manually
-before packaging. Use platform distribution tools for installers, signing,
-notarization, and release metadata.
+All runtimes need a matching WebviewJS `.node` addon. Node SEA is host-only;
+Bun and Deno accept runtime-specific target identifiers when that target addon
+is installed. Cross-target output is not covered by the current host
+integration smoke tests. This CLI does not create desktop installers or
+perform Windows certificate signing.
 
 See the [standalone executable guide](https://webview.js.org/guides/building-executables)
 for runtime-specific options and asset handling.

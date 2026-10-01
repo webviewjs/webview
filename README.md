@@ -495,47 +495,28 @@ Run an example after building the package with: `node apps/examples/menu-system.
 
 ## Building executables
 
-The `webview` CLI creates a standalone executable by delegating to the
-selected runtime's compiler:
-
-- Node.js uses Node's Single Executable Application (SEA) workflow.
-- Deno uses `deno compile`.
-- Bun uses `bun build --compile`.
-
-It is not a desktop application installer builder, package manager, or full
-application bundler. It does not create platform installers or perform
-cross-compilation. The WebviewJS `.node` addon is platform-specific, so build
-on the target operating system and architecture, or prepare the matching
-native addon and runtime toolchain manually before packaging. Use platform
-distribution tools alongside this CLI for installers, release metadata,
-signing, and notarization.
-
-> [!NOTE]
-> The CLI is evolving. Review the runtime and platform requirements before
-> distributing an executable.
-
-The `webview` CLI compiles your app into a single self-contained executable. The runtime is auto-detected (`Bun` → bun, `Deno` → deno, otherwise Node.js), or you can override it:
+Build a standalone executable with Node.js by default, or choose Bun or Deno:
 
 ```bash
-# Auto-detected runtime
-webview --build --input ./path/to/your/script.js --output ./dist --name my-app
-
-# Explicit runtime
-webview --build --runtime node --input ./src/index.js --name my-app
-webview --build --runtime deno --input ./src/index.ts --name my-app
-webview --build --runtime bun  --input ./src/index.ts --name my-app
+npm install @webviewjs/webview
+npx webview build src/main.ts
+npx webview build src/main.ts --runtime bun
+npx webview build src/main.ts --runtime deno
 ```
 
-| Flag                 | Default       | Description                   |
-| -------------------- | ------------- | ----------------------------- |
-| `--runtime` / `-R`   | auto-detected | `node`, `deno`, or `bun`      |
-| `--input` / `-i`     | `./index.js`  | Entry file                    |
-| `--output` / `-o`    | `./dist`      | Output directory              |
-| `--name` / `-n`      | `webviewjs`   | Executable name               |
-| `--resources` / `-r` | none          | JSON asset map (Node.js only) |
+The output goes to `./dist` by default. Set `--name`, `--out-dir`, `--target`,
+and repeat `--asset` as needed. Use `--resources` for the legacy Node SEA JSON
+asset map. Node SEA embeds WebviewJS's native addon; Bun and Deno builds also
+require the matching target-specific native package.
+Node SEA is host-only. Bun and Deno accept cross-target identifiers, but only
+the current host builds have integration smoke coverage in this repository.
+The CLI does not create installers or perform Windows certificate signing.
 
 For runtime-specific details, asset embedding, code signing, and release
 guidance, see [Building Executables](https://webview.js.org/guides/building-executables).
+
+The old `webview --build --input <entry>` form remains temporarily available
+and prints a deprecation warning.
 
 ## Agent skill
 

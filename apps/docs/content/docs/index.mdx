@@ -440,30 +440,20 @@ After building the package, run an example with: `node apps/examples/menu-system
 
 ## Building executables
 
-> [!WARNING]
-> The CLI feature is very experimental and may not work as expected. Please report any issues you find.
-
-The `webview` CLI compiles your app into a single self-contained executable. The runtime is auto-detected (`Bun` → bun, `Deno` → deno, otherwise Node.js), or you can override it:
+Build a standalone executable with Node.js by default, or select Bun or Deno:
 
 ```bash
-# Auto-detected runtime
-webview --build --input ./path/to/your/script.js --output ./dist --name my-app
-
-# Explicit runtime
-webview --build --runtime node --input ./src/index.js --name my-app
-webview --build --runtime deno --input ./src/index.ts --name my-app
-webview --build --runtime bun  --input ./src/index.ts --name my-app
+npx webview build src/main.ts
+npx webview build src/main.ts --runtime bun
+npx webview build src/main.ts --runtime deno
 ```
 
-| Flag                 | Default       | Description                |
-| -------------------- | ------------- | -------------------------- |
-| `--runtime` / `-R`   | auto-detected | `node`, `deno`, or `bun`   |
-| `--input` / `-i`     | `./index.js`  | Entry file                 |
-| `--output` / `-o`    | `./dist`      | Output directory           |
-| `--name` / `-n`      | `webviewjs`   | Executable name            |
-| `--resources` / `-r` | —             | JSON asset map (node only) |
+Node SEA embeds WebviewJS's native addon and is host-only. Bun and Deno need
+the matching target addon for the executable target; cross-target output is
+runtime-specific and only the current host builds have integration smoke tests.
 
-For the full compilation guide including cross-compilation and code signing, see [Building Executables](./guides/building-executables).
+For runtime details, target requirements, and asset handling, see
+[Building Executables](./guides/building-executables).
 
 ## Development
 

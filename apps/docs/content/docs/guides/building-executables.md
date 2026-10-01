@@ -1,162 +1,112 @@
 ---
 title: 'Building Standalone Executables'
-description: 'The webview CLI can package your application into a single self-contained executable — no Node.js, Deno, or Bun installation required on the target machine.'
+description: 'Build a self-contained desktop application with the WebviewJS CLI and Node.js, Bun, or Deno.'
 ---
 
-The `webview` CLI can package your application into a single self-contained executable — no Node.js, Deno, or Bun installation required on the target machine.
+The `webview` command builds your application into a standalone executable. The target computer does not need a separate Node.js, Bun, or Deno installation. Your application still needs the platform's desktop webview runtime, such as WebView2 on Windows or WebKit on macOS and Linux.
 
 ## Quick start
 
-```bash
-# Install globally (or use npx)
-npm install -g @webviewjs/webview
-
-# Build with your current runtime (Node.js by default)
-webview --build --input src/index.js --name myapp
-```
-
-The executable is written to `dist/` by default. On Windows it gets a `.exe` extension automatically.
-
----
-
-## Choosing a runtime
-
-Use `--runtime` (short: `-R`) to select how the executable is compiled:
-
-| Runtime | Flag             | Tool used             |
-| ------- | ---------------- | --------------------- |
-| Node.js | `--runtime node` | Node.js SEA (default) |
-| Deno    | `--runtime deno` | `deno compile`        |
-| Bun     | `--runtime bun`  | `bun build --compile` |
-
-### Node.js (default)
-
-Node.js does not have a one-shot compile command, so the CLI automates the multi-step [Single Executable Application (SEA)](https://nodejs.org/api/single-executable-applications.html) workflow for you:
-
-1. Writes a `sea-config.json` in the output directory.
-2. Runs `node --experimental-sea-config sea-config.json` to produce `sea-prep.blob`.
-3. Copies the current `node` binary.
-4. Removes its existing signature (macOS / Windows).
-5. Injects the blob via `postject` (downloaded automatically with `npx`).
-6. Re-signs the binary (`codesign` on macOS, `signtool` on Windows — optional).
+Install WebviewJS in your application, then build from the project directory:
 
 ```bash
-webview --build --runtime node --input src/index.js --name myapp --output dist
+npm install @webviewjs/webview
+npx webview build src/main.ts
 ```
 
-#### Bundling assets (Node.js only)
+The CLI uses Node.js SEA by default and writes the executable to `./dist`. The default name comes from your `package.json` name when it is a valid filename, otherwise from the entry file. Scoped names such as `@acme/my-app` produce `my-app`.
 
-Pass a JSON file mapping asset names to file paths via `--resources`:
+```bash
+webview build src/main.ts --name my-app --out-dir ./release
+```
+
+Use `webview --help`, `webview --version`, and `webview build --help` for command help. The old `webview --build --input src/main.ts` form remains available temporarily and prints a deprecation warning.
+
+## Shared options
+
+| Option                      | Description                                                                                                                      |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `--runtime node\|bun\|deno` | Select a runtime. Node is the default.                                                                                           |
+| `--name <name>`             | Executable filename without an automatically added Windows `.exe` suffix. Names may contain letters, numbers, `-`, `_`, and `.`. |
+| `--out-dir <directory>`     | Output directory. Defaults to `./dist`. `--output` remains as an alias.                                                          |
+| `--target <target>`         | Select a runtime-specific target. The matching WebviewJS native package must also be installed.                                  |
+| `--native-addon <path>`     | Advanced override for the target-specific WebviewJS `.node` file.                                                                |
+| `--asset <path>`            | Embed an asset; Node SEA takes files, while Bun and Deno also accept directories. Repeat the option for multiple assets.         |
+| `--resources <json>`        | Read the legacy Node SEA JSON asset map. Resource paths are relative to the JSON file.                                           |
+| `--minify`                  | Request minification from the selected runtime where supported.                                                                  |
+| `--dry-run`                 | Validate inputs and runtime support, then print the planned commands without compiling.                                          |
+| `--verbose`                 | Print subprocess commands with their arguments.                                                                                  |
+
+For Node SEA, `--asset file.txt` uses the file's basename as its SEA key. A resources map can choose explicit keys:
 
 ```json
 {
-  "icon.png": "./assets/icon.png",
-  "config.json": "./config.json"
+  "config.json": "./assets/config.json",
+  "images/icon.png": "./assets/icon.png"
 }
 ```
 
-```bash
-webview --build --runtime node --resources assets.json --input src/index.js --name myapp
-```
+Read Node SEA assets with `require('node:sea').getAsset('config.json')`. The private WebviewJS addon asset name is reserved.
 
-Inside your script, read them with the `node:sea` API:
+## Node.js
 
-```js
-const { getAsset } = require('node:sea');
-const iconBuffer = getAsset('icon.png');
-```
+Node builds bundle the application with esbuild as one CommonJS script targeting Node 24. This gives SEA one entry script and avoids relying on ordinary filesystem modules at runtime. The WebviewJS `.node` addon is added to the SEA asset map automatically.
 
----
+The runtime capability probe selects one of two SEA flows:
 
-### Deno
+- **Node 24 through Node 25.4:** Node creates a preparation blob. The CLI copies that exact Node executable, removes its macOS signature, and injects the blob with the pinned Postject dependency. The temporary bundle, config, and blob live in the operating system's temporary directory and are removed after the build.
+- **Node 25.5 and newer:** When `node --help` reports `--build-sea`, Node creates the final executable directly. Postject is not used.
 
-Requires `deno` on your `PATH`. Uses `deno compile` which bundles everything into a single binary.
+When the executable starts, a small prelude reads the private addon asset from `node:sea`, writes it atomically beneath `os.tmpdir()` in a directory keyed by the WebviewJS version and addon SHA-256, then sets `NAPI_RS_NATIVE_LIBRARY_PATH`. It replaces SEA's builtin-only `require` with `createRequire(process.execPath)` so NAPI-RS can load that extracted `.node` file. The bundle and addon are both inside the executable; it does not load them from the application's `node_modules`.
 
-```bash
-webview --build --runtime deno --input src/index.ts --name myapp --output dist
-```
+macOS executables receive an ad-hoc `codesign --sign -` signature. This is not a developer identity or notarization. Windows distribution signing is separate: the CLI does not invent a certificate or claim that the output has been signed.
 
-The CLI runs:
+Node SEA does not cross-compile. Build on the platform and architecture where the executable will run.
+
+## Bun
+
+Bun builds use Bun's standalone compiler directly:
 
 ```bash
-deno compile --allow-all --no-check --output dist/myapp src/index.ts
+webview build src/main.ts --runtime bun
 ```
 
-> `--allow-all` grants all permissions. Restrict them in your own build script if needed.
+The CLI passes `--compile`, `--outfile`, optional `--target`, `--minify`, and repeatable embedded assets to `bun build`. It does not add a second bundling pass. WebviewJS's generated N-API loader is included in the application; the Bun integration fixture verifies that a compiled executable can call `getWebviewVersion()` after it has been moved away from the project.
 
----
+The CLI recognizes Bun target names `bun-darwin-x64`, `bun-darwin-arm64`, `bun-linux-x64`, `bun-linux-arm64`, `bun-windows-x64`, and `bun-windows-arm64`. Bun also accepts musl targets, but WebviewJS does not publish musl native addons, so this CLI rejects them. The Bun integration smoke test covered the current `darwin-arm64` host only; cross-target Bun executables are not claimed as verified.
 
-### Bun
+## Deno
 
-Requires `bun` on your `PATH`. Uses `bun build --compile`.
+Deno builds use Deno 2's compiler with bundling and self-extraction:
 
 ```bash
-webview --build --runtime bun --input src/index.ts --name myapp --output dist
+webview build src/main.ts --runtime deno
 ```
 
-The CLI runs:
+The CLI runs `deno compile --bundle --self-extracting --allow-all`. A temporary target adapter gives Deno the selected `.node` file and maps unrelated optional N-API packages to build-only stubs, so it bundles the target addon without changing your project. The compiled entry locates Deno's extracted addon and sets `NAPI_RS_NATIVE_LIBRARY_PATH` before importing your app. The CLI passes `--no-check` because Deno 2.9 reports three unresolved internal callback aliases in WebviewJS's NAPI-RS-generated declaration file; this lets JavaScript and Node-style TypeScript projects package normally. Run `deno check` on application source separately when you want Deno's type diagnostics. User assets are passed through Deno 2.9's `--include` option; Deno also treats included `.js` and `.ts` files as module roots.
 
-```bash
-bun build --compile src/index.ts --outfile dist/myapp
-```
+The CLI recognizes `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`, and `aarch64-unknown-linux-gnu`. The Deno integration smoke test covered the current `aarch64-apple-darwin` host only; cross-target Deno executables are not claimed as verified.
 
-On Windows, Bun automatically appends `.exe` if not already present.
+## Native packages and cross-compilation
 
----
+WebviewJS currently publishes native packages for macOS x64 and arm64; Windows x64, arm64, and ia32; and glibc Linux x64, arm64, ia32, and arm. Runtime targets are accepted only when both the runtime compiler and WebviewJS provide a matching target. The CLI resolves that target package from your project first, then checks the matching native file in a WebviewJS development checkout. It never substitutes the host addon for a different target.
 
-## All options
+If the target package is not installed, install the optional dependency for the target platform or pass `--native-addon` with a matching `.node` file. The CLI checks a recognizable target in the filename and reports when it does not match. It does not change your dependency installation during cross-compilation.
 
-```
-  -b, --build        Build the project into a standalone executable
-  -R, --runtime      Runtime to use for compilation: node (default), deno, bun
-  -n, --name         Executable name (default: webviewjs)
-  -i, --input        Entry file (default: index.js in cwd)
-  -o, --output       Output directory (default: dist/)
-  -r, --resources    Resources mapping JSON file path (node runtime only)
-  -d, --dry-run      Print what would be done without executing
-  -h, --help         Show help
-  -v, --version      Show version
-```
-
----
+Cross-target compiler support is runtime-specific. Node SEA is host-only. Bun and Deno accept the target identifiers listed above, but an executable can only load WebviewJS when the matching native package is available. A local integration run validates the current host build; it does not execute cross-compiled binaries on their destination operating systems.
 
 ## Examples
 
 ```bash
-# Node.js SEA — default, no extra tools needed beyond node + npx
-webview --build --input src/main.js --name myapp
+# Default Node SEA build
+webview build src/main.ts
 
-# Deno — produces a single binary including the Deno runtime
-webview --build --runtime deno --input src/main.ts --name myapp
+# Bun standalone build
+webview build src/main.ts --runtime bun --minify --asset assets
 
-# Bun — fast compilation, includes the Bun runtime
-webview --build --runtime bun --input src/main.ts --name myapp
+# Deno self-extracting build
+webview build src/main.ts --runtime deno --out-dir ./release
 
-# Custom output directory and project name
-webview --build --runtime bun --input src/main.ts --name "MyDesktopApp" --output ./release
-
-# Dry-run to see what would happen
-webview --build --runtime node --input src/main.js --name myapp --dry-run
+# Check all inexpensive validations without compiling
+webview build src/main.ts --runtime node --dry-run
 ```
-
----
-
-## Platform notes
-
-| Platform | Node SEA             | Deno compile         | Bun compile          |
-| -------- | -------------------- | -------------------- | -------------------- |
-| Windows  | ✅ `.exe` auto-added | ✅ `.exe` auto-added | ✅ `.exe` auto-added |
-| macOS    | ✅ codesign applied  | ✅ ad-hoc signed     | ✅                   |
-| Linux    | ✅                   | ✅                   | ✅                   |
-
-### Code signing
-
-- **Node.js** — the CLI removes the existing signature and re-signs with `codesign -s -` (macOS) or `signtool` (Windows) if available.
-- **Deno** — applies an ad-hoc signature on macOS automatically. Use `codesign` / `signtool` for distribution.
-- **Bun** — use `codesign` on macOS after building. On Windows, use `signtool`.
-
-### Cross-compilation
-
-- **Deno**: pass `--target` directly to `deno compile`. Use a custom build script rather than the webviewjs CLI for cross-compile targets.
-- **Bun**: pass `--target` to `bun build`. Same recommendation.
-- **Node SEA**: cross-compilation is not supported; build on the target OS.

@@ -71,29 +71,23 @@ Run an example after building the package with `node apps/examples/simple.mjs`. 
 - Handwritten public library source belongs in `packages/webview/lib/`; TypeScript writes CommonJS and declarations to `packages/webview/dist/`.
 - Native NAPI classes remain the public runtime objects. TypeScript explicitly augments them with JS-only lifecycle, event, protocol, and IPC behavior.
 - Do not edit `packages/webview/js-bindings.js` or `packages/webview/js-bindings.d.ts`; NAPI-RS generates them from Rust source and both generated files are intentionally tracked.
-- CLI files in `packages/webview/cli/` are plain ESM and ship as-is.
+- `packages/webview/cli/index.mjs` is the permanent plain ESM npm bin shim. The TypeScript CLI implementation lives in `packages/webview/lib/cli/` and builds to `packages/webview/dist/cli/`.
 - Tests live in `packages/webview/__test__/` and use `node:test`, not Bun test, Jest, Vitest, or AVA.
 - Examples in `apps/examples/` import `@webviewjs/webview` through the Bun workspace dependency so they use the same package entry point as consumers.
 - Documentation lives in `apps/docs/content/docs/`. Its public routes start at the domain root, such as `/getting-started/installation` and `/api/application`.
 - Keep repository-level tools in the root package. Application and package dependencies belong to their respective workspaces.
 
-## CLI (`webview --build`)
+## CLI (`webview build`)
 
-The CLI compiles a user's app into a standalone executable. The runtime is **auto-detected** from globals:
+The CLI compiles a user's app into a standalone executable. Node.js is the default runtime; choose Bun or Deno with `--runtime <node|bun|deno>`:
 
-- `globalThis.Bun` present → default `--runtime bun`
-- `globalThis.Deno` present → default `--runtime deno`
-- otherwise → default `--runtime node`
+| Runtime | Mechanism                                                                                                 |
+| ------- | --------------------------------------------------------------------------------------------------------- |
+| `node`  | Node.js SEA; Node 24 uses `--experimental-sea-config` + pinned Postject; Node 25.5+ can use `--build-sea` |
+| `deno`  | Deno 2 `compile --bundle --self-extracting --allow-all`                                                   |
+| `bun`   | `bun build --compile`                                                                                     |
 
-Override with `--runtime <node|deno|bun>`. Each runtime uses a different compiler:
-
-| Runtime | Mechanism                                                                                |
-| ------- | ---------------------------------------------------------------------------------------- |
-| `node`  | Node.js SEA (Single Executable Application) via `--experimental-sea-config` + `postject` |
-| `deno`  | `deno compile --allow-all --no-check`                                                    |
-| `bun`   | `bun build --compile`                                                                    |
-
-The `--resources` flag (JSON asset map) is **node-only** — it maps to the SEA `assets` field.
+The entry file is positional, for example `webview build src/main.ts`. Use `--asset` to embed files or directories; `--resources` remains available for JSON asset maps. Each runtime adapter embeds the matching WebviewJS native addon.
 
 ## Docs / GitHub Pages
 
