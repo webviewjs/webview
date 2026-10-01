@@ -1,17 +1,17 @@
-import type { CustomProtocolResponse, ProtocolRequest } from '../../../js-bindings';
-import type { NativeBrowserWindow } from '../native-binding';
+import type { BrowserWindow, CustomProtocolResponse, ProtocolRequest } from '../../../js-bindings';
 import type { BrowserWindowProtocolHandler } from '../../types/browser-window';
 
 export class ProtocolBridge {
-  readonly #native: NativeBrowserWindow;
-  readonly #isDisposed: () => boolean;
+  readonly #native: BrowserWindow;
 
-  constructor(native: NativeBrowserWindow, isDisposed: () => boolean) {
+  constructor(native: BrowserWindow) {
     this.#native = native;
-    this.#isDisposed = isDisposed;
   }
 
   register(name: string, handler: BrowserWindowProtocolHandler): void {
+    if (this.#native.isDisposed()) {
+      throw new Error('BrowserWindow has been disposed');
+    }
     this.#native._registerProtocol(name, (protocolRequest) => {
       void this.#handle(protocolRequest, handler);
     });
@@ -65,7 +65,7 @@ export class ProtocolBridge {
   }
 
   #complete(id: number, response: CustomProtocolResponse): void {
-    if (this.#isDisposed()) {
+    if (this.#native.isDisposed()) {
       return;
     }
     this.#native._completeProtocol(id, response);

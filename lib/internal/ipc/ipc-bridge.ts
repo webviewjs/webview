@@ -1,9 +1,12 @@
-import type { IpcMessage } from '../../../js-bindings';
-import type { NativeWebview } from '../native-binding';
+import { Webview as NativeWebview } from '../../../js-bindings';
+import type { IpcMessage, Webview } from '../../../js-bindings';
 import { SerializationError } from '../../errors/serialization-error';
 import { serializeJson, validateJsonValue } from './serialization';
 
 export type IpcMessageHandler = (message: IpcMessage) => void;
+
+const nativeDispose = NativeWebview.prototype.dispose;
+const bridges = new WeakMap<Webview, WebviewIpcBridge>();
 
 interface ExposedNamespace {
   target: object;
@@ -19,16 +22,14 @@ interface ExposeCall {
 }
 
 export class WebviewIpcBridge {
-  readonly #native: NativeWebview;
-  readonly #isDisposed: () => boolean;
+  readonly #native: Webview;
   readonly #namespaces = new Map<string, ExposedNamespace>();
   #userHandler: IpcMessageHandler | null = null;
   #transportInstalled = false;
   readonly #transportHandler: (message: IpcMessage) => void;
 
-  constructor(native: NativeWebview, isDisposed: () => boolean) {
+  constructor(native: Webview) {
     this.#native = native;
-    this.#isDisposed = isDisposed;
     this.#transportHandler = (message) => this.#dispatchMessage(message);
   }
 
@@ -85,7 +86,7 @@ export class WebviewIpcBridge {
   }
 
   #assertNotDisposed(): void {
-    if (this.#isDisposed()) {
+    if (this.#native.isDisposed()) {
       throw new Error('Webview has been disposed');
     }
   }
@@ -94,7 +95,7 @@ export class WebviewIpcBridge {
     if (this.#transportInstalled) {
       return;
     }
-    this.#native.onIpcMessage(this.#transportHandler);
+    this.#setNativeHandler(this.#transportHandler);
     this.#transportInstalled = true;
   }
 
@@ -103,15 +104,22 @@ export class WebviewIpcBridge {
       return;
     }
     try {
-      this.#native.onIpcMessage(null);
+      this.#setNativeHandler(null);
     } catch {
       // Native disposal clears the IPC callback at the same time.
     }
     this.#transportInstalled = false;
   }
 
+  #setNativeHandler(handler: IpcMessageHandler | null): void {
+    const nativeMethod = Object.hasOwn(this.#native, 'onIpcMessage')
+      ? this.#native.onIpcMessage
+      : NativeWebview.prototype.onIpcMessage;
+    nativeMethod.call(this.#native, handler);
+  }
+
   #dispatchMessage(message: IpcMessage): void {
-    if (this.#isDisposed()) {
+    if (this.#native.isDisposed()) {
       return;
     }
 
@@ -149,7 +157,7 @@ export class WebviewIpcBridge {
       .then((result) => {
         try {
           const resultJson = serializeJson(result, 'Return value');
-          if (!this.#isDisposed()) {
+          if (!this.#native.isDisposed()) {
             this.#native.evaluateScript(
               'window.__webviewjs__&&window.__webviewjs__.resolve(' + Number(id) + ',' + resultJson + ')',
             );
@@ -170,7 +178,7 @@ export class WebviewIpcBridge {
   }
 
   #sendError(id: unknown, message: string, name = 'Error'): void {
-    if (this.#isDisposed()) {
+    if (this.#native.isDisposed()) {
       return;
     }
     try {
@@ -187,6 +195,31 @@ export class WebviewIpcBridge {
       // A response can race with disposal after the initial check.
     }
   }
+}
+
+function bridgeFor(webview: Webview): WebviewIpcBridge {
+  let bridge = bridges.get(webview);
+  if (bridge === undefined) {
+    bridge = new WebviewIpcBridge(webview);
+    bridges.set(webview, bridge);
+  }
+  return bridge;
+}
+
+export function onIpcMessage(this: Webview, handler?: IpcMessageHandler | null): void {
+  bridgeFor(this).setUserHandler(handler);
+}
+
+export function expose(this: Webview, name: string, target: object): void {
+  bridgeFor(this).expose(name, target);
+}
+
+export function disposeWebview(this: Webview): void {
+  const bridge = bridges.get(this);
+  bridge?.dispose();
+  bridges.delete(this);
+  const dispose = Object.hasOwn(this, 'dispose') ? this.dispose : nativeDispose;
+  dispose.call(this);
 }
 
 export { SerializationError };

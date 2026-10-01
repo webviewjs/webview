@@ -3,6 +3,7 @@ import type {
   WebviewNewWindowFeatures,
   WebviewOptions as NativeWebviewOptions,
 } from '../../js-bindings';
+import type { WebContext } from '../../js-bindings';
 
 export type { IpcMessage, WebviewBounds, WebviewCookie } from '../../js-bindings';
 
@@ -13,7 +14,7 @@ export interface WebviewOptions extends Omit<
   NativeWebviewOptions,
   'webContext' | 'navigationHandler' | 'newWindowHandler'
 > {
-  webContext?: import('../web-context').WebContext | null;
+  webContext?: WebContext | null;
   navigationHandler?: (url: string) => boolean;
   newWindowHandler?: (event: WebviewNewWindowEvent) => boolean;
 }

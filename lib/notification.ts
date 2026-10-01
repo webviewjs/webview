@@ -1,6 +1,7 @@
-import { TypedEventEmitter } from './types/events';
+import { EventEmitter } from 'node:events';
+import type { NodeEventMap } from './internal/events/event-emitter';
 import type { NativeNotificationAction, NativeNotificationOptions, NotificationEventPayload } from '../js-bindings';
-import { nativeBinding } from './internal/native-binding';
+import { NativeNotification } from '../js-bindings';
 
 export type NotificationPermission = 'granted';
 export type NotificationDirection = 'auto' | 'ltr' | 'rtl';
@@ -62,8 +63,8 @@ interface NormalizedNotificationOptions {
   vibrate: number | number[];
 }
 
-export class Notification extends TypedEventEmitter<NotificationEventMap> {
-  readonly #native: InstanceType<typeof nativeBinding.NativeNotification>;
+export class Notification extends EventEmitter<NodeEventMap<NotificationEventMap>> {
+  readonly #native: NativeNotification;
   readonly #handlers = new Map<NotificationEventName, (event: NotificationEvent) => void>();
   readonly #options: NormalizedNotificationOptions;
   readonly #title: string;
@@ -122,16 +123,13 @@ export class Notification extends TypedEventEmitter<NotificationEventMap> {
       })),
     };
 
-    this.#native = new nativeBinding.NativeNotification(
-      nativeOptions,
-      (error: Error | null, payload: NotificationEventPayload) => {
-        if (error) {
-          this.#dispatch({ event: 'error', error: error.message });
-        } else {
-          this.#dispatch(payload);
-        }
-      },
-    );
+    this.#native = new NativeNotification(nativeOptions, (error: Error | null, payload: NotificationEventPayload) => {
+      if (error) {
+        this.#dispatch({ event: 'error', error: error.message });
+      } else {
+        this.#dispatch(payload);
+      }
+    });
   }
 
   static get permission(): NotificationPermission {

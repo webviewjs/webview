@@ -21,7 +21,7 @@ docs/         GitHub Pages site (served at webview.js.org)
 examples/     Runnable .mjs examples
 npm/          Per-platform NAPI binary packages
 scripts/      Build helpers
-lib/          Handwritten TypeScript public API and internal bridges
+lib/          Handwritten TypeScript public API augmentations and internal bridges
 dist/         Compiled CommonJS library and generated declarations
 __test__/     Node.js built-in test runner tests
 js-bindings.js / js-bindings.d.ts  Lower-level generated bindings
@@ -54,6 +54,7 @@ cargo clippy              # Rust lints
 ## Key conventions
 
 - Handwritten public library source belongs in lib/; tsc writes CommonJS and declarations to dist/.
+- Native NAPI classes remain the public runtime objects. TypeScript explicitly augments them with JS-only lifecycle, event, protocol, and IPC behavior.
 - Do not edit js-bindings.js or js-bindings.d.ts; NAPI-RS generates them from Rust source.
 - CLI files (`cli/*.mjs`) are plain ESM — no build step, shipped as-is.
 - Tests live in `__test__/` and use `node:test` (not Jest/Vitest/AVA).

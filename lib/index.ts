@@ -1,8 +1,14 @@
-export { Application } from './application';
-export { BrowserWindow } from './browser-window';
-export { WebContext } from './web-context';
-export { Webview } from './webview';
-export { TrayIcon } from './tray-icon';
+import './augmentations';
+import './install';
+
+export { Application, BrowserWindow, NativeNotification, TrayIcon, WebContext, Webview } from '../js-bindings';
+export {
+  NativeNotification as JsNotification,
+  TrayIcon as JsTrayIcon,
+  WebContext as JsWebContext,
+  Webview as JsWebview,
+} from '../js-bindings';
+
 export {
   Notification,
   type NotificationAction,
@@ -14,11 +20,6 @@ export {
   type NotificationPermission,
 } from './notification';
 export { SerializationError } from './errors/serialization-error';
-
-export { TrayIcon as JsTrayIcon } from './tray-icon';
-export { WebContext as JsWebContext } from './web-context';
-export { Webview as JsWebview } from './webview';
-export { NativeNotification, NativeNotification as JsNotification } from '../js-bindings';
 
 export {
   ControlFlow,
