@@ -14,10 +14,10 @@ It is a good fit for utilities, internal tools, desktop companions, and
 existing web applications that need a native window without bundling a second
 browser engine.
 
-[Get started](https://webview.js.org/quickstart.md) ·
-[API reference](https://webview.js.org/api/application.md) ·
-[Examples](./examples) ·
-[Platform notes](https://webview.js.org/platforms/linux.md)
+[Get started](https://webview.js.org/getting-started/quick-start) ·
+[API reference](https://webview.js.org/api/application) ·
+[Examples](./apps/examples) ·
+[Platform notes](https://webview.js.org/platform/linux)
 
 ![WebviewJS preview](https://github.com/webviewjs/webview/raw/main/assets/preview.png)
 
@@ -39,49 +39,49 @@ browser engine.
 
 ## Documentation
 
-The complete documentation is available at [webview.js.org](https://webview.js.org). For an index designed for documentation tools and assistants, see [llms.txt](https://webview.js.org/llms.txt).
+The complete documentation is available at [webview.js.org](https://webview.js.org). Documentation tools and assistants can use [`llms.txt`](https://webview.js.org/llms.txt), the full [`llms-full.txt`](https://webview.js.org/llms-full.txt), or per-page Markdown such as [`/api/application.md`](https://webview.js.org/api/application.md).
 
 ### Getting started
 
-|                                                        |                                 |
-| ------------------------------------------------------ | ------------------------------- |
-| [Installation](https://webview.js.org/installation.md) | System requirements and setup   |
-| [Quick Start](https://webview.js.org/quickstart.md)    | Your first window in minutes    |
-| [Event Loop](https://webview.js.org/event-loop.md)     | How the non-blocking pump works |
+|                                                                     |                                 |
+| ------------------------------------------------------------------- | ------------------------------- |
+| [Installation](https://webview.js.org/getting-started/installation) | System requirements and setup   |
+| [Quick Start](https://webview.js.org/getting-started/quick-start)   | Your first window in minutes    |
+| [Event Loop](https://webview.js.org/getting-started/event-loop)     | How the non-blocking pump works |
 
 ### API reference
 
-|                                                               |                                                       |
-| ------------------------------------------------------------- | ----------------------------------------------------- |
-| [Application](https://webview.js.org/api/application.md)      | Root object, event loop, windows, menus               |
-| [BrowserWindow](https://webview.js.org/api/browser-window.md) | OS window, size, position, cursor, decorations        |
-| [Webview](https://webview.js.org/api/webview.md)              | Embedded browser, navigation, cookies, script, bounds |
-| [WebContext](https://webview.js.org/api/web-context.md)       | Shared browser data, profiles, and automation         |
-| [System Tray](https://webview.js.org/api/tray.md)             | Tray icons, menus, updates, and pointer events        |
-| [Notification](https://webview.js.org/api/notification.md)    | Native desktop notifications and lifecycle events     |
-| [Menu](https://webview.js.org/api/menu.md)                    | Native menu bar construction                          |
-| [Types](https://webview.js.org/api/types.md)                  | Shared interfaces and enums                           |
+|                                                            |                                                       |
+| ---------------------------------------------------------- | ----------------------------------------------------- |
+| [Application](https://webview.js.org/api/application)      | Root object, event loop, windows, menus               |
+| [BrowserWindow](https://webview.js.org/api/browser-window) | OS window, size, position, cursor, decorations        |
+| [Webview](https://webview.js.org/api/webview)              | Embedded browser, navigation, cookies, script, bounds |
+| [WebContext](https://webview.js.org/api/web-context)       | Shared browser data, profiles, and automation         |
+| [System Tray](https://webview.js.org/api/tray)             | Tray icons, menus, updates, and pointer events        |
+| [Notification](https://webview.js.org/api/notification)    | Native desktop notifications and lifecycle events     |
+| [Menu](https://webview.js.org/api/menu)                    | Native menu bar construction                          |
+| [Types](https://webview.js.org/api/types)                  | Shared interfaces and enums                           |
 
 ### Guides
 
-|                                                                               |                                                 |
-| ----------------------------------------------------------------------------- | ----------------------------------------------- |
-| [Building Executables](https://webview.js.org/guides/building-executables.md) | Compile to `.exe` / binary with node, deno, bun |
-| [IPC Messaging](https://webview.js.org/guides/ipc-messaging.md)               | Page ↔ Node communication                       |
-| [Menus](https://webview.js.org/guides/menus.md)                               | Building menu bars with roles and accelerators  |
-| [Multiple Windows](https://webview.js.org/guides/multiple-windows.md)         | Managing several windows                        |
-| [Cookies & Storage](https://webview.js.org/guides/cookies-and-storage.md)     | Reading, writing, and clearing cookies          |
-| [Custom Protocols](https://webview.js.org/guides/custom-protocols.md)         | Serving local content to the webview            |
+|                                                                            |                                                 |
+| -------------------------------------------------------------------------- | ----------------------------------------------- |
+| [Building Executables](https://webview.js.org/guides/building-executables) | Compile to `.exe` / binary with node, deno, bun |
+| [IPC Messaging](https://webview.js.org/guides/ipc-messaging)               | Page ↔ Node communication                       |
+| [Menus](https://webview.js.org/guides/menus)                               | Building menu bars with roles and accelerators  |
+| [Multiple Windows](https://webview.js.org/guides/multiple-windows)         | Managing several windows                        |
+| [Cookies & Storage](https://webview.js.org/guides/cookies-and-storage)     | Reading, writing, and clearing cookies          |
+| [Custom Protocols](https://webview.js.org/guides/custom-protocols)         | Serving local content to the webview            |
 
 ### Platform notes
 
-|                                                        |                                           |
-| ------------------------------------------------------ | ----------------------------------------- |
-| [Windows](https://webview.js.org/platforms/windows.md) | WebView2, taskbar, DPI                    |
-| [macOS](https://webview.js.org/platforms/macos.md)     | WebKit, main-thread requirement, app menu |
-| [Linux](https://webview.js.org/platforms/linux.md)     | WebKitGTK, Wayland/X11, menu limitations  |
-| [iOS](https://webview.js.org)                          | Orientation, status bar, and gestures     |
-| [Android](https://webview.js.org)                      | Content rectangle and configuration       |
+|                                                    |                                           |
+| -------------------------------------------------- | ----------------------------------------- |
+| [Windows](https://webview.js.org/platform/windows) | WebView2, taskbar, DPI                    |
+| [macOS](https://webview.js.org/platform/macos)     | WebKit, main-thread requirement, app menu |
+| [Linux](https://webview.js.org/platform/linux)     | WebKitGTK, Wayland/X11, menu limitations  |
+| [iOS](https://webview.js.org/platform/ios)         | Orientation, status bar, and gestures     |
+| [Android](https://webview.js.org/platform/android) | Content rectangle and configuration       |
 
 ## Installation
 
@@ -105,11 +105,11 @@ addon selected for the current operating system and architecture.
 | --------------- | ----------------------------------------------------------------------------------------------------------- |
 | Windows         | WebView2. It ships with Windows 11 and current Edge installations; Windows 10 can install it automatically. |
 | macOS           | macOS 10.15 Catalina or later. WebKit is built in.                                                          |
-| Linux           | WebKitGTK 4.1 and `libxdo`. See the [Linux platform guide](https://webview.js.org/platforms/linux.md).      |
+| Linux           | WebKitGTK 4.1 and `libxdo`. See the [Linux platform guide](https://webview.js.org/platform/linux).          |
 | Android and iOS | Native project setup and platform SDKs. See the [hosted documentation](https://webview.js.org).             |
 
 For distribution and platform-specific behavior, review the complete
-[installation guide](https://webview.js.org/installation.md) before shipping.
+[installation guide](https://webview.js.org/getting-started/installation) before shipping.
 
 ## Supported platforms
 
@@ -204,8 +204,8 @@ app.whenReady().then(() => {
 });
 ```
 
-See the [system tray reference](https://webview.js.org/api/tray.md) and
-[runnable tray example](./examples/tray.mjs).
+See the [system tray reference](https://webview.js.org/api/tray) and
+[runnable tray example](./apps/examples/tray.mjs).
 
 ### Notifications
 
@@ -221,8 +221,8 @@ notification.on('error', ({ error }) => console.error(error));
 ```
 
 Notification permission is always `"granted"` for native applications. See the
-[notification reference](https://webview.js.org/api/notification.md) and
-[runnable notification example](./examples/notification.mjs).
+[notification reference](https://webview.js.org/api/notification) and
+[runnable notification example](./apps/examples/notification.mjs).
 
 ### IPC and exposed functions
 
@@ -275,7 +275,7 @@ window.registerProtocol('app', async (request) => {
 window.createWebview({ url: 'app://localhost/index.html' });
 ```
 
-See [Custom Protocols](https://webview.js.org/guides/custom-protocols.md), [IPC](https://webview.js.org/guides/ipc-messaging.md), and the runnable [custom protocol](examples/custom-protocol.mjs) and [expose](examples/expose.mjs) examples.
+See [Custom Protocols](https://webview.js.org/guides/custom-protocols), [IPC](https://webview.js.org/guides/ipc-messaging), and the runnable [custom protocol](./apps/examples/custom-protocol.mjs) and [expose](./apps/examples/expose.mjs) examples.
 
 ### Menu system
 
@@ -457,8 +457,8 @@ webview.reload();
 ```
 
 For more details on application lifecycle and disposal, see the
-[Application API reference](https://webview.js.org/api/application.md) and the
-[closing example](./examples/close-example.mjs).
+[Application API reference](https://webview.js.org/api/application) and the
+[closing example](./apps/examples/close-example.mjs).
 
 ### Keep strong references
 
@@ -483,15 +483,15 @@ true`, and method calls fail with a disposed error. Individual windows,
 webviews, contexts, and tray icons also support `dispose()` and
 `Symbol.dispose`.
 
-Check out [examples](./examples) directory for more examples:
+Check out [examples](./apps/examples) directory for more examples:
 
-- **[menu-system.mjs](./examples/menu-system.mjs)** - Comprehensive menu system demonstration with all features
-- **[window-menus.mjs](./examples/window-menus.mjs)** - Window-specific vs global menu examples
-- **[http/](./examples/http/)** - Serving content from a web server to webview
-- **[transparent.mjs](./examples/transparent.mjs)** - Transparent window example
-- **[close-example.mjs](./examples/close-example.mjs)** - Graceful application closing
+- **[menu-system.mjs](./apps/examples/menu-system.mjs)** - Comprehensive menu system demonstration with all features
+- **[window-menus.mjs](./apps/examples/window-menus.mjs)** - Window-specific vs global menu examples
+- **[http/](./apps/examples/http/)** - Serving content from a web server to webview
+- **[transparent.mjs](./apps/examples/transparent.mjs)** - Transparent window example
+- **[close-example.mjs](./apps/examples/close-example.mjs)** - Graceful application closing
 
-Run any example with: `node examples/menu-system.mjs` (after building the project)
+Run an example after building the package with: `node apps/examples/menu-system.mjs`.
 
 ## Building executables
 
@@ -535,7 +535,7 @@ webview --build --runtime bun  --input ./src/index.ts --name my-app
 | `--resources` / `-r` | none          | JSON asset map (Node.js only) |
 
 For runtime-specific details, asset embedding, code signing, and release
-guidance, see [Building Executables](https://webview.js.org/guides/building-executables.md).
+guidance, see [Building Executables](https://webview.js.org/guides/building-executables).
 
 ## Agent skill
 
@@ -551,9 +551,12 @@ API patterns, and executable builds.
 
 ## Development
 
+The published library is in `packages/webview`, runnable examples are in
+`apps/examples`, and the documentation website is in `apps/docs`.
+
 ### Prerequisites
 
-- [Bun](https://bun.sh/) >= 1.3.0
+- [Bun](https://bun.sh/) 1.3.14
 - [Rust](https://www.rust-lang.org/) stable toolchain
 - [Node.js](https://nodejs.org/) >= 24 (for testing)
 
@@ -563,8 +566,32 @@ API patterns, and executable builds.
 bun install
 ```
 
-### Build
+### Build and run an example
 
 ```bash
-bun run build
+bun --filter @webviewjs/webview build
+node apps/examples/simple.mjs
+```
+
+The native build requires the platform's Rust and GUI development dependencies.
+To build only the TypeScript layer, run `bun --filter @webviewjs/webview build:lib`.
+
+### Repository commands
+
+```bash
+bun run dev          # Start the documentation app
+bun run build        # Build the native package and static docs
+bun run test         # Run Node's built-in test runner
+bun run lint         # Run Oxlint across the repository
+bun run lint:fix
+bun run format       # Format JS/TS/MD and Rust source
+bun run format:check
+bun run check        # Cargo check and docs type check
+bun run clippy
+```
+
+The docs workspace can also be run on its own with `bun --filter @webviewjs/docs dev` or built with `bun --filter @webviewjs/docs build`.
+
+```
+
 ```

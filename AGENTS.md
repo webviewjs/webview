@@ -1,4 +1,4 @@
-# WebviewJS — CLAUDE.md
+# WebviewJS repository instructions
 
 ## What this project is
 
@@ -6,59 +6,76 @@ A native Node.js (NAPI-RS) binding to [wry](https://github.com/tauri-apps/wry) a
 
 ## Repo layout
 
-```
-src/          Rust source (NAPI-RS bindings)
-cli/          The `webview` / `webviewjs` CLI (pure JS, ESM)
-  index.mjs   Entry point — argument parsing, help, dispatch
-  build.mjs   Compile logic for node (SEA), deno compile, bun build --compile
-  utils.mjs   String helpers
-docs/         GitHub Pages site (served at webview.js.org)
-  README.md   SYMLINK → ../README.md  (the root README is the Pages homepage)
-  api/        API reference markdown
-  guides/     How-to guides
-  getting-started/
-  platform/
-examples/     Runnable .mjs examples
-npm/          Per-platform NAPI binary packages
-scripts/      Build helpers
-lib/          Handwritten TypeScript public API augmentations and internal bridges
-dist/         Compiled CommonJS library and generated declarations
-__test__/     Node.js built-in test runner tests
-js-bindings.js / js-bindings.d.ts  Lower-level generated bindings
+```text
+apps/docs/             Static Next.js + Fumadocs site for webview.js.org
+  app/                 App Router routes and layouts
+  content/docs/        Markdown/MDX documentation source
+  public/CNAME          GitHub Pages custom domain
+  out/                 Static export output (generated)
+apps/examples/          Runnable .mjs examples and their assets
+packages/webview/       Published @webviewjs/webview package
+  src/                  Rust NAPI-RS bindings
+  lib/                  Handwritten TypeScript public API layer
+  cli/                  Shipped ESM webview/webviewjs CLI
+  scripts/              Build helpers
+  __test__/             Node.js built-in test runner tests
+  npm/                  Per-platform NAPI packages
+  js-bindings.js        Generated and tracked NAPI-RS bindings
+  js-bindings.d.ts      Generated and tracked NAPI-RS declarations
+.cargo/                 Root Cargo configuration
+.github/workflows/      Native CI, repository checks, and Pages deployment
+.husky/                 Root Git hooks
+assets/                 Repository-level project assets
+skills/                 WebviewJS skill content
 ```
 
 ## Tech stack
 
-| Layer                | Tool                             |
-| -------------------- | -------------------------------- |
-| Rust bindings        | NAPI-RS (`@napi-rs/cli`)         |
-| Package manager      | Bun (use `bun` for all JS tasks) |
-| JS runtime for tests | Node.js >= 24 (`node --test`)    |
-| Linter               | oxlint                           |
-| Formatter            | Prettier                         |
-| Rust formatter       | `cargo fmt`                      |
+| Layer                | Tool                          |
+| -------------------- | ----------------------------- |
+| Monorepo             | Bun workspaces + Turborepo    |
+| Rust bindings        | NAPI-RS (`@napi-rs/cli`)      |
+| Package manager      | Bun 1.3.14                    |
+| JS runtime for tests | Node.js >= 24 (`node --test`) |
+| Linter               | Root Oxlint                   |
+| Formatter            | Root Prettier                 |
+| Rust formatter       | `cargo fmt`                   |
 
 ## Common commands
 
+Run these from the repository root:
+
 ```bash
-bun install               # install JS deps
-bun run build             # release build (Rust + bindings)
-bun run build:debug       # debug build
-bun run test               # build the TypeScript library, then run tests
-bun run lint              # oxlint
-bun run format            # prettier + cargo fmt
-cargo check               # fast Rust type check
-cargo clippy              # Rust lints
+bun install
+bun run dev
+bun run build
+bun run test
+bun run lint
+bun run lint:fix
+bun run format
+bun run format:check
+bun run check
+bun run clippy
 ```
+
+To build the published package directly:
+
+```bash
+bun --filter @webviewjs/webview build
+```
+
+Run an example after building the package with `node apps/examples/simple.mjs`. To work on docs, use `bun --filter @webviewjs/docs dev` or `bun --filter @webviewjs/docs build`.
 
 ## Key conventions
 
-- Handwritten public library source belongs in lib/; tsc writes CommonJS and declarations to dist/.
+- Handwritten public library source belongs in `packages/webview/lib/`; TypeScript writes CommonJS and declarations to `packages/webview/dist/`.
 - Native NAPI classes remain the public runtime objects. TypeScript explicitly augments them with JS-only lifecycle, event, protocol, and IPC behavior.
-- Do not edit js-bindings.js or js-bindings.d.ts; NAPI-RS generates them from Rust source.
-- CLI files (`cli/*.mjs`) are plain ESM — no build step, shipped as-is.
-- Tests live in `__test__/` and use `node:test` (not Jest/Vitest/AVA).
-- Examples in `examples/` are standalone `.mjs` files; run them directly with `node examples/foo.mjs` after building.
+- Do not edit `packages/webview/js-bindings.js` or `packages/webview/js-bindings.d.ts`; NAPI-RS generates them from Rust source and both generated files are intentionally tracked.
+- CLI files in `packages/webview/cli/` are plain ESM and ship as-is.
+- Tests live in `packages/webview/__test__/` and use `node:test`, not Bun test, Jest, Vitest, or AVA.
+- Examples in `apps/examples/` import `@webviewjs/webview` through the Bun workspace dependency so they use the same package entry point as consumers.
+- Documentation lives in `apps/docs/content/docs/`. Its public routes start at the domain root, such as `/getting-started/installation` and `/api/application`.
+- Keep repository-level tools in the root package. Application and package dependencies belong to their respective workspaces.
 
 ## CLI (`webview --build`)
 
@@ -80,22 +97,25 @@ The `--resources` flag (JSON asset map) is **node-only** — it maps to the SEA 
 
 ## Docs / GitHub Pages
 
-- Site root: `docs/` → served at **webview.js.org**
-- `docs/README.md` is a **git symlink** to `../README.md` (the repo root README is the Pages homepage)
-- The symlink is stored in git as mode `120000`. On Windows it appears as a regular file in the working tree (Windows symlink limitation) — this is expected. It resolves correctly on the Linux Pages server.
-- Navigation links in `docs/` use paths relative to `docs/` (e.g. `./getting-started/installation.md`). Links in the root README use `./docs/`-prefixed paths for GitHub.com rendering.
-- To add a new guide: create `docs/guides/your-guide.md`, then add a row to the Guides table in the root `README.md`.
+- The Fumadocs site is in `apps/docs/` and exports to `apps/docs/out/`.
+- Documentation source is in `apps/docs/content/docs/`; the section order is controlled by its `meta.json` files.
+- The static site includes `apps/docs/public/CNAME` for **webview.js.org**, static Orama search, `/llms.txt`, `/llms-full.txt`, and per-page Markdown.
+- To add a guide, create it under `apps/docs/content/docs/guides/` and add it to `apps/docs/content/docs/guides/meta.json`.
+- Documentation routes use the domain root, for example `/guides/custom-protocols`.
 
 ## Adding a new CLI flag
 
-1. Add the option object to `options` in `cli/index.mjs`.
+1. Add the option object to `options` in `packages/webview/cli/index.mjs`.
 2. Destructure from `args.values` in the relevant branch.
-3. Pass it through to the appropriate `build*` function in `cli/build.mjs`.
-4. Update `docs/guides/building-executables.md` options table.
+3. Pass it through to the appropriate build function in `packages/webview/cli/build.mjs`.
+4. Update the options table in `apps/docs/content/docs/guides/building-executables.md`.
 
 ## Rust / NAPI notes
 
-- Bindings are declared in src/. After editing Rust, run bun run build to regenerate js-bindings.js / js-bindings.d.ts and compile lib/ into dist/.
-- Target list is in `package.json` under `napi.targets`.
-- Each target gets its own npm package under `npm/`.
-- The .node binary is loaded at runtime via NAPI-RS's platform detection in js-bindings.js.
+- Bindings are declared in `packages/webview/src/`. After editing Rust, build from the Webview package with `bun --filter @webviewjs/webview build` to regenerate `js-bindings.js` / `js-bindings.d.ts` and compile the TypeScript layer.
+- The NAPI target list is in `packages/webview/package.json` under `napi.targets`.
+- Each target gets its own package under `packages/webview/npm/`.
+- The crate manifest is `packages/webview/Cargo.toml`. There is no root Cargo workspace; root Rust commands should pass this manifest explicitly.
+- Native build outputs and Cargo's `target/` directory live under `packages/webview/`.
+- Native builds are platform-specific and are not cached by Turborepo.
+- Publishing the public package must run from `packages/webview/`, never from the private repository root.

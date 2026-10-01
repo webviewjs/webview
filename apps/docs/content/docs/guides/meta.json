@@ -1,0 +1,11 @@
+{
+  "title": "Guides",
+  "pages": [
+    "building-executables",
+    "custom-protocols",
+    "ipc-messaging",
+    "menus",
+    "multiple-windows",
+    "cookies-and-storage"
+  ]
+}

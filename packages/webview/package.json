@@ -1,0 +1,83 @@
+{
+  "name": "@webviewjs/webview",
+  "version": "0.4.7",
+  "bin": {
+    "webview": "./cli/index.mjs",
+    "webviewjs": "./cli/index.mjs"
+  },
+  "description": "Robust cross-platform webview library for Node.js written in Rust. It also works with deno and bun.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "repository": "git@github.com:webviewjs/webview.git",
+  "license": "MIT",
+  "type": "commonjs",
+  "keywords": [
+    "webview",
+    "node",
+    "rust",
+    "cross-platform",
+    "gui"
+  ],
+  "files": [
+    "cli",
+    "dist",
+    "js-bindings.js",
+    "js-bindings.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "napi": {
+    "binaryName": "webview",
+    "targets": [
+      "x86_64-pc-windows-msvc",
+      "i686-pc-windows-msvc",
+      "aarch64-pc-windows-msvc",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "i686-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "armv7-unknown-linux-gnueabihf",
+      "aarch64-linux-android",
+      "armv7-linux-androideabi",
+      "x86_64-unknown-freebsd"
+    ],
+    "constEnum": false
+  },
+  "engines": {
+    "node": ">= 24"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "run-s build:native build:lib",
+    "build:native": "node ./scripts/build.js --release",
+    "build:lib": "run-s build:lib:clean build:lib:tsc",
+    "build:lib:clean": "node ./scripts/clean-lib.js",
+    "build:lib:tsc": "tsc -p tsconfig.json",
+    "build:debug": "run-s build:native:debug build:lib",
+    "build:native:debug": "node ./scripts/build.js",
+    "clean": "napi clean && cargo clean",
+    "test": "run-s build:lib test:node",
+    "test:node": "node --test __test__/*.test.*",
+    "test:watch": "run-s build:lib test:watch:node",
+    "test:watch:node": "node --test --watch __test__/*.test.*",
+    "prepublishOnly": "run-s build prepublish:napi",
+    "prepublish:napi": "napi prepublish -t npm",
+    "version": "napi version",
+    "check": "cargo check",
+    "clippy": "cargo clippy -- -D warnings",
+    "docs": "cargo doc --no-deps --open",
+    "update": "bun update",
+    "setup": "bash ./scripts/install-linux-deps.sh"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.7.4",
+    "@types/node": "^26.1.1",
+    "npm-run-all2": "^7.0.2",
+    "typescript": "^5.9.3"
+  }
+}

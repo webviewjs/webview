@@ -17,21 +17,25 @@ on:
       - main
     tags-ignore:
       - '**'
-    paths-ignore:
-      - '**/*.md'
-      - LICENSE
-      - '**/*.gitignore'
-      - .editorconfig
-      - docs/**
+    paths:
+      - packages/webview/**
+      - bun.lock
+      - package.json
+      - turbo.json
+      - .cargo/**
+      - rustfmt.toml
+      - .github/workflows/CI.yml
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - '**/*.md'
-      - LICENSE
-      - '**/*.gitignore'
-      - .editorconfig
-      - docs/**
+    paths:
+      - packages/webview/**
+      - bun.lock
+      - package.json
+      - turbo.json
+      - .cargo/**
+      - rustfmt.toml
+      - .github/workflows/CI.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -211,7 +215,7 @@ jobs:
           path: |
             ~/.bun/install/cache
             node_modules
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb', '**/package-lock.json') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
@@ -229,7 +233,7 @@ jobs:
       - name: Cache Cargo build
         uses: actions/cache@v4
         with:
-          path: target/
+          path: packages/webview/target/
           key: ${{ matrix.settings.target }}-cargo-build-${{ github.sha }}
           restore-keys: |
             ${{ matrix.settings.target }}-cargo-build-
@@ -383,12 +387,13 @@ jobs:
       - name: Build
         run: ${{ matrix.settings.build_script || format('bun run build --target {0}', matrix.settings.target) }}
         shell: bash
+        working-directory: packages/webview
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: ${{ env.APP_NAME }}.*.node
+          path: packages/webview/${{ env.APP_NAME }}.*.node
           if-no-files-found: error
           retention-days: 7
 
@@ -430,13 +435,14 @@ jobs:
           node -v
           bun --version
           bun install --frozen-lockfile
+          cd packages/webview
           bun run build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: bindings-x86_64-unknown-freebsd
-          path: ${{ env.APP_NAME }}.*.node
+          path: packages/webview/${{ env.APP_NAME }}.*.node
           if-no-files-found: error
           retention-days: 7
 
@@ -470,14 +476,16 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: packages/webview/artifacts
 
       - name: Move artifacts
         run: bun run artifacts
+        working-directory: packages/webview
 
       - name: List packages
         run: ls -R ./npm
         shell: bash
+        working-directory: packages/webview
 
       - name: Extract version from commit message
         id: version
@@ -498,6 +506,7 @@ jobs:
         run: |
           npm config set provenance true
           npm publish --access public --tag ${{ steps.version.outputs.tag }}
+        working-directory: packages/webview
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

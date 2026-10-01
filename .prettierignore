@@ -1,5 +1,11 @@
-target
-.yarn
-js-bindings.js
-js-bindings.d.ts
-npm
+node_modules
+.turbo
+**/.next
+**/.source
+**/out
+**/dist
+packages/webview/target
+packages/webview/npm
+packages/webview/js-bindings.js
+packages/webview/js-bindings.d.ts
+*.node
