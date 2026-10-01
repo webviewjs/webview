@@ -1,6 +1,8 @@
-# WebviewJS documentation
+# WebviewJS documentation site
 
-The static Fumadocs site is built from `content/docs` and exports to `out/`.
+This workspace powers [webview.js.org](https://webview.js.org). The guides and
+API reference live in `apps/docs/content/docs`; the custom homepage lives in
+`apps/docs/app/(home)`.
 
 From the repository root, run:
 
@@ -10,6 +12,5 @@ bun --filter @webviewjs/docs dev
 bun --filter @webviewjs/docs build
 ```
 
-The app uses Fumadocs' generated static search index, `llms.txt`,
-`llms-full.txt`, and processed per-page Markdown routes. Its build also copies
-those Markdown pages to convenient `/<page>.md` files in the static export.
+The build exports the static site to `apps/docs/out/`, including search,
+`llms.txt`, `llms-full.txt`, and per-page Markdown aliases.

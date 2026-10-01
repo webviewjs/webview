@@ -99,10 +99,12 @@ The entry file is positional, for example `webview build src/main.ts`. Use `--as
 
 ## Adding a new CLI flag
 
-1. Add the option object to `options` in `packages/webview/cli/index.mjs`.
-2. Destructure from `args.values` in the relevant branch.
-3. Pass it through to the appropriate build function in `packages/webview/cli/build.mjs`.
+1. Add or update argument parsing in `packages/webview/lib/cli/args.ts`.
+2. Pass the parsed option to the relevant command or runtime implementation under `packages/webview/lib/cli/`.
+3. Update runtime-specific behavior in `packages/webview/lib/cli/runtimes/` when needed.
 4. Update the options table in `apps/docs/content/docs/guides/building-executables.md`.
+
+`packages/webview/cli/index.mjs` is the small permanent ESM npm-bin bootstrap. Do not put CLI implementation logic there.
 
 ## Rust / NAPI notes
 

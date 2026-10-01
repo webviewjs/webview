@@ -13,7 +13,7 @@ import type { Metadata } from 'next';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
 import { getPageImageUrl, getPageMarkdownUrl, gitConfig } from '@/lib/shared';
 
-type DocsPageProps = { params: Promise<{ slug?: string[] }> };
+type DocsPageProps = { params: Promise<{ slug: string[] }> };
 
 export default async function Page(props: DocsPageProps) {
   const params = await props.params;

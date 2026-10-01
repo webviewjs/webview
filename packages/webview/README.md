@@ -487,11 +487,9 @@ Check out [examples](https://github.com/webviewjs/webview/tree/main/apps/example
 
 - **[menu-system.mjs](https://github.com/webviewjs/webview/blob/main/apps/examples/menu-system.mjs)** - Comprehensive menu system demonstration with all features
 - **[window-menus.mjs](https://github.com/webviewjs/webview/blob/main/apps/examples/window-menus.mjs)** - Window-specific vs global menu examples
-- **[http/](https://github.com/webviewjs/webview/tree/main/apps/examples)** - Serving content from a web server to webview
+- **[http/](https://github.com/webviewjs/webview/tree/main/apps/examples/http)** - Serving content from a web server to webview
 - **[transparent.mjs](https://github.com/webviewjs/webview/blob/main/apps/examples/transparent.mjs)** - Transparent window example
 - **[close-example.mjs](https://github.com/webviewjs/webview/blob/main/apps/examples/close-example.mjs)** - Graceful application closing
-
-Run an example after building the package with: `node apps/examples/menu-system.mjs`.
 
 ## Building executables
 
@@ -529,50 +527,3 @@ npx skills add webviewjs/webview
 
 It covers application structure, native prerequisites, platform constraints,
 API patterns, and executable builds.
-
-## Development
-
-The published library is in `packages/webview`, runnable examples are in
-`apps/examples`, and the documentation website is in `apps/docs`.
-
-### Prerequisites
-
-- [Bun](https://bun.sh/) 1.3.14
-- [Rust](https://www.rust-lang.org/) stable toolchain
-- [Node.js](https://nodejs.org/) >= 24 (for testing)
-
-### Setup
-
-```bash
-bun install
-```
-
-### Build and run an example
-
-```bash
-bun --filter @webviewjs/webview build
-node apps/examples/simple.mjs
-```
-
-The native build requires the platform's Rust and GUI development dependencies.
-To build only the TypeScript layer, run `bun --filter @webviewjs/webview build:lib`.
-
-### Repository commands
-
-```bash
-bun run dev          # Start the documentation app
-bun run build        # Build the native package and static docs
-bun run test         # Run Node's built-in test runner
-bun run lint         # Run Oxlint across the repository
-bun run lint:fix
-bun run format       # Format JS/TS/MD and Rust source
-bun run format:check
-bun run check        # Cargo check and docs type check
-bun run clippy
-```
-
-The docs workspace can also be run on its own with `bun --filter @webviewjs/docs dev` or built with `bun --filter @webviewjs/docs build`.
-
-```
-
-```

@@ -6,8 +6,15 @@ import './global.css';
 export const metadata: Metadata = {
   metadataBase: new URL('https://webview.js.org'),
   title: {
-    default: 'WebviewJS',
+    default: 'WebviewJS | Native webviews for JavaScript',
     template: '%s | WebviewJS',
+  },
+  description:
+    'A typed N-API binding for creating native desktop windows with Node.js, Bun, or Deno and the webview provided by the operating system.',
+  openGraph: {
+    siteName: 'WebviewJS',
+    type: 'website',
+    locale: 'en_US',
   },
 };
 
