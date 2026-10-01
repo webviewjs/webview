@@ -1031,8 +1031,8 @@ impl Application {
   }
 
   /// Pump the tao event loop once without blocking. Returns `true` while
-  /// the app is alive, `false` when it should stop. Drive this from a JS
-  /// `setInterval` via the `run()` wrapper in `index.js`.
+  /// the app is alive, `false` when it should stop. Drive this from the
+  /// public JavaScript Application.run() wrapper.
   #[napi]
   pub fn pump_events(&mut self) -> bool {
     use tao::event::Event;

@@ -38,4 +38,4 @@ npm install
 npm run build   # compiles Rust and generates JS bindings
 ```
 
-The compiled native addon is placed in `<platform>-<arch>/` (e.g. `win32-x64-msvc/`) and `index.js` is updated automatically.
+The compiled native addon is placed in <platform>-<arch>/ (e.g. win32-x64-msvc/). The build also regenerates js-bindings.js and js-bindings.d.ts, then compiles the public TypeScript layer from lib/ into dist/.

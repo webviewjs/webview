@@ -2,47 +2,57 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
-import vm from 'node:vm';
 
-import webviewjs from '../index.js';
+const requireFromTest = createRequire(import.meta.url);
+const nativeBinding = requireFromTest('../js-bindings.js');
+const prototypeSignatures = new Map(
+  ['Application', 'BrowserWindow', 'Webview', 'WebContext', 'TrayIcon'].map((name) => [
+    name,
+    Object.getOwnPropertyDescriptors(nativeBinding[name].prototype),
+  ]),
+);
+const webviewjs = requireFromTest('../dist/index.js');
 
 const { Application, BrowserWindow, Notification, SerializationError, TrayIcon, WebContext, Webview } = webviewjs;
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
-const requireFromTest = createRequire(import.meta.url);
-
-async function loadWrapperForTest(nativeBinding) {
-  const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
-  const module = { exports: {} };
-  const context = vm.createContext({
-    Buffer,
-    clearInterval,
-    console,
-    module,
-    Promise,
-    require: (specifier) => (specifier === './js-bindings.js' ? nativeBinding : requireFromTest(specifier)),
-    setInterval,
-    setImmediate,
-  });
-
-  vm.runInContext(source.split('// Auto-generated exports by postbuild.js.')[0], context, {
-    filename: new URL('../index.js', import.meta.url).pathname,
-  });
-  return module.exports;
-}
 
 function protocolWindow() {
-  return {
+  let window;
+  const native = {
     completed: [],
     callbacks: new Map(),
+    preventCalls: 0,
+    disposed: false,
+    _onWindowEvent(callback) {
+      this.windowEventCallback = callback;
+    },
+    _preventClose() {
+      this.preventCalls += 1;
+      return true;
+    },
+    hide() {
+      this.hidden = true;
+    },
     _registerProtocol(_name, callback) {
       this.callbacks.set(_name, callback);
-      this.callback = callback;
+      window.callback = callback;
     },
     _completeProtocol(id, response) {
       this.completed.push([id, response]);
     },
+    isDisposed() {
+      return this.disposed;
+    },
+    dispose() {
+      this.disposed = true;
+    },
   };
+  window = BrowserWindow.fromNative(native);
+  for (const property of ['completed', 'callbacks', 'preventCalls', 'windowEventCallback', 'hidden']) {
+    Object.defineProperty(window, property, { get: () => native[property] });
+  }
+  return window;
 }
 
 function protocolRequest(id, overrides = {}) {
@@ -57,15 +67,21 @@ function protocolRequest(id, overrides = {}) {
 }
 
 function exposedWebview() {
-  return {
+  const native = {
     scripts: [],
+    disposed: false,
     isDisposed() {
-      return false;
+      return this.disposed;
+    },
+    dispose() {
+      this.disposed = true;
     },
     onIpcMessage(callback) {
       this.ipcCallback = callback;
     },
-    _exposeInternal(_name, _statics, _functions) {},
+    _exposeInternal(name, statics, functions) {
+      this.exposed = { name, statics, functions };
+    },
     emitExposeCall(call) {
       this.ipcCallback({
         body: Buffer.from(JSON.stringify({ __e: true, ...call })),
@@ -75,14 +91,51 @@ function exposedWebview() {
       this.scripts.push(script);
     },
   };
+  const webview = Webview.fromNative(native);
+  Object.defineProperties(webview, {
+    scripts: { get: () => native.scripts },
+    ipcCallback: { get: () => native.ipcCallback },
+    exposed: { get: () => native.exposed },
+    emitExposeCall: {
+      value: (call) => native.emitExposeCall(call),
+    },
+  });
+  return webview;
 }
 
 function eventApplication() {
-  return {
+  const native = {
+    ready: false,
     onEvent(callback) {
       this.applicationEventCallback = callback;
     },
+    isReady() {
+      return this.ready;
+    },
+    pumpEvents() {
+      return !this.exited;
+    },
+    exit() {
+      this.exited = true;
+    },
+    runSync() {},
+    createWebContext() {
+      throw new Error('not used in this test');
+    },
+    createTrayIcon() {
+      throw new Error('not used in this test');
+    },
+    createBrowserWindow() {
+      throw new Error('not used in this test');
+    },
+    createChildBrowserWindow() {
+      throw new Error('not used in this test');
+    },
+    setMenu() {},
   };
+  const app = Application.fromNative(native);
+  Object.defineProperty(app, 'applicationEventCallback', { get: () => native.applicationEventCallback });
+  return app;
 }
 
 test('Application dispatches native events through named EventEmitter events', () => {
@@ -116,12 +169,85 @@ test('Application EventEmitter methods are chainable and removable', () => {
   assert.equal(Application.prototype.listenerCount.call(app, 'window-close-requested'), 0);
 });
 
-test('BrowserWindow forwards stable native event names through one EventEmitter adapter', () => {
-  const window = {
-    _onWindowEvent(callback) {
-      this.windowEventCallback = callback;
-    },
+test('Application run is idempotent, respects ref, and stop clears its timer', () => {
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  const timers = [];
+  globalThis.setInterval = (callback, interval) => {
+    const timer = {
+      callback,
+      interval,
+      unrefCalls: 0,
+      cleared: false,
+      unref() {
+        this.unrefCalls += 1;
+      },
+    };
+    timers.push(timer);
+    return timer;
   };
+  globalThis.clearInterval = (timer) => {
+    timer.cleared = true;
+  };
+
+  try {
+    const app = eventApplication();
+    app.run({ interval: 24, ref: false });
+    app.run({ interval: 5, ref: true });
+    assert.equal(timers.length, 1);
+    assert.equal(timers[0].interval, 24);
+    assert.equal(timers[0].unrefCalls, 1);
+
+    app.stop();
+    app.stop();
+    assert.equal(timers[0].cleared, true);
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+  }
+});
+
+test('Application whenReady auto-runs with defaults and stops after native exit', async () => {
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  const timers = [];
+  globalThis.setInterval = (callback, interval) => {
+    const timer = {
+      callback,
+      interval,
+      unrefCalls: 0,
+      cleared: false,
+      unref() {
+        this.unrefCalls += 1;
+      },
+    };
+    timers.push(timer);
+    return timer;
+  };
+  globalThis.clearInterval = (timer) => {
+    timer.cleared = true;
+  };
+
+  try {
+    const app = eventApplication();
+    const ready = app.whenReady();
+    assert.equal(timers.length, 1);
+    assert.equal(timers[0].interval, 16);
+    assert.equal(timers[0].unrefCalls, 0);
+    app.applicationEventCallback({ event: 'ready' });
+    await ready;
+
+    app.exit();
+    timers[0].callback();
+    assert.equal(timers[0].cleared, true);
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+  }
+});
+
+test('BrowserWindow forwards stable native event names through one EventEmitter adapter', () => {
+  const window = protocolWindow();
   const received = [];
   const listener = (event) => received.push(event);
 
@@ -134,16 +260,7 @@ test('BrowserWindow forwards stable native event names through one EventEmitter 
 });
 
 test('BrowserWindow close events support synchronous cancellation', () => {
-  const window = {
-    preventCalls: 0,
-    _onWindowEvent(callback) {
-      this.windowEventCallback = callback;
-    },
-    _preventClose() {
-      this.preventCalls += 1;
-      return true;
-    },
-  };
+  const window = protocolWindow();
   const observed = [];
 
   BrowserWindow.prototype.on.call(window, 'close', (event) => {
@@ -160,16 +277,7 @@ test('BrowserWindow close events support synchronous cancellation', () => {
 });
 
 test('BrowserWindow close events remain compatible without preventDefault', () => {
-  const window = {
-    preventCalls: 0,
-    _onWindowEvent(callback) {
-      this.windowEventCallback = callback;
-    },
-    _preventClose() {
-      this.preventCalls += 1;
-      return true;
-    },
-  };
+  const window = protocolWindow();
   let received;
 
   BrowserWindow.prototype.on.call(window, 'close', (event) => {
@@ -184,16 +292,7 @@ test('BrowserWindow close events remain compatible without preventDefault', () =
 });
 
 test('BrowserWindow close cancellation follows listener ordering and resets', () => {
-  const window = {
-    preventCalls: 0,
-    _onWindowEvent(callback) {
-      this.windowEventCallback = callback;
-    },
-    _preventClose() {
-      this.preventCalls += 1;
-      return true;
-    },
-  };
+  const window = protocolWindow();
   const observed = [];
   let preventNext = true;
   let retained;
@@ -224,18 +323,7 @@ test('BrowserWindow close cancellation follows listener ordering and resets', ()
 });
 
 test('BrowserWindow close cancellation permits reentrant hide calls', () => {
-  const window = {
-    hidden: false,
-    _onWindowEvent(callback) {
-      this.windowEventCallback = callback;
-    },
-    _preventClose() {
-      return true;
-    },
-    hide() {
-      this.hidden = true;
-    },
-  };
+  const window = protocolWindow();
 
   BrowserWindow.prototype.on.call(window, 'close', (event) => {
     event.preventDefault();
@@ -246,12 +334,33 @@ test('BrowserWindow close cancellation permits reentrant hide calls', () => {
   assert.equal(window.hidden, true);
 });
 
+test('loading the public package leaves generated NAPI class prototypes untouched', () => {
+  for (const [name, descriptors] of prototypeSignatures) {
+    assert.deepEqual(Object.getOwnPropertyDescriptors(nativeBinding[name].prototype), descriptors, name);
+  }
+  assert.notEqual(BrowserWindow, nativeBinding.BrowserWindow);
+  assert.notEqual(Application, nativeBinding.Application);
+  assert.notEqual(Webview, nativeBinding.Webview);
+  assert.notEqual(WebContext, nativeBinding.WebContext);
+  assert.notEqual(TrayIcon, nativeBinding.TrayIcon);
+  assert.equal(webviewjs.JsWebview, Webview);
+  assert.equal(webviewjs.JsWebContext, WebContext);
+  assert.equal(webviewjs.JsTrayIcon, TrayIcon);
+  assert.equal(webviewjs.JsNotification, webviewjs.NativeNotification);
+});
+
 test('TrayIcon forwards native tray events through the shared EventEmitter adapter', () => {
-  const tray = {
+  const native = {
     _onTrayEvent(callback) {
       this.trayEventCallback = callback;
     },
+    isDisposed() {
+      return false;
+    },
+    dispose() {},
   };
+  const tray = TrayIcon.fromNative(native);
+  Object.defineProperty(tray, 'trayEventCallback', { get: () => native.trayEventCallback });
   const received = [];
 
   TrayIcon.prototype.once.call(tray, 'click', (event) => received.push(event));
@@ -311,97 +420,79 @@ test('Application whenReady rejects run options when autoRun is false', () => {
   assert.throws(() => Application.prototype.whenReady.call(app, { autoRun: false, ref: false }), /ref.*autoRun/i);
 });
 
+test('Application dispose exits the native application', () => {
+  const app = eventApplication();
+  app[Symbol.dispose]();
+  assert.equal(app.pumpEvents(), false);
+});
+
 test('createWebview forwards navigationHandler and uses its decision', async () => {
-  class MockApplication {
-    pumpEvents() {
-      return true;
-    }
-
-    exit() {}
-
-    onEvent() {}
-  }
-
-  class MockWebContext {
-    dispose() {}
-
-    isDisposed() {
-      return false;
-    }
-  }
-
-  class MockTrayIcon {
-    dispose() {}
-
-    isDisposed() {
-      return false;
-    }
-
-    _onTrayEvent() {}
-  }
-
-  class MockWebview {
-    dispose() {}
-
-    isDisposed() {
-      return false;
-    }
-
-    _exposeInternal() {}
-
-    evaluateScript() {}
-  }
-
-  class MockBrowserWindow {
-    dispose() {}
-
-    isDisposed() {
-      return false;
-    }
-
-    _onWindowEvent() {}
-
-    createWebview(_options, _webContext, eventHandler, navigationHandler) {
+  const creations = [];
+  const nativeWindow = {
+    isDisposed: () => false,
+    dispose() {},
+    _onWindowEvent() {},
+    createWebview(options, webContext, eventHandler, navigationHandler, newWindowHandler) {
       const url = 'app://blocked';
-      const creation = { eventHandler, navigationAllowed: navigationHandler?.(url) ?? true };
-      this.creations ??= [];
-      this.creations.push(creation);
-      return new MockWebview();
-    }
-  }
-
-  const wrappedBinding = await loadWrapperForTest({
-    Application: MockApplication,
-    BrowserWindow: MockBrowserWindow,
-    TrayIcon: MockTrayIcon,
-    WebContext: MockWebContext,
-    Webview: MockWebview,
-  });
-  const window = new wrappedBinding.BrowserWindow();
+      const creation = {
+        options,
+        webContext,
+        eventHandler,
+        newWindowHandler,
+        navigationAllowed: navigationHandler?.(url) ?? true,
+      };
+      creations.push(creation);
+      return {
+        dispose() {},
+        isDisposed: () => false,
+        onIpcMessage() {},
+        _exposeInternal() {},
+        evaluateScript() {},
+      };
+    },
+  };
+  const nativeContext = {
+    dataDirectory: '/profile',
+    isCustomProtocolRegistered: () => false,
+    setAllowsAutomation() {},
+    dispose() {},
+    isDisposed: () => false,
+  };
+  const context = WebContext.fromNative(nativeContext);
+  const window = BrowserWindow.fromNative(nativeWindow);
   const navigationUrls = [];
 
-  const firstWebview = wrappedBinding.BrowserWindow.prototype.createWebview.call(window, {
+  const firstWebview = window.createWebview({
+    url: 'app://first',
+    webContext: context,
     navigationHandler(url) {
       navigationUrls.push(url);
       return false;
     },
+    newWindowHandler: () => true,
   });
-  const secondWebview = wrappedBinding.BrowserWindow.prototype.createWebview.call(window, {
+  const secondWebview = window.createWebview({
+    url: 'app://second',
     navigationHandler() {
       return true;
     },
   });
 
   assert.deepEqual(navigationUrls, ['app://blocked']);
-  assert.equal(window.creations[0].navigationAllowed, false);
-  assert.equal(window.creations[1].navigationAllowed, true);
+  assert.equal(creations[0].navigationAllowed, false);
+  assert.equal(creations[1].navigationAllowed, true);
+  assert.equal(creations[0].webContext, nativeContext);
+  assert.deepEqual(creations[0].options, { url: 'app://first' });
+  assert.equal(typeof creations[0].newWindowHandler, 'function');
+  assert.equal(creations[0].newWindowHandler({ event: 'new-window', url: 'app://popup' }), true);
+  assert.equal(creations[1].webContext, null);
 
   const firstEvents = [];
   const secondEvents = [];
   firstWebview.on('navigation', (event) => firstEvents.push(event));
   secondWebview.on('navigation', (event) => secondEvents.push(event));
-  window.creations[0].eventHandler(null, { event: 'navigation', url: 'app://first' });
-  window.creations[1].eventHandler(null, { event: 'navigation', url: 'app://second' });
+  creations[0].eventHandler(null, { event: 'navigation', url: 'app://first' });
+  creations[1].eventHandler(null, { event: 'navigation', url: 'app://second' });
 
   assert.deepEqual(firstEvents, [{ event: 'navigation', url: 'app://first' }]);
   assert.deepEqual(secondEvents, [{ event: 'navigation', url: 'app://second' }]);
@@ -527,13 +618,13 @@ test('BrowserWindow delegates supported platform behavior to Tao and Muda', asyn
   const menuSource = await readFile(new URL('../src/menu.rs', import.meta.url), 'utf8');
   const typesSource = await readFile(new URL('../src/types.rs', import.meta.url), 'utf8');
 
-  assert.match(windowSource, /self\.window\.set_progress_bar\(/);
-  assert.match(windowSource, /self\.window\.monitor_from_point\(x, y\)/);
+  assert.match(windowSource, /self\.window\(\)\.set_progress_bar\(/);
+  assert.match(windowSource, /self\.window\(\)\.monitor_from_point\(x, y\)/);
   assert.match(windowSource, /WindowExtIOS/);
   assert.match(windowSource, /WindowBuilderExtIOS/);
   assert.match(windowSource, /pub fn get_wayland_surface/);
   assert.match(windowSource, /tao::rwh_06::\{HasWindowHandle, RawWindowHandle\}/);
-  assert.match(windowSource, /self\.window\.set_is_document_edited\(edited\)/);
+  assert.match(windowSource, /self\.window\(\)\.set_is_document_edited\(edited\)/);
   assert.doesNotMatch(windowSource, /tao::platform::(?:x11|wayland)/);
   assert.doesNotMatch(
     windowSource,
@@ -630,19 +721,17 @@ test('Notification exposes browser-compatible permission and EventEmitter APIs',
 test('native notifications are isolated and mobile-safe', async () => {
   const source = await readFile(new URL('../src/notifications.rs', import.meta.url), 'utf8');
   const library = await readFile(new URL('../src/lib.rs', import.meta.url), 'utf8');
-  const wrapper = await readFile(new URL('../index.js', import.meta.url), 'utf8');
-  const wrapperTypes = await readFile(new URL('../index.d.ts', import.meta.url), 'utf8');
+  const wrapper = await readFile(new URL('../lib/notification.ts', import.meta.url), 'utf8');
+  const wrapperTypes = await readFile(new URL('../lib/notification.ts', import.meta.url), 'utf8');
 
   assert.match(library, /pub mod notifications;/);
   assert.match(source, /notify_rust::Notification/);
   assert.match(source, /target_os = "android"/);
   assert.match(source, /target_os = "ios"/);
   assert.match(source, /NotificationEventPayload/);
-  assert.match(source, /callback\.unref\(&env\)/);
   assert.match(source, /windows_notifications_enabled/);
   assert.match(source, /Windows notifications are disabled in system settings/);
   assert.match(source, /NativeNotificationAction/);
-  assert.match(source, /if !options\.persistent/);
   assert.match(source, /notification\.action\(&action\.action, &action\.title\)/);
   assert.doesNotMatch(source, /\.action\("default", ""\)/);
   assert.match(source, /Some\(String::new\(\)\)/);
@@ -652,7 +741,52 @@ test('native notifications are isolated and mobile-safe', async () => {
   assert.match(wrapper, /Buffer\.isBuffer\(options\.image\)/);
   assert.match(wrapper, /imageData:/);
   assert.match(wrapperTypes, /image\?: string \| Buffer/);
-  assert.match(wrapper, /\(error, payload\) =>/);
+  assert.match(wrapper, /\(error: Error \| null, payload: NotificationEventPayload\) =>/);
+});
+
+test('Notification converts native events and supports EventEmitter plus DOM handlers', () => {
+  const bindingModule = requireFromTest('../dist/internal/native-binding.js');
+  const originalNativeNotification = bindingModule.nativeBinding.NativeNotification;
+  let nativeNotification;
+  class MockNativeNotification {
+    constructor(options, callback) {
+      this.options = options;
+      this.callback = callback;
+      nativeNotification = this;
+    }
+    close() {}
+  }
+  bindingModule.nativeBinding.NativeNotification = MockNativeNotification;
+
+  try {
+    const notification = new Notification('Title', {
+      image: Buffer.from('image'),
+      persistent: true,
+      actions: [{ action: 'open', title: 'Open' }],
+    });
+    const received = [];
+    notification.on('click', (event) => received.push(['emitter', event]));
+    notification.onclick = (event) => received.push(['dom', event]);
+    nativeNotification.callback(null, { event: 'click', action: 'open' });
+
+    assert.equal(nativeNotification.options.imageData.toString(), 'image');
+    assert.equal(nativeNotification.options.actions[0].action, 'open');
+    assert.equal(received.length, 2);
+    assert.equal(received[0][1], received[1][1]);
+    assert.equal(received[0][1].target, notification);
+    assert.equal(received[0][1].type, 'click');
+    assert.equal(received[0][1].action, 'open');
+
+    let nativeError;
+    notification.on('error', () => {});
+    notification.onerror = (event) => {
+      nativeError = event.error;
+    };
+    nativeNotification.callback(new Error('native failure'), undefined);
+    assert.equal(nativeError.message, 'native failure');
+  } finally {
+    bindingModule.nativeBinding.NativeNotification = originalNativeNotification;
+  }
 });
 
 test('root-created wrappers expose explicit disposal', () => {
@@ -681,10 +815,10 @@ test('README uses standard responses, EventEmitter events, and strong-reference 
 });
 
 test('webview event callback handles the ThreadsafeFunction error-first signature', async () => {
-  const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../lib/browser-window.ts', import.meta.url), 'utf8');
 
-  assert.match(source, /const eventHandler = function \(error, payload\)/);
-  assert.match(source, /if \(error\) throw error;/);
+  assert.match(source, /const eventHandler = \(error: Error \| null, payload: WebviewEventPayload\)/);
+  assert.match(source, /if \(error\) \{\s+throw error;/);
   assert.doesNotMatch(source, /_setPendingWebview(?:EventCallback|NavigationHandler)|_clearPendingWebviewHandlers/);
 });
 
@@ -692,7 +826,7 @@ test('created webviews receive callbacks directly instead of pending handlers', 
   const source = await readFile(new URL('../src/browser_window.rs', import.meta.url), 'utf8');
   const webviewSource = await readFile(new URL('../src/webview.rs', import.meta.url), 'utf8');
 
-  assert.match(source, /event_handler: Option<ThreadsafeFunction<WebviewEventPayload>>/);
+  assert.match(source, /event_handler: Option<WebviewEventThreadsafeFunction>/);
   assert.match(source, /navigation_handler: Option<FunctionRef<String, bool>>/);
   assert.doesNotMatch(source, /pending_webview_event_handler|pending_nav_handler|_setPendingWebview/);
 
@@ -708,7 +842,7 @@ test('generated declarations match the direct callback and transport plumbing', 
   const declarations = await readFile(new URL('../js-bindings.d.ts', import.meta.url), 'utf8');
 
   assert.match(declarations, /_registerProtocol\(name: string, handler: \(arg: ProtocolRequest\) => void\)/);
-  assert.match(declarations, /eventHandler\?: \(\(err: Error \| null, arg: WebviewEventPayload\) => any\)/);
+  assert.match(declarations, /eventHandler\?: WebviewEventThreadsafeFunction/);
   assert.match(declarations, /navigationHandler\?: \(\(arg: string\) => boolean\)/);
   assert.match(declarations, /_exposeInternal\(name: string, staticsJson: string, funcNames: Array<string>\)/);
   assert.doesNotMatch(declarations, /_setPendingWebview|_clearPendingWebview/);
@@ -745,6 +879,26 @@ test('registerProtocol completes an asynchronous handler response', async () => 
       },
     ],
   ]);
+});
+
+test('registerProtocol does not complete after its window is disposed', async () => {
+  const win = protocolWindow();
+  let finish;
+  win.registerProtocol(
+    'app',
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+
+  win.callback(protocolRequest(18));
+  await flush();
+  win.dispose();
+  finish({ body: Buffer.from('late') });
+  await flush();
+
+  assert.deepEqual(win.completed, []);
 });
 
 test('registerProtocol maps a rejected asynchronous handler to a text 500 response', async () => {
@@ -897,6 +1051,25 @@ test('expose rejects a duplicate namespace at registration time', () => {
   assert.throws(() => Webview.prototype.expose.call(webview, 'native', { second: true }), /already registered/);
 });
 
+test('expose validates identifiers and targets and keeps target this binding', async () => {
+  const webview = exposedWebview();
+  assert.throws(() => Webview.prototype.expose.call(webview, 'not-valid', {}), /identifier/);
+  assert.throws(() => Webview.prototype.expose.call(webview, 'native', null), /target/);
+
+  const target = {
+    prefix: 'hello ',
+    greet(name) {
+      return this.prefix + name;
+    },
+  };
+  Webview.prototype.expose.call(webview, 'native', target);
+  assert.deepEqual(JSON.parse(webview.exposed.statics), { prefix: 'hello ' });
+  assert.deepEqual(webview.exposed.functions, ['greet']);
+  webview.emitExposeCall({ ns: 'native', method: 'greet', id: 19, args: ['Ada'] });
+  await flush();
+  assert.match(webview.scripts.at(-1), /resolve\(19,"hello Ada"\)/);
+});
+
 test('expose resolves asynchronous Node functions in the page bridge', async () => {
   const webview = exposedWebview();
 
@@ -976,12 +1149,33 @@ test('expose still works after clearing a user IPC handler', async () => {
 });
 
 test('expose and IPC methods reject disposed webviews', () => {
-  const webview = {
+  const webview = Webview.fromNative({
     isDisposed: () => true,
-  };
+    dispose() {},
+    onIpcMessage() {},
+    _exposeInternal() {},
+    evaluateScript() {},
+  });
 
   assert.throws(() => Webview.prototype.expose.call(webview, 'native', {}), /disposed/);
   assert.throws(() => Webview.prototype.onIpcMessage.call(webview, () => {}), /disposed/);
+});
+
+test('expose ignores pending results after Webview disposal', async () => {
+  const webview = exposedWebview();
+  let finish;
+  Webview.prototype.expose.call(webview, 'native', {
+    pending: () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  });
+  webview.emitExposeCall({ ns: 'native', method: 'pending', id: 20, args: [] });
+  await flush();
+  webview.dispose();
+  finish('late');
+  await flush();
+  assert.deepEqual(webview.scripts, []);
 });
 
 test('expose sends a SerializationError name to the page for non-serializable results', async () => {

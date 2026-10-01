@@ -1,14 +1,17 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "strict": true,
+    "target": "ES2022",
     "module": "CommonJS",
+    "moduleResolution": "Node",
+    "rootDir": "./lib",
+    "outDir": "./dist",
+    "strict": true,
+    "declaration": true,
+    "sourceMap": true,
+    "skipLibCheck": true,
     "types": ["node"],
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
+    "lib": ["ES2022", "DOM"],
+    "stripInternal": true
   },
-  "include": ["."],
-  "exclude": ["node_modules", "bench", "__test__"]
+  "include": ["lib/**/*.ts"]
 }

@@ -1,3 +1,5 @@
 target
 .yarn
+js-bindings.js
+js-bindings.d.ts
 npm

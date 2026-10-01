@@ -1,8 +1,6 @@
 const { spawnSync } = require('node:child_process');
 const { dirname, join } = require('node:path');
 
-const postbuild = require('./postbuild');
-
 const cliPackageJson = require.resolve('@napi-rs/cli/package.json');
 const napiCli = join(dirname(cliPackageJson), 'dist', 'cli.js');
 const args = [
@@ -29,5 +27,3 @@ if (result.error) {
 if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
-
-postbuild();
