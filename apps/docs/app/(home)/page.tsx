@@ -1,17 +1,13 @@
 import type { Metadata } from 'next';
-import styles from '@/components/home/home-visuals.module.css';
-import { CapabilityBento } from '@/components/home/capability-bento';
-import { CodeShowcase } from '@/components/home/code-showcase';
-import { DocsLinks } from '@/components/home/docs-links';
-import { ExecutableBuilder } from '@/components/home/executable-builder';
+import { Executable } from '@/components/home/executable';
 import { Footer } from '@/components/home/footer';
 import { Hero } from '@/components/home/hero';
-import { NativeCapabilities } from '@/components/home/native-capabilities';
-import { RuntimeBridge } from '@/components/home/runtime-bridge';
+import { JavaScriptNative } from '@/components/home/javascript-native';
+import { SystemWebview } from '@/components/home/system-webview';
 
-const title = 'WebviewJS | Native webviews for JavaScript';
+const title = 'WebviewJS | Native webviews. JavaScript.';
 const description =
-  'Create desktop applications with JavaScript or TypeScript using Node.js, Bun, or Deno and the native webview provided by Windows, macOS, and Linux.';
+  'Create native desktop windows from JavaScript using the webview already provided by the operating system.';
 
 export const metadata: Metadata = {
   title: { absolute: title },
@@ -22,27 +18,22 @@ export const metadata: Metadata = {
     url: '/',
     siteName: 'WebviewJS',
     type: 'website',
-    images: [{ url: '/preview.png', alt: 'A WebviewJS native window showing a web application.' }],
   },
   twitter: {
     card: 'summary_large_image',
     title,
     description,
-    images: ['/preview.png'],
   },
 };
 
 export default function Page() {
   return (
-    <div className={`${styles.homeVisuals} webview-home`}>
+    <main>
       <Hero />
-      <RuntimeBridge />
-      <CapabilityBento />
-      <CodeShowcase />
-      <NativeCapabilities />
-      <ExecutableBuilder />
-      <DocsLinks />
+      <SystemWebview />
+      <JavaScriptNative />
+      <Executable />
       <Footer />
-    </div>
+    </main>
   );
 }

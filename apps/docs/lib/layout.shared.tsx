@@ -1,5 +1,5 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
-import { PanelsTopLeft } from 'lucide-react';
+import { WebviewLogo } from '@/components/home/webview-logo';
 import { appName, gitConfig } from './shared';
 
 export function baseOptions(): BaseLayoutProps {
@@ -7,9 +7,7 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       title: (
         <span className="wjs-wordmark">
-          <span aria-hidden="true" className="wjs-wordmark-glyph">
-            <PanelsTopLeft />
-          </span>
+          <WebviewLogo className="size-7" />
           <span>{appName}</span>
         </span>
       ),

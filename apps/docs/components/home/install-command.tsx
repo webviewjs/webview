@@ -3,49 +3,46 @@
 import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
 
-const command = 'npm install @webviewjs/webview';
+const command = 'npm i @webviewjs/webview';
 
 export function InstallCommand() {
   const [copied, setCopied] = useState(false);
-  const [status, setStatus] = useState('');
+  const [message, setMessage] = useState('');
 
   async function copyCommand() {
     try {
       await navigator.clipboard.writeText(command);
       setCopied(true);
-      setStatus('Install command copied to clipboard.');
+      setMessage('Install command copied.');
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       setCopied(false);
-      setStatus('Copy unavailable. Select the command to copy it.');
+      setMessage('Copy unavailable. Select the command to copy it.');
     }
   }
 
   return (
-    <div>
-      <div className="flex min-w-0 items-center gap-3 rounded-[10px] border border-[var(--wjs-border-strong)] bg-[var(--wjs-surface)] px-3.5 py-2.5 shadow-[0_5px_20px_rgb(0_0_0/0.07),inset_0_1px_0_rgb(255_255_255/0.04)]">
-        <span aria-hidden="true" className="select-none font-mono text-sm text-[var(--wjs-accent)]">
+    <div className="mt-7 max-w-[420px] sm:mt-8">
+      <div className="group flex min-w-0 items-center gap-3 border-b border-white/20 py-3 font-mono text-[12px] sm:text-[13px]">
+        <span aria-hidden="true" className="select-none text-[#c8152f]">
           $
         </span>
-        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[11px] text-[var(--wjs-text)] sm:text-xs">
-          {command}
-        </code>
+        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-white/75">{command}</code>
         <button
           type="button"
+          aria-label={copied ? 'Install command copied' : 'Copy install command'}
           onClick={copyCommand}
-          aria-label={copied ? 'Install command copied' : 'Copy npm install command'}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-transparent px-2 py-1.5 text-[11px] text-[var(--wjs-muted)] transition-colors hover:border-[var(--wjs-border)] hover:bg-[var(--wjs-bg-soft)] hover:text-[var(--wjs-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wjs-accent)]"
+          className="inline-flex size-8 shrink-0 items-center justify-center text-white/45 transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff2347]"
         >
           {copied ? (
-            <Check aria-hidden="true" className="size-3.5" />
+            <Check aria-hidden="true" className="size-4 text-[#ff2347]" />
           ) : (
-            <Copy aria-hidden="true" className="size-3.5" />
+            <Copy aria-hidden="true" className="size-4" />
           )}
-          <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
         </button>
       </div>
-      <p aria-live="polite" className="mt-1.5 min-h-4 text-[11px] text-[var(--wjs-subtle)]">
-        {status}
+      <p aria-live="polite" className="min-h-5 pt-1.5 text-[11px] text-white/45">
+        {message}
       </p>
     </div>
   );
