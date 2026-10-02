@@ -215,9 +215,16 @@ jobs:
           path: |
             ~/.bun/install/cache
             node_modules
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ runner.os == 'Windows' && 'hoisted-' || '' }}${{ hashFiles('bun.lock') }}
           restore-keys: |
             ${{ runner.os }}-bun-
+
+      # The Windows runner can retain an isolated .bun dependency tree whose
+      # package links fail with EPERM when the NAPI CLI loads its dependencies.
+      - name: Reset cached Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: if (Test-Path node_modules) { Remove-Item -LiteralPath node_modules -Recurse -Force }
 
       - name: Cache Cargo registry
         uses: actions/cache@v4
@@ -382,7 +389,12 @@ jobs:
           done
 
       - name: Install dependencies
+        if: runner.os != 'Windows'
         run: bun install --frozen-lockfile
+
+      - name: Install Windows dependencies with hoisted linker
+        if: runner.os == 'Windows'
+        run: bun install --frozen-lockfile --linker hoisted
 
       - name: Build
         run: ${{ matrix.settings.build_script || format('bun run build --target {0}', matrix.settings.target) }}
