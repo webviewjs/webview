@@ -587,9 +587,20 @@ jobs:
             exit 1
           fi
 
+      - name: Build package JavaScript and publish platform packages
+        if: needs.release-version.outputs.is_release == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          npm_config_provenance: 'true'
+        run: |
+          bun run build:lib
+          bun run prepublish:napi
+        working-directory: packages/webview
+
       - name: Publish to npm
         if: needs.release-version.outputs.is_release == 'true'
-        run: npm publish --provenance --access public --tag "${{ needs.release-version.outputs.tag }}"
+        run: npm publish --ignore-scripts --provenance --access public --tag "${{ needs.release-version.outputs.tag }}"
         working-directory: packages/webview
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -674,7 +685,7 @@ jobs:
             fi
 
             echo "Publishing ${package_name}@${VERSION} with npm tag ${TAG}."
-            npm publish --provenance --access public --tag "$TAG"
+            npm publish --ignore-scripts --provenance --access public --tag "$TAG"
           }
 
           cd "$STAGING_DIR"
