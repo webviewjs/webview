@@ -1652,14 +1652,6 @@ body:has(.home-layout) {
   color: #fff;
 }
 
-#nd-home-layout #nd-nav ul:first-of-type a[href*='buymemomo'] {
-  color: #ff7387;
-}
-
-#nd-home-layout #nd-nav ul:first-of-type a[href*='buymemomo']:hover {
-  color: #fff;
-}
-
 #nd-home-layout .wjs-wordmark {
   gap: 9px;
   font-size: 15px;
@@ -3047,5 +3039,96 @@ body:has(.home-layout) {
 @media (max-width: 360px) {
   .hero-install-panel .hero-install {
     font-size: 12px;
+  }
+}
+
+.hero-feature-strip {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  border-bottom: 1px solid rgb(255 255 255 / 0.09);
+  background: linear-gradient(180deg, #080809, #050506);
+}
+
+.hero-feature-list {
+  display: flex;
+  width: min(88%, 1220px);
+  min-height: 86px;
+  align-items: center;
+  justify-content: space-evenly;
+  gap: 12px;
+  margin: 0 auto;
+  padding: 12px 0;
+  list-style: none;
+}
+
+.hero-feature-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: rgb(245 245 245 / 0.86);
+  font-size: 14px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.hero-feature-item svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: #ff536d;
+  stroke-width: 1.8;
+}
+
+@media (max-width: 1023px) {
+  .hero-feature-list {
+    display: grid;
+    min-height: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 18px;
+    padding-block: 22px;
+  }
+}
+
+@media (max-width: 599px) {
+  .hero-feature-list {
+    width: calc(100% - 40px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-feature-item {
+    gap: 7px;
+    font-size: 13px;
+  }
+
+  .hero-feature-item svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media (min-width: 700px) {
+  .hero-title {
+    font-size: clamp(64px, 5.25vw, 76px);
+  }
+}
+
+@media (min-width: 700px) and (max-width: 1099px) {
+  .hero-title {
+    font-size: clamp(54px, 6vw, 62px);
+  }
+}
+
+@media (max-width: 699px) {
+  .hero-title {
+    font-size: clamp(52px, 12vw, 64px);
+  }
+}
+
+@media (max-width: 360px) {
+  .hero-title {
+    font-size: 50px;
   }
 }

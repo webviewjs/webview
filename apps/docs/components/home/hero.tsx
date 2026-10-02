@@ -11,17 +11,16 @@ export function Hero() {
         <div className="hero-copy">
           <p className="home-eyebrow">
             <span aria-hidden="true" />
-            Native desktop runtime
+            NATIVE DESKTOP RUNTIME
           </p>
           <h1 className="hero-title">
-            Native
+            Build native
             <br />
-            webviews.
-            <br />
-            JavaScript<span>.</span>
+            desktop apps<span>.</span>
           </h1>
           <p className="hero-lead">
-            Create native desktop windows backed by the webview already provided by the operating system.
+            Use the system webview on Windows, macOS, and Linux, with APIs for windows, menus, tray icons,
+            notifications, IPC, browser contexts, and custom protocols. Works with Node.js, Bun, and Deno.
           </p>
           <div className="hero-actions">
             <Link href="/getting-started/quick-start" className="home-button home-button-primary">

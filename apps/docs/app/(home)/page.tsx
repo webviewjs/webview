@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Executable } from '@/components/home/executable';
 import { Hero } from '@/components/home/hero';
+import { HeroFeatures } from '@/components/home/hero-features';
 import { JavaScriptNative } from '@/components/home/javascript-native';
 import { SystemWebview } from '@/components/home/system-webview';
 
@@ -29,6 +30,7 @@ export default function Page() {
   return (
     <main>
       <Hero />
+      <HeroFeatures />
       <SystemWebview />
       <JavaScriptNative />
       <Executable />
