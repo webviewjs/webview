@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 import { Application, Notification } from '@webviewjs/webview';
 
-const notificationImage = await readFile(new URL('../assets/preview.webp', import.meta.url));
+const notificationImage = await readFile(new URL('../../assets/preview.webp', import.meta.url));
 
 const app = new Application();
 const window = app.createBrowserWindow({
