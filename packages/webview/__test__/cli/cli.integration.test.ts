@@ -102,32 +102,26 @@ async function runStandalone(runtime) {
   }
 }
 
-test(
+test.skipIf(!addonAvailable)(
   'Node SEA embeds and loads WebviewJS without project node_modules',
-  { skip: !addonAvailable, timeout: 60_000 },
   async () => {
     await runStandalone('node');
   },
+  60_000,
 );
 
-test(
+test.skipIf(!addonAvailable || !runtimeAvailable('bun'))(
   'Bun standalone embeds and loads WebviewJS N-API addon when Bun is installed',
-  {
-    skip: !addonAvailable || !runtimeAvailable('bun'),
-    timeout: 60_000,
-  },
   async () => {
     await runStandalone('bun');
   },
+  60_000,
 );
 
-test(
+test.skipIf(!addonAvailable || !runtimeAvailable('deno'))(
   'Deno self-extracting executable embeds and loads WebviewJS N-API addon when Deno is installed',
-  {
-    skip: !addonAvailable || !runtimeAvailable('deno'),
-    timeout: 60_000,
-  },
   async () => {
     await runStandalone('deno');
   },
+  60_000,
 );
