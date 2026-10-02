@@ -20,11 +20,20 @@ export const metadata: Metadata = {
     url: '/',
     siteName: 'WebviewJS',
     type: 'website',
+    images: [
+      {
+        url: '/og/home/image.png',
+        width: 1200,
+        height: 630,
+        alt: 'WebviewJS — native desktop apps for JavaScript',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title,
     description,
+    images: ['/og/home/image.png'],
   },
 };
 

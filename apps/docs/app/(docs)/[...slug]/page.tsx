@@ -55,11 +55,26 @@ export async function generateMetadata(props: DocsPageProps): Promise<Metadata> 
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
+  const imageUrl = getPageImageUrl(page).url;
+
   return {
     title: page.data.title,
     description: page.data.description,
     openGraph: {
-      images: getPageImageUrl(page).url,
+      images: [
+        {
+          url: imageUrl,
+          width: 1200,
+          height: 630,
+          alt: `${page.data.title} — WebviewJS documentation`,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: page.data.title,
+      description: page.data.description,
+      images: [imageUrl],
     },
   };
 }
