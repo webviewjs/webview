@@ -2,6 +2,7 @@
   "name": "create-webview",
   "version": "0.0.0",
   "description": "Create a WebviewJS desktop application.",
+  "homepage": "https://webview.js.org",
   "type": "module",
   "bin": {
     "create-webview": "./dist/index.js",

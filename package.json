@@ -1,5 +1,6 @@
 {
   "name": "webviewjs",
+  "homepage": "https://webview.js.org",
   "private": true,
   "packageManager": "bun@1.4.2",
   "workspaces": [

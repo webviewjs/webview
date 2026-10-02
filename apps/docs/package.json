@@ -1,5 +1,6 @@
 {
   "name": "@webviewjs/docs",
+  "homepage": "https://webview.js.org",
   "private": true,
   "scripts": {
     "build": "next build && node ./scripts/export-markdown-aliases.mjs",

@@ -1,5 +1,6 @@
 {
   "name": "@webviewjs/examples",
+  "homepage": "https://webview.js.org",
   "private": true,
   "type": "module",
   "scripts": {
