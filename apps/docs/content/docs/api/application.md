@@ -124,7 +124,7 @@ The usual `on`, `once`, `off`, `addListener`, `removeListener`,
 `eventNames` methods are available. Listener-registration and removal methods
 are chainable.
 
-See the runnable [application events example](https://github.com/webviewjs/webview/blob/main/apps/examples/application-events.mjs).
+See the runnable [application events example](https://github.com/webviewjs/webview/blob/main/apps/examples/application-events.ts).
 
 ### Legacy `onEvent(handler)` / `bind(handler)`
 

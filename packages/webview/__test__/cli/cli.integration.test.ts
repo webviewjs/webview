@@ -1,4 +1,3 @@
-import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
   copyFileSync,
@@ -12,7 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { test } from 'node:test';
+import { expect, test } from 'bun:test';
 import {
   buildExecutable,
   getHostPlatform,
@@ -20,11 +19,16 @@ import {
   nativePackageName,
   parseRuntimeTarget,
   resolveNativeAddon,
-} from '../dist/cli/index.js';
+} from '../../dist/cli/index.js';
 
-const packageRoot = join(import.meta.dirname, '..');
+const packageRoot = join(import.meta.dirname, '..', '..');
 const fixture = join(import.meta.dirname, 'fixtures/executable-version.mjs');
 const hostTarget = parseRuntimeTarget('node', undefined, getHostPlatform());
+
+function executableOnPath(command: string): string {
+  const result = spawnSync(command, ['-p', 'process.execPath'], { encoding: 'utf8' });
+  return result.status === 0 ? result.stdout.trim() : command;
+}
 
 function runtimeAvailable(command) {
   const result = spawnSync(command, ['--version'], { encoding: 'utf8' });
@@ -70,35 +74,44 @@ async function runStandalone(runtime) {
     mkdirSync(outputDirectory, { recursive: true });
     const result = await buildExecutable(
       { runtime, input, cwd: projectRoot, outDir: outputDirectory, name: `webview-${runtime}` },
-      { packageRoot, logger: { info() {}, success() {}, warn() {}, error() {} } },
+      {
+        packageRoot,
+        nodeExecutable: runtime === 'node' ? executableOnPath('node') : undefined,
+        logger: { info() {}, success() {}, warn() {}, error() {} },
+      },
     );
     const isolatedDirectory = join(directory, 'isolated application');
     mkdirSync(isolatedDirectory);
     const isolatedExecutable = join(isolatedDirectory, basename(result.output));
     renameSync(result.output, isolatedExecutable);
     rmSync(join(projectRoot, 'node_modules'), { recursive: true, force: true });
-    assert.ok(existsSync(isolatedExecutable));
+    expect(existsSync(isolatedExecutable)).toBeTruthy();
     const executed = spawnSync(isolatedExecutable, [], {
       cwd: isolatedDirectory,
       encoding: 'utf8',
       env: { ...process.env, NODE_PATH: '' },
       timeout: 120_000,
     });
-    assert.equal(executed.status, 0, executed.stderr || executed.error?.message);
-    assert.match(executed.stdout.trim(), /\d+\.\d+\.\d+/u);
+    expect(executed.status).toBe(0);
+    expect(executed.stdout.trim()).toMatch(/\d+\.\d+\.\d+/u);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 }
 
-test('Node SEA embeds and loads WebviewJS without project node_modules', { skip: !addonAvailable }, async () => {
-  await runStandalone('node');
-});
+test(
+  'Node SEA embeds and loads WebviewJS without project node_modules',
+  { skip: !addonAvailable, timeout: 60_000 },
+  async () => {
+    await runStandalone('node');
+  },
+);
 
 test(
   'Bun standalone embeds and loads WebviewJS N-API addon when Bun is installed',
   {
     skip: !addonAvailable || !runtimeAvailable('bun'),
+    timeout: 60_000,
   },
   async () => {
     await runStandalone('bun');
@@ -109,6 +122,7 @@ test(
   'Deno self-extracting executable embeds and loads WebviewJS N-API addon when Deno is installed',
   {
     skip: !addonAvailable || !runtimeAvailable('deno'),
+    timeout: 60_000,
   },
   async () => {
     await runStandalone('deno');

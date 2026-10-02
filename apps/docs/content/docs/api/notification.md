@@ -166,4 +166,4 @@ native close operation on backends where notify-rust does not expose one.
 Android and iOS expose the JavaScript API but do not display a notification or
 emit native lifecycle events.
 
-See the runnable [notification example](https://github.com/webviewjs/webview/blob/main/apps/examples/notification.mjs).
+See the runnable [notification example](https://github.com/webviewjs/webview/blob/main/apps/examples/notification.ts).

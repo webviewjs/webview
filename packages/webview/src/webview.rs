@@ -72,6 +72,14 @@ fn call_new_window_handler(
     .unwrap_or(true)
 }
 
+fn new_window_response(navigation_allowed: bool, request_allowed: bool) -> NewWindowResponse {
+  if navigation_allowed && request_allowed {
+    NewWindowResponse::Allow
+  } else {
+    NewWindowResponse::Deny
+  }
+}
+
 pub(crate) fn protocol_error_response(
   message: &str,
 ) -> wry::http::Response<std::borrow::Cow<'static, [u8]>> {
@@ -445,11 +453,7 @@ impl JsWebview {
 
             let navigation_allowed = call_bool_handler(&nav_rc, env_c, url);
             let new_window_allowed = call_new_window_handler(&new_window_rc, env_c, event);
-            if navigation_allowed && new_window_allowed {
-              NewWindowResponse::Allow
-            } else {
-              NewWindowResponse::Deny
-            }
+            new_window_response(navigation_allowed, new_window_allowed)
           },
         );
       }
@@ -1054,4 +1058,22 @@ fn js_to_cookie(c: &WebviewCookie) -> wry::cookie::Cookie<'static> {
     builder = builder.same_site(same_site);
   }
   builder.build()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{new_window_response, NewWindowResponse};
+
+  #[test]
+  fn new_window_requires_both_navigation_and_popup_handlers_to_allow() {
+    for (navigation_allowed, request_allowed, should_allow) in [
+      (true, true, true),
+      (true, false, false),
+      (false, true, false),
+      (false, false, false),
+    ] {
+      let response = new_window_response(navigation_allowed, request_allowed);
+      assert_eq!(matches!(response, NewWindowResponse::Allow), should_allow);
+    }
+  }
 }

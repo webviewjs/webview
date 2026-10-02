@@ -4,13 +4,18 @@ import { fileURLToPath } from 'node:url';
 
 import { Application } from '@webviewjs/webview';
 
-const directory = fileURLToPath(new URL('./assets/expose/', import.meta.url));
+const directory = fileURLToPath(new URL('./assets/custom-protocol/', import.meta.url));
 const root = resolve(directory);
-const mimeTypes = {
+const mimeTypes: Record<string, string> = {
+  '.css': 'text/css',
   '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
 };
+
 const app = new Application();
-const window = app.createBrowserWindow({ title: 'Expose Example' });
+const window = app.createBrowserWindow({ title: 'Custom Protocol Example' });
 
 window.registerProtocol('app', async (request) => {
   const url = new URL(request.url);
@@ -40,15 +45,6 @@ window.registerProtocol('app', async (request) => {
   }
 });
 
-const webview = window.createWebview({
-  url: 'app://localhost/index.html',
-  ipcName: 'bindings',
-});
-
-webview.expose('native', {
-  isCool: true,
-  version: '0.1.4',
-  readExample: async () => readFile(resolve(root, 'index.html'), 'utf8'),
-});
-
+const webview = window.createWebview({ url: 'app://localhost/index.html' });
+webview.openDevtools();
 app.run();

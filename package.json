@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "test": "turbo run test",
+    "test": "turbo run test && bun --filter @webviewjs/examples check",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "format": "prettier --write . && cargo fmt --manifest-path packages/webview/Cargo.toml",

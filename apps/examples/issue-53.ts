@@ -3,26 +3,26 @@
 // Tray app pattern: an invisible anchor window keeps the app alive, and the
 // visible window is meant to hide on close and come back from the tray.
 //
-// Run: node repro-close-quit.mjs        (xdotool is used to press the WM close
+// Run: bun apps/examples/issue-53.ts        (xdotool is used to press the WM close
 //                                        button; close it by hand if missing)
-import { Application } from '@webviewjs/webview';
+import { Application, type BrowserWindow, type WebContext } from '@webviewjs/webview';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const log = (...a) => console.log(`[${new Date().toISOString().slice(11, 23)}]`, ...a);
-const step = (name, fn) => {
+const log = (...a: unknown[]) => console.log(`[${new Date().toISOString().slice(11, 23)}]`, ...a);
+const step = (name: string, fn: () => unknown) => {
   try {
     const r = fn();
     log(`OK   ${name}`, r === undefined ? '' : `-> ${r}`);
     return r;
-  } catch (e) {
-    log(`FAIL ${name}: ${e?.message ?? e}`);
+  } catch (error) {
+    log(`FAIL ${name}: ${error instanceof Error ? error.message : error}`);
   }
 };
 
-process.on('uncaughtException', (e) => log('uncaughtException:', e?.stack ?? e));
+process.on('uncaughtException', (error) => log('uncaughtException:', error.stack ?? error));
 
 const PAGE = "<body style='background:#c33;font:700 40px sans-serif'>PAINTED</body>";
 const PROFILE = mkdtempSync(join(tmpdir(), 'webview-repro-'));
@@ -40,31 +40,38 @@ const icon = Buffer.from(
 );
 app.createTrayIcon({ icon: { data: icon }, tooltip: 'repro', menu: { items: [{ id: 'quit', label: 'Quit' }] } });
 
-let win = null;
-let webContext = null;
+let win: BrowserWindow | null = null;
+let webContext: WebContext | null = null;
 let reuseContext = true; // second pass flips this to show the difference
 
 function openWindow() {
-  win = app.createBrowserWindow({ title: 'repro-close-quit', width: 420, height: 300 });
+  const currentWindow = app.createBrowserWindow({ title: 'repro-close-quit', width: 420, height: 300 });
+  win = currentWindow;
   // Intended "hide instead of destroy" behaviour. Never fires on Linux.
-  win.on('close', (event) => {
+  currentWindow.on('close', (event) => {
     log('close event');
 
     event.preventDefault();
 
-    step('close event -> win.hide()', () => win.hide());
+    step('close event -> win.hide()', () => currentWindow.hide());
   });
 
-  if (!webContext || !reuseContext) {
-    webContext = app.createWebContext({ dataDirectory: PROFILE });
+  let currentContext = webContext;
+  if (!currentContext || !reuseContext) {
+    currentContext = app.createWebContext({ dataDirectory: PROFILE });
+    webContext = currentContext;
   }
-  if (!webContext.isCustomProtocolRegistered('app')) {
-    win.registerProtocol('app', async () => {
+  if (!currentContext.isCustomProtocolRegistered('app')) {
+    currentWindow.registerProtocol('app', async () => {
       log('protocol handler called');
       return new Response(PAGE, { headers: { 'Content-Type': 'text/html' } });
     });
   }
-  const wv = win.createWebview({ url: 'app://localhost/index.html', webContext, enableDevtools: false });
+  const wv = currentWindow.createWebview({
+    url: 'app://localhost/index.html',
+    webContext: currentContext,
+    enableDevtools: false,
+  });
   wv.on('page-load-finished', (e) => log('page-load-finished', e.url));
   log('window created');
 }
@@ -86,9 +93,9 @@ setTimeout(() => {
 
 setTimeout(() => {
   log('--- 2. the JS handle after the WM close ---');
-  step('win.isDisposed()', () => win.isDisposed());
-  step('win.isVisible()', () => win.isVisible());
-  step('win.show()', () => win.show());
+  step('win.isDisposed()', () => win?.isDisposed());
+  step('win.isVisible()', () => win?.isVisible());
+  step('win.show()', () => win?.show());
 }, 5000);
 
 setTimeout(() => {

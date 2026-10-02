@@ -58,7 +58,7 @@ Navigation events include `target: 'current'`; new-window events include
 `target: 'new-window'`. This identifies the requested browsing context. Wry
 does not expose the original HTML `target` attribute value.
 
-See the runnable [navigation handler example](https://github.com/webviewjs/webview/blob/main/apps/examples/navigation-handler.mjs).
+See the runnable [navigation handler example](https://github.com/webviewjs/webview/blob/main/apps/examples/navigation-handler.ts).
 
 ## Events
 
@@ -80,7 +80,7 @@ The `new-window` event observes attempts from `window.open`,
 asynchronously, so use `newWindowHandler` or `navigationHandler` to cancel a
 request. Download events are observational and do not cancel downloads.
 
-See the runnable [webview events example](https://github.com/webviewjs/webview/blob/main/apps/examples/webview-events.mjs).
+See the runnable [webview events example](https://github.com/webviewjs/webview/blob/main/apps/examples/webview-events.ts).
 
 `HeaderData`:
 
@@ -193,7 +193,7 @@ const text = await window.native.readFile('/tmp/example.txt');
 
 Only enumerable own data properties are exposed. Getters and setters are ignored. Arguments, static values, and function results must be JSON-serializable. Cyclic structures, `BigInt`, functions as values, and `undefined` results are rejected with `SerializationError`.
 
-The namespace must be a valid JavaScript identifier and can be exposed only once for a webview. See the runnable [expose example](https://github.com/webviewjs/webview/blob/main/apps/examples/expose.mjs).
+The namespace must be a valid JavaScript identifier and can be exposed only once for a webview. See the runnable [expose example](https://github.com/webviewjs/webview/blob/main/apps/examples/expose.ts).
 
 ## Custom protocols
 

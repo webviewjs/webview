@@ -86,6 +86,8 @@ window.on('close', (event) => {
 });
 
 app.on('custom-menu-click', ({ customMenuEvent }) => {
+  if (!customMenuEvent) return;
+
   console.log('menu:', customMenuEvent.id);
 
   switch (customMenuEvent.id) {

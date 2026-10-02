@@ -1,4 +1,4 @@
-//node --expose-gc .\apps\examples\windows-leak.mjs 2>&1 | Tee-Object -FilePath ./apps/examples/windows-leak.txt
+// node --expose-gc apps/examples/windows-leak.ts 2>&1 | Tee-Object -FilePath ./apps/examples/windows-leak.txt
 import { execFileSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Application } from '@webviewjs/webview';
@@ -6,6 +6,7 @@ import { Application } from '@webviewjs/webview';
 if (!global.gc) {
   throw new Error('Run with node --expose-gc');
 }
+const forceGc = global.gc;
 
 function handleCount() {
   try {
@@ -24,7 +25,7 @@ function handleCount() {
   }
 }
 
-function snapshot(label) {
+function snapshot(label: string) {
   const m = process.memoryUsage();
 
   console.log(label, {
@@ -37,7 +38,7 @@ function snapshot(label) {
 
 async function gc() {
   for (let i = 0; i < 5; i++) {
-    global.gc();
+    forceGc();
     await sleep(100);
   }
 }
@@ -64,7 +65,7 @@ const _anchor = app.createBrowserWindow({
 
 snapshot('after anchor');
 
-async function cycle(index, count = 25) {
+async function cycle(index: string | number, count = 25) {
   console.log(`\n=== cycle ${index} ===`);
 
   const windows = [];

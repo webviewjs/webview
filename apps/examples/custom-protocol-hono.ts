@@ -4,7 +4,7 @@ import { Application } from '@webviewjs/webview';
 
 const router = new Hono();
 
-function escapeHtml(value) {
+function escapeHtml(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 }
 
@@ -19,7 +19,7 @@ router.get('/*', (context) => {
           .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
           .join(' / ');
   const safePageName = escapeHtml(pageName);
-  const current = (path) => (path === pathname ? ' aria-current="page"' : '');
+  const current = (path: string) => (path === pathname ? ' aria-current="page"' : '');
   const navigation = `
       <a href="/"${current('/')}>Home</a>
       <a href="/about"${current('/about')}>About</a>

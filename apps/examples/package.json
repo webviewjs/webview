@@ -1,9 +1,17 @@
 {
   "name": "@webviewjs/examples",
   "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
   "dependencies": {
     "@webviewjs/webview": "workspace:*",
     "hono": "^4.12.32",
     "nodeia": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.3"
   }
 }

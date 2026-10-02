@@ -1,10 +1,9 @@
-import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { test } from 'node:test';
+import { expect, test } from 'bun:test';
 import {
   bootstrapCLI,
   buildExecutable,
@@ -18,10 +17,10 @@ import {
   processRunner,
   resolveNativeAddon,
   resolvePostjectCli,
-} from '../dist/cli/index.js';
-import { NodeRuntimeBuilder } from '../dist/cli/runtimes/node.js';
+} from '../../dist/cli/index.js';
+import { NodeRuntimeBuilder } from '../../dist/cli/runtimes/node.js';
 
-const packageRoot = join(import.meta.dirname, '..');
+const packageRoot = join(import.meta.dirname, '..', '..');
 
 async function withTempDirectory(callback) {
   const directory = await mkdtemp(join(tmpdir(), 'webview-cli-test-'));
@@ -43,41 +42,38 @@ async function makeProject(directory, packageName = '@acme/my-app') {
 }
 
 test('CommonJS CLI output exposes named bootstrapCLI and the actual bin shim runs', async () => {
-  assert.equal(typeof bootstrapCLI, 'function');
+  expect(typeof bootstrapCLI).toBe('function');
   const shim = join(packageRoot, 'cli/index.mjs');
   const result = spawnSync(process.execPath, [shim, '--version'], { encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /WebviewJS v0\.4\.7/u);
+  expect(result.status).toBe(0);
+  expect(result.stdout).toMatch(/WebviewJS v0\.4\.7/u);
 });
 
 test('argument parsing uses positional input, Node default, package name and dist output', async () => {
   await withTempDirectory(async (directory) => {
     const { project, input } = await makeProject(directory);
     const parsed = parseCLIArguments(['build', input], project);
-    assert.equal(parsed.kind, 'build');
+    expect(parsed.kind).toBe('build');
     if (parsed.kind !== 'build') return;
-    assert.equal(parsed.options.runtime, 'node');
-    assert.equal(parsed.options.input, input);
-    assert.equal(parsed.options.outDir, join(project, 'dist'));
-    assert.equal(parsed.options.name, 'my-app');
-    assert.equal(parsed.deprecated, false);
+    expect(parsed.options.runtime).toBe('node');
+    expect(parsed.options.input).toBe(input);
+    expect(parsed.options.outDir).toBe(join(project, 'dist'));
+    expect(parsed.options.name).toBe('my-app');
+    expect(parsed.deprecated).toBe(false);
   });
 });
 
 test('argument parsing validates runtime and runtime-specific targets', async () => {
   await withTempDirectory(async (directory) => {
     const { project, input } = await makeProject(directory);
-    assert.throws(() => parseCLIArguments(['build', input, '--runtime', 'nodejs'], project), /Unknown runtime/u);
-    assert.throws(
-      () => parseCLIArguments(['build', input, '--runtime', 'bun', '--target', 'bun-linux-x64-musl'], project),
-      /does not publish musl native addons/u,
-    );
-    assert.throws(
-      () => parseCLIArguments(['build', input, '--runtime', 'bun', '--target', 'bun-windows-ia32'], project),
-      /Unsupported bun target/u,
-    );
-    assert.throws(
-      () => parseCLIArguments(['build', input, '--runtime', 'node', '--target', 'darwin-arm64'], project),
+    expect(() => parseCLIArguments(['build', input, '--runtime', 'nodejs'], project)).toThrow(/Unknown runtime/u);
+    expect(() =>
+      parseCLIArguments(['build', input, '--runtime', 'bun', '--target', 'bun-linux-x64-musl'], project),
+    ).toThrow(/does not publish musl native addons/u);
+    expect(() =>
+      parseCLIArguments(['build', input, '--runtime', 'bun', '--target', 'bun-windows-ia32'], project),
+    ).toThrow(/Unsupported bun target/u);
+    expect(() => parseCLIArguments(['build', input, '--runtime', 'node', '--target', 'darwin-arm64'], project)).toThrow(
       /cannot cross-compile/u,
     );
   });
@@ -94,21 +90,19 @@ test('legacy --build --input normalizes to build and resources JSON joins the as
       ['--build', '--input', input, '--resources', join(resourceDirectory, 'map.json'), '--name', 'my_app.v2'],
       project,
     );
-    assert.equal(parsed.kind, 'build');
+    expect(parsed.kind).toBe('build');
     if (parsed.kind !== 'build') return;
-    assert.equal(parsed.deprecated, true);
-    assert.equal(parsed.options.name, 'my_app.v2');
-    assert.deepEqual(parsed.options.assets, [
+    expect(parsed.deprecated).toBe(true);
+    expect(parsed.options.name).toBe('my_app.v2');
+    expect(parsed.options.assets).toEqual([
       { key: 'custom-config', path: join(resourceDirectory, 'config file.json') },
     ]);
-    assert.throws(
-      () =>
-        parseCLIArguments(
-          ['build', input, '--runtime', 'bun', '--resources', join(resourceDirectory, 'map.json')],
-          project,
-        ),
-      /Node SEA compatibility option/u,
-    );
+    expect(() =>
+      parseCLIArguments(
+        ['build', input, '--runtime', 'bun', '--resources', join(resourceDirectory, 'map.json')],
+        project,
+      ),
+    ).toThrow(/Node SEA compatibility option/u);
   });
 });
 
@@ -118,34 +112,31 @@ test('asset flags support paths with spaces and resource maps report invalid JSO
     const asset = join(project, 'an asset.txt');
     await writeFile(asset, 'hello');
     const parsed = parseCLIArguments(['build', input, '--asset', asset], project);
-    assert.equal(parsed.kind, 'build');
-    if (parsed.kind === 'build') assert.deepEqual(parsed.options.assets, [{ key: 'an asset.txt', path: asset }]);
+    expect(parsed.kind).toBe('build');
+    if (parsed.kind === 'build') expect(parsed.options.assets).toEqual([{ key: 'an asset.txt', path: asset }]);
 
     const malformed = join(project, 'assets.json');
     await writeFile(malformed, '{nope');
-    assert.throws(
-      () => parseCLIArguments(['build', input, '--resources', malformed], project),
+    expect(() => parseCLIArguments(['build', input, '--resources', malformed], project)).toThrow(
       /parse resources JSON/u,
     );
   });
 });
 
 test('executable names preserve sensible punctuation and reject path separators', () => {
-  assert.equal(normalizeExecutableName('my-app', '/tmp', 'src/main.js'), 'my-app');
-  assert.equal(normalizeExecutableName('foo_bar', '/tmp', 'src/main.js'), 'foo_bar');
-  assert.equal(normalizeExecutableName('foo.bar', '/tmp', 'src/main.js'), 'foo.bar');
-  assert.throws(() => normalizeExecutableName('../escape', '/tmp', 'src/main.js'), /Invalid executable name/u);
-  assert.equal(
-    getOutputPath({ outDir: '/tmp/release', name: 'my-app' }, { os: 'win32', arch: 'x64' }),
+  expect(normalizeExecutableName('my-app', '/tmp', 'src/main.js')).toBe('my-app');
+  expect(normalizeExecutableName('foo_bar', '/tmp', 'src/main.js')).toBe('foo_bar');
+  expect(normalizeExecutableName('foo.bar', '/tmp', 'src/main.js')).toBe('foo.bar');
+  expect(() => normalizeExecutableName('../escape', '/tmp', 'src/main.js')).toThrow(/Invalid executable name/u);
+  expect(getOutputPath({ outDir: '/tmp/release', name: 'my-app' }, { os: 'win32', arch: 'x64' })).toBe(
     '/tmp/release/my-app.exe',
   );
-  assert.equal(
-    getOutputPath({ outDir: '/tmp/release', name: 'my-app.exe' }, { os: 'win32', arch: 'x64' }),
+  expect(getOutputPath({ outDir: '/tmp/release', name: 'my-app.exe' }, { os: 'win32', arch: 'x64' })).toBe(
     '/tmp/release/my-app.exe',
   );
-  assert.deepEqual(parseCLIArguments(['--help']).kind, 'help');
-  assert.deepEqual(parseCLIArguments(['build', '--help']).kind, 'help');
-  assert.deepEqual(parseCLIArguments(['--version']).kind, 'version');
+  expect(parseCLIArguments(['--help']).kind).toEqual('help');
+  expect(parseCLIArguments(['build', '--help']).kind).toEqual('help');
+  expect(parseCLIArguments(['--version']).kind).toEqual('version');
 });
 
 test('target mapping covers every published WebviewJS desktop native package', () => {
@@ -160,9 +151,9 @@ test('target mapping covers every published WebviewJS desktop native package', (
     [{ os: 'linux', arch: 'ia32', libc: 'gnu' }, '@webviewjs/webview-linux-ia32-gnu'],
     [{ os: 'linux', arch: 'arm', libc: 'gnu' }, '@webviewjs/webview-linux-arm-gnueabihf'],
   ];
-  for (const [target, packageName] of targets) assert.equal(nativePackageName(target), packageName);
-  assert.throws(() => nativePackageName({ os: 'linux', arch: 'x64', libc: 'musl' }), /does not publish/u);
-  assert.deepEqual(parseRuntimeTarget('deno', 'aarch64-pc-windows-msvc'), { os: 'win32', arch: 'arm64' });
+  for (const [target, packageName] of targets) expect(nativePackageName(target)).toBe(packageName);
+  expect(() => nativePackageName({ os: 'linux', arch: 'x64', libc: 'musl' })).toThrow(/does not publish/u);
+  expect(parseRuntimeTarget('deno', 'aarch64-pc-windows-msvc')).toEqual({ os: 'win32', arch: 'arm64' });
 });
 
 test('native resolver is project-anchored and never falls back to a host addon', async () => {
@@ -171,27 +162,29 @@ test('native resolver is project-anchored and never falls back to a host addon',
     const localPackage = join(directory, 'webview-package');
     await mkdir(localPackage);
     await writeFile(join(localPackage, 'webview.darwin-arm64.node'), 'host placeholder');
-    assert.throws(
-      () => resolveNativeAddon({ os: 'win32', arch: 'x64' }, project, localPackage),
+    expect(() => resolveNativeAddon({ os: 'win32', arch: 'x64' }, project, localPackage)).toThrow(
       /win32-x64.*optional dependency/u,
     );
 
-    const targetPackage = join(project, 'node_modules/@webviewjs/webview-win32-x64-msvc');
+    // Bun caches failed createRequire.resolve() lookups, so verify the existing
+    // target package in a separate consumer project after checking no fallback.
+    const { project: projectWithTarget } = await makeProject(join(directory, 'with-target'));
+    const targetPackage = join(projectWithTarget, 'node_modules/@webviewjs/webview-win32-x64-msvc');
     await mkdir(targetPackage, { recursive: true });
     const addon = join(targetPackage, 'webview.win32-x64-msvc.node');
     await writeFile(addon, 'target placeholder');
     await writeFile(join(targetPackage, 'package.json'), JSON.stringify({ main: 'webview.win32-x64-msvc.node' }));
-    assert.equal(resolveNativeAddon({ os: 'win32', arch: 'x64' }, project, localPackage).path, realpathSync(addon));
-    assert.throws(
-      () =>
-        resolveNativeAddon(
-          { os: 'win32', arch: 'x64' },
-          project,
-          localPackage,
-          join(localPackage, 'webview.darwin-arm64.node'),
-        ),
-      /requested target is win32-x64/u,
+    expect(realpathSync(resolveNativeAddon({ os: 'win32', arch: 'x64' }, projectWithTarget, localPackage).path)).toBe(
+      realpathSync(addon),
     );
+    expect(() =>
+      resolveNativeAddon(
+        { os: 'win32', arch: 'x64' },
+        projectWithTarget,
+        localPackage,
+        join(localPackage, 'webview.darwin-arm64.node'),
+      ),
+    ).toThrow(/requested target is win32-x64/u);
   });
 });
 
@@ -202,29 +195,26 @@ test('process runner preserves exact arguments and distinguishes missing command
     ['-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', argument],
     { capture: true },
   );
-  assert.deepEqual(JSON.parse(result.stdout), [argument]);
-  assert.match(formatCommand(process.execPath, [argument]), /"\/tmp\/a path\/with spaces\.txt"/u);
+  expect(JSON.parse(result.stdout)).toEqual([argument]);
+  expect(formatCommand(process.execPath, [argument])).toMatch(/"\/tmp\/a path\/with spaces\.txt"/u);
 
-  await assert.rejects(processRunner.run('/definitely/missing/webview-runtime', [], { capture: true }), (error) => {
-    assert.equal(error.kind, 'not-found');
-    return true;
+  await expect(processRunner.run('/definitely/missing/webview-runtime', [], { capture: true })).rejects.toMatchObject({
+    kind: 'not-found',
   });
-  await assert.rejects(processRunner.run(process.execPath, ['-e', 'process.exit(7)'], { capture: true }), (error) => {
-    assert.equal(error.kind, 'failed');
-    assert.equal(error.exitCode, 7);
-    return true;
-  });
+  await expect(processRunner.run(process.execPath, ['-e', 'process.exit(7)'], { capture: true })).rejects.toMatchObject(
+    { kind: 'failed', exitCode: 7 },
+  );
 });
 
 test('SEA prelude embeds the private addon asset and extracts it under a version/hash cache', () => {
   const digest = 'a'.repeat(64);
   const prelude = createSeaPrelude('0.4.7', digest);
-  assert.match(prelude, /__webviewjs_native\.node/u);
-  assert.match(prelude, /NAPI_RS_NATIVE_LIBRARY_PATH/u);
-  assert.match(prelude, /createRequire\(process\.execPath\)/u);
-  assert.match(prelude, /0\.4\.7-[a]{64}/u);
-  assert.match(prelude, /renameSync/u);
-  assert.match(prelude, /Buffer\.from\(__wvSea\.getAsset/u);
+  expect(prelude).toMatch(/__webviewjs_native\.node/u);
+  expect(prelude).toMatch(/NAPI_RS_NATIVE_LIBRARY_PATH/u);
+  expect(prelude).toMatch(/createRequire\(process\.execPath\)/u);
+  expect(prelude).toMatch(/0\.4\.7-[a]{64}/u);
+  expect(prelude).toMatch(/renameSync/u);
+  expect(prelude).toMatch(/Buffer\.from\(__wvSea\.getAsset/u);
 });
 
 function createFakeRunner(onRun = () => {}) {
@@ -297,26 +287,23 @@ test('Node 24 SEA planning bundles first, embeds the addon and invokes installed
     });
     context.runner = fake.runner;
     const result = await new NodeRuntimeBuilder().build(context);
-    assert.equal(result.output, output);
-    assert.equal(config.main, join(tempDir, 'bundled-entry.cjs'));
-    assert.equal(config.output, join(tempDir, 'sea-prep.blob'));
-    assert.equal(config.useCodeCache, false);
-    assert.equal(config.useSnapshot, false);
-    assert.equal(config.assets['__webviewjs_native.node'], addonPath);
+    expect(result.output).toBe(output);
+    expect(config.main).toBe(join(tempDir, 'bundled-entry.cjs'));
+    expect(config.output).toBe(join(tempDir, 'sea-prep.blob'));
+    expect(config.useCodeCache).toBe(false);
+    expect(config.useSnapshot).toBe(false);
+    expect(config.assets['__webviewjs_native.node']).toBe(addonPath);
     const postjectCall = fake.calls.find((call) => call.args[0].includes('postject'));
-    assert.ok(postjectCall);
-    assert.equal(postjectCall.executable, fakeNode);
-    assert.equal(postjectCall.args[0], resolvePostjectCli(packageRoot));
-    assert.ok(postjectCall.args.includes('NODE_SEA_BLOB'));
-    assert.ok(postjectCall.args.includes('NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2'));
-    assert.ok(postjectCall.args.includes(join(tempDir, 'sea-prep.blob')));
-    assert.ok(!postjectCall.args.includes('npx'));
-    assert.equal(
-      fake.calls.some((call) => call.args[0] === '--experimental-sea-config'),
-      true,
-    );
-    assert.equal(existsSync(join(dirname(output), 'sea-config.json')), false, 'SEA config stays in the temp directory');
-    assert.equal(existsSync(join(dirname(output), 'sea-prep.blob')), false, 'SEA blob stays in the temp directory');
+    expect(postjectCall).toBeTruthy();
+    expect(postjectCall.executable).toBe(fakeNode);
+    expect(postjectCall.args[0]).toBe(resolvePostjectCli(packageRoot));
+    expect(postjectCall.args.includes('NODE_SEA_BLOB')).toBeTruthy();
+    expect(postjectCall.args.includes('NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2')).toBeTruthy();
+    expect(postjectCall.args.includes(join(tempDir, 'sea-prep.blob'))).toBeTruthy();
+    expect(!postjectCall.args.includes('npx')).toBeTruthy();
+    expect(fake.calls.some((call) => call.args[0] === '--experimental-sea-config')).toBe(true);
+    expect(existsSync(join(dirname(output), 'sea-config.json'))).toBe(false);
+    expect(existsSync(join(dirname(output), 'sea-prep.blob'))).toBe(false);
   });
 });
 
@@ -332,11 +319,8 @@ test('Node 25.5 capability selects --build-sea and skips Postject', async () => 
     });
     context.runner = fake.runner;
     await new NodeRuntimeBuilder().build(context);
-    assert.equal(config.output, output);
-    assert.deepEqual(
-      fake.calls.map((call) => call.args[0]),
-      ['--build-sea'],
-    );
+    expect(config.output).toBe(output);
+    expect(fake.calls.map((call) => call.args[0])).toEqual(['--build-sea']);
   });
 });
 
@@ -358,14 +342,14 @@ test('Node probe detects SEA support by capability output and macOS legacy injec
     stdout: args[0] === '--version' ? 'v24.21.0' : 'Usage: node [options]',
     stderr: '',
   });
-  assert.equal((await builder.probe({ ...base, runner: probe24.runner })).supportsBuildSea, false);
+  expect((await builder.probe({ ...base, runner: probe24.runner })).supportsBuildSea).toBe(false);
   const probe25 = createFakeRunner();
   probe25.runner.run = async (_executable, args) => ({
     code: 0,
     stdout: args[0] === '--version' ? 'v25.5.0' : '  --build-sea config.json',
     stderr: '',
   });
-  assert.equal((await builder.probe({ ...base, runner: probe25.runner })).supportsBuildSea, true);
+  expect((await builder.probe({ ...base, runner: probe25.runner })).supportsBuildSea).toBe(true);
 
   await withTempDirectory(async (directory) => {
     const { context, fakeNode, tempDir } = await makeNodeBuildContext(directory, false, {
@@ -381,12 +365,14 @@ test('Node probe detects SEA support by capability output and macOS legacy injec
     context.runner = fake.runner;
     await new NodeRuntimeBuilder().build(context);
     const postjectCall = fake.calls.find((call) => call.args[0].includes('postject'));
-    assert.ok(postjectCall);
-    assert.deepEqual(postjectCall.args.slice(-2), ['--macho-segment-name', 'NODE_SEA']);
-    assert.ok(fake.calls.some((call) => call.executable === 'codesign' && call.args[0] === '--remove-signature'));
-    assert.ok(fake.calls.some((call) => call.executable === 'codesign' && call.args[0] === '--sign'));
-    assert.equal(fakeNode.length > 0, true);
-    assert.equal(tempDir.includes('temp build'), true);
+    expect(postjectCall).toBeTruthy();
+    expect(postjectCall.args.slice(-2)).toEqual(['--macho-segment-name', 'NODE_SEA']);
+    expect(
+      fake.calls.some((call) => call.executable === 'codesign' && call.args[0] === '--remove-signature'),
+    ).toBeTruthy();
+    expect(fake.calls.some((call) => call.executable === 'codesign' && call.args[0] === '--sign')).toBeTruthy();
+    expect(fakeNode.length > 0).toBe(true);
+    expect(tempDir.includes('temp build')).toBe(true);
   });
 });
 
@@ -414,11 +400,8 @@ test('dry run validates the addon and runtime but does not create output or invo
         logger: { info() {}, success() {}, warn() {}, error() {} },
       },
     );
-    assert.equal(result.dryRun, true);
-    assert.equal(existsSync(outDir), false);
-    assert.deepEqual(
-      fake.calls.map((call) => call.args[0]),
-      ['--version', '--help'],
-    );
+    expect(result.dryRun).toBe(true);
+    expect(existsSync(outDir)).toBe(false);
+    expect(fake.calls.map((call) => call.args[0])).toEqual(['--version', '--help']);
   });
 });

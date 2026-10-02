@@ -4,6 +4,8 @@ const app = new Application();
 
 // Set up menu event handler
 app.on('custom-menu-click', ({ customMenuEvent: menuEvent }) => {
+  if (!menuEvent) return;
+
   console.log(`Menu item clicked: "${menuEvent.id}" from window ${menuEvent.windowId}`);
 
   // Handle specific menu items

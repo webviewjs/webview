@@ -213,7 +213,7 @@ app.whenReady().then(() => {
 ```
 
 See the [system tray reference](https://webview.js.org/api/tray) and
-[runnable tray example](https://github.com/webviewjs/webview/blob/main/apps/examples/tray.mjs).
+[runnable tray example](https://github.com/webviewjs/webview/blob/main/apps/examples/tray.ts).
 
 ### Notifications
 
@@ -230,7 +230,7 @@ notification.on('error', ({ error }) => console.error(error));
 
 Notification permission is always `"granted"` for native applications. See the
 [notification reference](https://webview.js.org/api/notification) and
-[runnable notification example](https://github.com/webviewjs/webview/blob/main/apps/examples/notification.mjs).
+[runnable notification example](https://github.com/webviewjs/webview/blob/main/apps/examples/notification.ts).
 
 ### IPC and exposed functions
 
@@ -283,7 +283,7 @@ window.registerProtocol('app', async (request) => {
 window.createWebview({ url: 'app://localhost/index.html' });
 ```
 
-See [Custom Protocols](https://webview.js.org/guides/custom-protocols), [IPC](https://webview.js.org/guides/ipc-messaging), and the runnable [custom protocol](https://github.com/webviewjs/webview/blob/main/apps/examples/custom-protocol.mjs) and [expose](https://github.com/webviewjs/webview/blob/main/apps/examples/expose.mjs) examples.
+See [Custom Protocols](https://webview.js.org/guides/custom-protocols), [IPC](https://webview.js.org/guides/ipc-messaging), and the runnable [custom protocol](https://github.com/webviewjs/webview/blob/main/apps/examples/custom-protocol.ts) and [expose](https://github.com/webviewjs/webview/blob/main/apps/examples/expose.ts) examples.
 
 ### Menu system
 
@@ -466,7 +466,7 @@ webview.reload();
 
 For more details on application lifecycle and disposal, see the
 [Application API reference](https://webview.js.org/api/application) and the
-[closing example](https://github.com/webviewjs/webview/blob/main/apps/examples/close-example.mjs).
+[closing example](https://github.com/webviewjs/webview/blob/main/apps/examples/close-example.ts).
 
 ### Keep strong references
 
@@ -493,11 +493,11 @@ webviews, contexts, and tray icons also support `dispose()` and
 
 Check out [examples](https://github.com/webviewjs/webview/tree/main/apps/examples) directory for more examples:
 
-- **[menu-system.mjs](https://github.com/webviewjs/webview/blob/main/apps/examples/menu-system.mjs)** - Comprehensive menu system demonstration with all features
-- **[window-menus.mjs](https://github.com/webviewjs/webview/blob/main/apps/examples/window-menus.mjs)** - Window-specific vs global menu examples
+- **[menu-system.ts](https://github.com/webviewjs/webview/blob/main/apps/examples/menu-system.ts)** - Comprehensive menu system demonstration with all features
+- **[window-menus.ts](https://github.com/webviewjs/webview/blob/main/apps/examples/window-menus.ts)** - Window-specific vs global menu examples
 - **[http/](https://github.com/webviewjs/webview/tree/main/apps/examples/http)** - Serving content from a web server to webview
-- **[transparent.mjs](https://github.com/webviewjs/webview/blob/main/apps/examples/transparent.mjs)** - Transparent window example
-- **[close-example.mjs](https://github.com/webviewjs/webview/blob/main/apps/examples/close-example.mjs)** - Graceful application closing
+- **[transparent.ts](https://github.com/webviewjs/webview/blob/main/apps/examples/transparent.ts)** - Transparent window example
+- **[close-example.ts](https://github.com/webviewjs/webview/blob/main/apps/examples/close-example.ts)** - Graceful application closing
 
 ## Building executables
 

@@ -1,7 +1,7 @@
 import { serve } from 'nodeia';
 
 export function createServer() {
-  const { promise, resolve, reject } = Promise.withResolvers();
+  const { promise, resolve, reject } = Promise.withResolvers<void>();
 
   serve({
     fetch(_req) {
@@ -29,6 +29,7 @@ export function createServer() {
     error(err) {
       console.error('Server error:', err);
       reject(err);
+      return new Response('Server error', { status: 500 });
     },
     port: 3000,
   }).unref();

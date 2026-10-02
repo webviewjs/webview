@@ -352,7 +352,7 @@ equivalent pixel distance.
 IME phases are `enabled`, `preedit`, `commit`, or `disabled`. Touch phases are
 `started`, `moved`, `ended`, or `cancelled`.
 
-See the runnable [application events example](https://github.com/webviewjs/webview/blob/main/apps/examples/application-events.mjs).
+See the runnable [application events example](https://github.com/webviewjs/webview/blob/main/apps/examples/application-events.ts).
 
 ### Undecorated-window resize
 

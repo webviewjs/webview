@@ -50,11 +50,11 @@ bun --filter @webviewjs/docs dev
 
 ## Examples
 
-Build the package, then run an example with Node.js:
+Build the package, then run an example with Bun:
 
 ```bash
 bun --filter @webviewjs/webview build
-node apps/examples/simple.mjs
+bun apps/examples/simple.ts
 ```
 
 ## Project structure

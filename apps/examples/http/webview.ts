@@ -1,5 +1,5 @@
 import { Application, getWebviewVersion } from '@webviewjs/webview';
-import { createServer } from './server.mjs';
+import { createServer } from './server.ts';
 
 async function createWindow() {
   console.log('Initializing http server...');

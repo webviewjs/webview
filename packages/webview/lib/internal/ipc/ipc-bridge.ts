@@ -8,6 +8,8 @@ export type IpcMessageHandler = (message: IpcMessage) => void;
 
 /** Original native disposal method, preserved before the IPC wrapper is installed. */
 const nativeDispose = NativeWebview.prototype.dispose;
+/** Original native IPC registration method, preserved before the public wrapper is installed. */
+const nativeOnIpcMessage = NativeWebview.prototype.onIpcMessage;
 /** IPC bridge state keyed by native webview instances without retaining disposed views. */
 const bridges = new WeakMap<Webview, WebviewIpcBridge>();
 
@@ -150,9 +152,7 @@ export class WebviewIpcBridge {
    * @param handler Callback to install or `null` to clear the native IPC callback.
    */
   #setNativeHandler(handler: IpcMessageHandler | null): void {
-    const nativeMethod = Object.hasOwn(this.#native, 'onIpcMessage')
-      ? this.#native.onIpcMessage
-      : NativeWebview.prototype.onIpcMessage;
+    const nativeMethod = Object.hasOwn(this.#native, 'onIpcMessage') ? this.#native.onIpcMessage : nativeOnIpcMessage;
     nativeMethod.call(this.#native, handler);
   }
 

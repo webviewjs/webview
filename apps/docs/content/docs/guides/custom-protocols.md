@@ -62,7 +62,7 @@ win.registerProtocol('app', (request) => router.fetch(request));
 win.createWebview({ url: 'app://localhost/' });
 ```
 
-The runnable [Hono custom protocol example](https://github.com/webviewjs/webview/blob/main/apps/examples/custom-protocol-hono.mjs)
+The runnable [Hono custom protocol example](https://github.com/webviewjs/webview/blob/main/apps/examples/custom-protocol-hono.ts)
 includes dynamic pages, navigation links, pathname rendering, and application
 shutdown handling.
 
@@ -79,7 +79,7 @@ interface CustomProtocolResponse {
 
 ## Security
 
-Never resolve a request path without checking it remains inside the intended asset directory. Normalize and validate the path before passing it to the file system. The runnable [custom protocol example](https://github.com/webviewjs/webview/blob/main/apps/examples/custom-protocol.mjs) includes this check.
+Never resolve a request path without checking it remains inside the intended asset directory. Normalize and validate the path before passing it to the file system. The runnable [custom protocol example](https://github.com/webviewjs/webview/blob/main/apps/examples/custom-protocol.ts) includes this check.
 
 ## Multiple protocols
 

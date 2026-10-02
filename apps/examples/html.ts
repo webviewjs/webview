@@ -1,4 +1,4 @@
-const { Application } = require('@webviewjs/webview');
+import { Application } from '@webviewjs/webview';
 
 const app = new Application();
 const window = app.createBrowserWindow();
@@ -32,7 +32,7 @@ const webview = window.createWebview({
 if (!webview.isDevtoolsOpen()) webview.openDevtools();
 
 webview.onIpcMessage(() => {
-  webview.evaluateScriptWithCallback(`onIpcMessage("${++count}")`, (err, result) => {
+  webview.evaluateScriptWithCallback(`onIpcMessage("${++count}")`, (err: Error | null, result?: string) => {
     if (err) {
       console.error('Error evaluating script:', err);
     } else {

@@ -52,6 +52,10 @@ fn dispatch_reentrant<T>(
   }
 }
 
+fn release_resource<T>(resource: &Rc<RefCell<Option<T>>>) {
+  drop(resource.borrow_mut().take());
+}
+
 struct AppState {
   handler: Rc<RefCell<Option<FunctionRef<ApplicationEvent, ()>>>>,
   env: Env,
@@ -87,11 +91,11 @@ impl AppState {
   fn begin_close_window(&mut self, window_id: WindowId) {
     if let Some(views) = self.webviews.get(&window_id) {
       for resource in views.borrow().iter() {
-        resource.borrow_mut().take();
+        release_resource(resource);
       }
     }
     if let Some(resource) = self.windows.get(&window_id) {
-      resource.borrow_mut().take();
+      release_resource(resource);
     }
   }
 
@@ -118,6 +122,21 @@ impl AppState {
     self.cursor_positions.remove(&window_id);
   }
 
+  fn handle_destroyed_window(&mut self, window_id: WindowId) {
+    self.finish_destroyed_window(window_id);
+    if self.windows.is_empty() {
+      if !self.exit_requested {
+        self.fire(ApplicationEvent {
+          event: WebviewApplicationEvent::ApplicationCloseRequested
+            .name()
+            .to_owned(),
+          custom_menu_event: None,
+        });
+      }
+      self.finalize_shutdown();
+    }
+  }
+
   fn finalize_shutdown(&mut self) {
     if self.should_exit {
       return;
@@ -125,12 +144,12 @@ impl AppState {
     #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
     {
       for resource in self.tray_resources.drain(..) {
-        resource.borrow_mut().take();
+        release_resource(&resource);
       }
       self.tray_handlers.clear();
     }
     for context in self.web_contexts.drain(..) {
-      context.borrow_mut().take();
+      release_resource(&context);
     }
     self.handler.borrow_mut().take();
     #[cfg(not(target_os = "android"))]
@@ -318,18 +337,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
       state.begin_close_window(window_id);
     }
     WindowEvent::Destroyed => {
-      state.finish_destroyed_window(window_id);
-      if state.windows.is_empty() {
-        if !state.exit_requested {
-          state.fire(ApplicationEvent {
-            event: WebviewApplicationEvent::ApplicationCloseRequested
-              .name()
-              .to_owned(),
-            custom_menu_event: None,
-          });
-        }
-        state.finalize_shutdown();
-      }
+      state.handle_destroyed_window(window_id);
     }
     WindowEvent::Focused(focused) => {
       state.fire_window_event(
@@ -1237,9 +1245,104 @@ impl Drop for Application {
 
 #[cfg(test)]
 mod tests {
-  use super::dispatch_reentrant;
-  use crate::browser_window::CloseRequestState;
-  use std::cell::RefCell;
+  use super::{dispatch_reentrant, release_resource, AppState, WindowId};
+  use crate::browser_window::{CloseRequestState, WindowResource};
+  use crate::webview::WebviewResource;
+  use napi::Env;
+  use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+  };
+  use tao::keyboard::ModifiersState;
+
+  fn app_state() -> AppState {
+    AppState {
+      handler: Rc::new(RefCell::new(None)),
+      env: Env::from_raw(std::ptr::null_mut()),
+      should_exit: false,
+      exit_requested: false,
+      ready: false,
+      windows: HashMap::new(),
+      webviews: HashMap::new(),
+      window_handlers: HashMap::new(),
+      window_close_states: HashMap::new(),
+      window_lifecycles: HashMap::new(),
+      webview_lifecycles: HashMap::new(),
+      cursor_positions: HashMap::new(),
+      current_modifiers: ModifiersState::default(),
+      #[cfg(not(target_os = "android"))]
+      menu_event_receiver: None,
+      #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+      tray_handlers: HashMap::new(),
+      #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+      tray_resources: Vec::new(),
+      web_contexts: Vec::new(),
+    }
+  }
+
+  #[test]
+  fn release_resource_drops_the_native_value_and_clears_its_shared_slot() {
+    struct DropProbe(Rc<Cell<bool>>);
+
+    impl Drop for DropProbe {
+      fn drop(&mut self) {
+        self.0.set(true);
+      }
+    }
+
+    let dropped = Rc::new(Cell::new(false));
+    let resource = Rc::new(RefCell::new(Some(DropProbe(Rc::clone(&dropped)))));
+
+    release_resource(&resource);
+
+    assert!(dropped.get());
+    assert!(resource.borrow().is_none());
+  }
+
+  #[test]
+  fn destroying_the_final_window_clears_handles_and_finishes_lifecycles() {
+    let mut state = app_state();
+    // SAFETY: the dummy ID is used only as a key in the in-memory AppState maps.
+    let window_id = unsafe { WindowId::dummy() };
+    let window_lifecycle = Rc::new(Cell::new(false));
+    let webview_lifecycle = Rc::new(Cell::new(false));
+    let webview_lifecycles = Rc::new(RefCell::new(vec![Rc::clone(&webview_lifecycle)]));
+    let window_resource: WindowResource = Rc::new(RefCell::new(None));
+    let webview_resource: WebviewResource = Rc::new(RefCell::new(None));
+
+    state.windows.insert(window_id, window_resource);
+    state
+      .webviews
+      .insert(window_id, Rc::new(RefCell::new(vec![webview_resource])));
+    state
+      .window_handlers
+      .insert(window_id, Rc::new(RefCell::new(None)));
+    state
+      .window_close_states
+      .insert(window_id, Rc::new(CloseRequestState::new()));
+    state
+      .window_lifecycles
+      .insert(window_id, Rc::clone(&window_lifecycle));
+    state
+      .webview_lifecycles
+      .insert(window_id, Rc::clone(&webview_lifecycles));
+    state.cursor_positions.insert(window_id, (1.0, 2.0));
+
+    state.handle_destroyed_window(window_id);
+
+    assert!(state.windows.is_empty());
+    assert!(state.webviews.is_empty());
+    assert!(state.window_handlers.is_empty());
+    assert!(state.window_close_states.is_empty());
+    assert!(state.window_lifecycles.is_empty());
+    assert!(state.webview_lifecycles.is_empty());
+    assert!(state.cursor_positions.is_empty());
+    assert!(window_lifecycle.get());
+    assert!(webview_lifecycle.get());
+    assert!(webview_lifecycles.borrow().is_empty());
+    assert!(state.should_exit);
+  }
 
   #[test]
   fn reentrant_dispatch_allows_callback_to_clear_its_slot() {

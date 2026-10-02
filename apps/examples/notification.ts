@@ -33,7 +33,7 @@ const webview = window.createWebview({
 });
 
 webview.expose('native', {
-  showNotification: (title, options) => {
+  showNotification: (title: string, options: { body?: string }) => {
     const notification = new Notification(title, {
       body: options.body,
       persistent: true,

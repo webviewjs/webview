@@ -4,6 +4,8 @@ const app = new Application();
 
 // Handle menu events
 app.on('custom-menu-click', ({ customMenuEvent: menuEvent }) => {
+  if (!menuEvent) return;
+
   console.log(`Menu "${menuEvent.id}" clicked on window ${menuEvent.windowId}`);
 
   switch (menuEvent.id) {
@@ -183,7 +185,7 @@ const window3 = app.createBrowserWindow({
   height: 300,
   x: 310,
   y: 420,
-  show_menu: true, // Uses global menu
+  showMenu: true, // Uses global menu
 });
 
 const _webview3 = window3.createWebview({

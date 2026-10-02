@@ -51,4 +51,4 @@ even when the wrapper remains reachable.
 Call `tray.dispose()` for early removal, or use `Symbol.dispose`.
 `tray.isDisposed()` reports whether the icon has been disposed.
 
-See the runnable [tray example](https://github.com/webviewjs/webview/blob/main/apps/examples/tray.mjs).
+See the runnable [tray example](https://github.com/webviewjs/webview/blob/main/apps/examples/tray.ts).

@@ -1,10 +1,9 @@
 import { Application, Theme } from '@webviewjs/webview';
 
 const app = new Application();
-const window = app.createBrowserWindow();
+const window = app.createBrowserWindow({ title: 'Hello world' });
 
 const _webview = window.createWebview({
-  title: 'Hello world',
   url: 'https://nodejs.org',
 });
 

@@ -46,7 +46,7 @@ const second = secondWindow.createWebview({
 Both webviews use the same browser-data store. A webview created without
 `webContext` uses its own default context.
 
-See the runnable [web context example](https://github.com/webviewjs/webview/blob/main/apps/examples/web-context.mjs).
+See the runnable [web context example](https://github.com/webviewjs/webview/blob/main/apps/examples/web-context.ts).
 
 ## Properties and methods
 

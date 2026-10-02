@@ -111,18 +111,26 @@ fn windows_notifications_enabled() -> bool {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn response_payload(
+  response: &notify_rust::NotificationResponse,
+) -> (&'static str, Option<String>) {
+  use notify_rust::NotificationResponse;
+
+  match response {
+    NotificationResponse::Default => ("click", Some(String::new())),
+    NotificationResponse::Action(action) => ("click", Some(action.clone())),
+    NotificationResponse::Reply(reply) => ("click", Some(reply.clone())),
+    NotificationResponse::Closed(_) => ("close", None),
+  }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn emit_response(
   callback: &NotificationEventThreadsafeFunction,
   response: &notify_rust::NotificationResponse,
 ) {
-  use notify_rust::NotificationResponse;
-
-  match response {
-    NotificationResponse::Default => emit(callback, "click", Some(String::new()), None),
-    NotificationResponse::Action(action) => emit(callback, "click", Some(action.clone()), None),
-    NotificationResponse::Reply(reply) => emit(callback, "click", Some(reply.clone()), None),
-    NotificationResponse::Closed(_) => emit(callback, "close", None, None),
-  }
+  let (event, action) = response_payload(response);
+  emit(callback, event, action, None);
 }
 
 #[napi(js_name = "NativeNotification")]
@@ -287,5 +295,31 @@ impl JsNotification {
         futures_lite::future::block_on(handle.close_async());
       }
     }
+  }
+}
+
+#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+mod tests {
+  use super::response_payload;
+  use notify_rust::{CloseReason, NotificationResponse};
+
+  #[test]
+  fn native_notification_responses_map_to_click_and_close_events() {
+    assert_eq!(
+      response_payload(&NotificationResponse::Default),
+      ("click", Some(String::new()))
+    );
+    assert_eq!(
+      response_payload(&NotificationResponse::Action("open".to_owned())),
+      ("click", Some("open".to_owned()))
+    );
+    assert_eq!(
+      response_payload(&NotificationResponse::Reply("hello".to_owned())),
+      ("click", Some("hello".to_owned()))
+    );
+    assert_eq!(
+      response_payload(&NotificationResponse::Closed(CloseReason::Dismissed)),
+      ("close", None)
+    );
   }
 }
