@@ -28,12 +28,18 @@ test('Hono example connects router responses to the custom protocol', async () =
   expect(source).toMatch(/createWebview\(\{ url: 'app:\/\/localhost' \}\)/u);
 });
 
-test('README examples document Fetch responses, EventEmitter events, and strong references', async () => {
-  const source = await readFile(new URL('../../README.md', import.meta.url), 'utf8');
+test('package README and hosted docs document current entry points and API behavior', async () => {
+  const [readme, customProtocols, applicationApi, quickStart] = await Promise.all([
+    readFile(new URL('../../README.md', import.meta.url), 'utf8'),
+    readFile(new URL('../../../../apps/docs/content/docs/guides/custom-protocols.md', import.meta.url), 'utf8'),
+    readFile(new URL('../../../../apps/docs/content/docs/api/application.md', import.meta.url), 'utf8'),
+    readFile(new URL('../../../../apps/docs/content/docs/getting-started/quick-start.md', import.meta.url), 'utf8'),
+  ]);
 
-  expect(source).toMatch(/return new Response\(/u);
-  expect(source).toMatch(/app\.on\('custom-menu-click'/u);
-  expect(source).toMatch(/Keep strong references/u);
-  expect(source).toMatch(/BrowserWindow.*Webview.*TrayIcon/su);
-  expect(source).not.toMatch(/app\.(?:bind|onEvent)\(/u);
+  expect(readme).toMatch(/https:\/\/webview\.js\.org/u);
+  expect(readme).not.toMatch(/app\.(?:bind|onEvent)\(/u);
+  expect(customProtocols).toMatch(/return new Response\(/u);
+  expect(applicationApi).toMatch(/app\.on\('custom-menu-click'/u);
+  expect(quickStart).toMatch(/Keep strong references/u);
+  expect(quickStart).toMatch(/BrowserWindow.*Webview.*TrayIcon/su);
 });
