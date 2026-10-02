@@ -18,7 +18,15 @@ Use the hosted documentation as the API authority:
 
 ## Install and prepare the host
 
-Install the package with the package manager used by the application:
+For a new project, start with the official scaffolder:
+
+```bash
+npm create webview@latest
+```
+
+`npm create webview-app@latest` runs the same scaffolder from its published
+alias. Use the `create-webview` skill for starter options and project-generation
+guidance. To add WebviewJS to an existing project, use its package manager:
 
 ```bash
 npm install @webviewjs/webview
