@@ -457,16 +457,6 @@ jobs:
         if: runner.os == 'Windows'
         run: bun install --frozen-lockfile --linker hoisted
 
-      - name: Set release package version
-        if: needs.release-version.outputs.is_release == 'true'
-        env:
-          VERSION: ${{ needs.release-version.outputs.version }}
-        run: |
-          node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync("package.json", "utf8")); manifest.version = process.env.VERSION; fs.writeFileSync("package.json", `${JSON.stringify(manifest, null, 2)}\n`);'
-          bun run version
-        shell: bash
-        working-directory: packages/webview
-
       - name: Build
         run: ${{ matrix.settings.build_script || format('bun run build --target {0}', matrix.settings.target) }}
         shell: bash
@@ -514,7 +504,6 @@ jobs:
         env:
           DEBUG: napi:*
           RUSTUP_IO_THREADS: 1
-          RELEASE_VERSION: ${{ needs.release-version.outputs.version }}
         run: |
           . "$HOME/.cargo/env"
           rustc --version
@@ -522,10 +511,6 @@ jobs:
           bun --version
           bun install --frozen-lockfile
           cd packages/webview
-          if [ -n "$RELEASE_VERSION" ]; then
-            node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync("package.json", "utf8")); manifest.version = process.env.RELEASE_VERSION; fs.writeFileSync("package.json", `${JSON.stringify(manifest, null, 2)}\n`);'
-            bun run version
-          fi
           # FreeBSD exports only the unsupported native stub; its generated
           # bindings intentionally omit the public API, so skip the JS typecheck.
           bun run build:native
@@ -604,9 +589,7 @@ jobs:
 
       - name: Publish to npm
         if: needs.release-version.outputs.is_release == 'true'
-        run: |
-          npm config set provenance true
-          npm publish --access public --tag "${{ needs.release-version.outputs.tag }}"
+        run: npm publish --provenance --access public --tag "${{ needs.release-version.outputs.tag }}"
         working-directory: packages/webview
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -662,8 +645,6 @@ jobs:
           await access(new URL('./dist/index.js', `file://${manifestPath}`));
           NODE
 
-          npm config set provenance true
-
           package_version_exists() {
             local package_name="$1"
             local output
@@ -693,7 +674,7 @@ jobs:
             fi
 
             echo "Publishing ${package_name}@${VERSION} with npm tag ${TAG}."
-            npm publish --access public --tag "$TAG"
+            npm publish --provenance --access public --tag "$TAG"
           }
 
           cd "$STAGING_DIR"
