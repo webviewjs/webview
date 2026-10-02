@@ -41,7 +41,7 @@ npm install @webviewjs/webview
 
 ## Building from source
 
-You need Bun 1.3.14 and the stable Rust toolchain. The repository includes the NAPI-RS CLI as a Webview package development dependency.
+You need Bun 1.4.2 and the stable Rust toolchain. The repository includes the NAPI-RS CLI as a Webview package development dependency.
 
 ```bash
 git clone https://github.com/webviewjs/webview

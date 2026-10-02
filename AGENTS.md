@@ -36,8 +36,8 @@ skills/                 WebviewJS skill content
 | --------------- | -------------------------- |
 | Monorepo        | Bun workspaces + Turborepo |
 | Rust bindings   | NAPI-RS (`@napi-rs/cli`)   |
-| Package manager | Bun 1.3.14                 |
-| JS test harness | Bun 1.3.14 (`bun:test`)    |
+| Package manager | Bun 1.4.2                  |
+| JS test harness | Bun 1.4.2 (`bun:test`)     |
 | Linter          | Root Oxlint                |
 | Formatter       | Root Prettier              |
 | Rust formatter  | `cargo fmt`                |

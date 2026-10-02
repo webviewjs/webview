@@ -21,7 +21,7 @@ This repository contains the published package, its documentation site, runnable
 
 ## Development
 
-Install [Bun 1.3.14](https://bun.sh/), [Rust stable](https://www.rust-lang.org/tools/install), and [Node.js 24 or newer](https://nodejs.org/) for package tests.
+Install [Bun 1.4.2](https://bun.sh/), [Rust stable](https://www.rust-lang.org/tools/install), and [Node.js 24 or newer](https://nodejs.org/) for package tests.
 
 ```bash
 bun install
