@@ -40,6 +40,6 @@ test('package README and hosted docs document current entry points and API behav
   expect(readme).not.toMatch(/app\.(?:bind|onEvent)\(/u);
   expect(customProtocols).toMatch(/return new Response\(/u);
   expect(applicationApi).toMatch(/app\.on\('custom-menu-click'/u);
-  expect(quickStart).toMatch(/Keep strong references/u);
+  expect(quickStart).toMatch(/Keep references to objects/u);
   expect(quickStart).toMatch(/BrowserWindow.*Webview.*TrayIcon/su);
 });
