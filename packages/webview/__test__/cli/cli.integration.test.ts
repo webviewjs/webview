@@ -35,13 +35,15 @@ function runtimeAvailable(command) {
   return result.status === 0;
 }
 
-let addonAvailable = false;
+let addonPath: string | undefined;
 try {
-  resolveNativeAddon(hostTarget, packageRoot, packageRoot);
-  addonAvailable = true;
+  addonPath = resolveNativeAddon(hostTarget, packageRoot, packageRoot).path;
 } catch {
-  addonAvailable = false;
+  addonPath = undefined;
 }
+// Reuse the preflight result; repeating the createRequire lookup after the
+// fixture adds a symlinked consumer package can return a different result in Bun.
+const addonAvailable = addonPath !== undefined;
 
 async function runStandalone(runtime) {
   const directory = mkdtempSync(join(tmpdir(), 'webview-cli-integration-'));
@@ -55,7 +57,8 @@ async function runStandalone(runtime) {
     mkdirSync(typesDirectory, { recursive: true });
     symlinkSync(packageRoot, join(appNodeModules, 'webview'), 'dir');
     symlinkSync(join(packageRoot, 'node_modules/@types/node'), join(typesDirectory, 'node'));
-    const addon = resolveNativeAddon(hostTarget, packageRoot, packageRoot).path;
+    if (!addonPath) throw new Error('The host native addon was not resolved for this integration test.');
+    const addon = addonPath;
     symlinkSync(addon, join(platformPackage, nativeAddonFileName(hostTarget)));
     writeFileSync(
       join(platformPackage, 'package.json'),
