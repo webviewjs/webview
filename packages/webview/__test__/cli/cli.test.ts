@@ -9,6 +9,7 @@ import {
   buildExecutable,
   createSeaPrelude,
   formatCommand,
+  getHostPlatform,
   getOutputPath,
   nativePackageName,
   normalizeExecutableName,
@@ -21,6 +22,15 @@ import {
 import { NodeRuntimeBuilder } from '../../dist/cli/runtimes/node.js';
 
 const packageRoot = join(import.meta.dirname, '..', '..');
+const currentHostPlatform = getHostPlatform();
+const supportsExecutableHost = ['darwin', 'linux', 'win32'].includes(currentHostPlatform.os);
+const testHostPlatform = supportsExecutableHost
+  ? currentHostPlatform
+  : { os: 'linux' as NodeJS.Platform, arch: 'x64', libc: 'gnu' as const };
+
+function parseArguments(argv: readonly string[], cwd = process.cwd()) {
+  return parseCLIArguments(argv, cwd, testHostPlatform);
+}
 
 async function withTempDirectory(callback) {
   const directory = await mkdtemp(join(tmpdir(), 'webview-cli-test-'));
@@ -52,7 +62,7 @@ test('CommonJS CLI output exposes named bootstrapCLI and the actual bin shim run
 test('argument parsing uses positional input, Node default, package name and dist output', async () => {
   await withTempDirectory(async (directory) => {
     const { project, input } = await makeProject(directory);
-    const parsed = parseCLIArguments(['build', input], project);
+    const parsed = parseArguments(['build', input], project);
     expect(parsed.kind).toBe('build');
     if (parsed.kind !== 'build') return;
     expect(parsed.options.runtime).toBe('node');
@@ -66,14 +76,14 @@ test('argument parsing uses positional input, Node default, package name and dis
 test('argument parsing validates runtime and runtime-specific targets', async () => {
   await withTempDirectory(async (directory) => {
     const { project, input } = await makeProject(directory);
-    expect(() => parseCLIArguments(['build', input, '--runtime', 'nodejs'], project)).toThrow(/Unknown runtime/u);
+    expect(() => parseArguments(['build', input, '--runtime', 'nodejs'], project)).toThrow(/Unknown runtime/u);
     expect(() =>
-      parseCLIArguments(['build', input, '--runtime', 'bun', '--target', 'bun-linux-x64-musl'], project),
+      parseArguments(['build', input, '--runtime', 'bun', '--target', 'bun-linux-x64-musl'], project),
     ).toThrow(/does not publish musl native addons/u);
-    expect(() =>
-      parseCLIArguments(['build', input, '--runtime', 'bun', '--target', 'bun-windows-ia32'], project),
-    ).toThrow(/Unsupported bun target/u);
-    expect(() => parseCLIArguments(['build', input, '--runtime', 'node', '--target', 'darwin-arm64'], project)).toThrow(
+    expect(() => parseArguments(['build', input, '--runtime', 'bun', '--target', 'bun-windows-ia32'], project)).toThrow(
+      /Unsupported bun target/u,
+    );
+    expect(() => parseArguments(['build', input, '--runtime', 'node', '--target', 'darwin-arm64'], project)).toThrow(
       /cannot cross-compile/u,
     );
   });
@@ -86,7 +96,7 @@ test('legacy --build --input normalizes to build and resources JSON joins the as
     await mkdir(resourceDirectory);
     await writeFile(join(resourceDirectory, 'config file.json'), '{}');
     await writeFile(join(resourceDirectory, 'map.json'), JSON.stringify({ 'custom-config': './config file.json' }));
-    const parsed = parseCLIArguments(
+    const parsed = parseArguments(
       ['--build', '--input', input, '--resources', join(resourceDirectory, 'map.json'), '--name', 'my_app.v2'],
       project,
     );
@@ -98,10 +108,7 @@ test('legacy --build --input normalizes to build and resources JSON joins the as
       { key: 'custom-config', path: join(resourceDirectory, 'config file.json') },
     ]);
     expect(() =>
-      parseCLIArguments(
-        ['build', input, '--runtime', 'bun', '--resources', join(resourceDirectory, 'map.json')],
-        project,
-      ),
+      parseArguments(['build', input, '--runtime', 'bun', '--resources', join(resourceDirectory, 'map.json')], project),
     ).toThrow(/Node SEA compatibility option/u);
   });
 });
@@ -111,15 +118,13 @@ test('asset flags support paths with spaces and resource maps report invalid JSO
     const { project, input } = await makeProject(directory, 'simple');
     const asset = join(project, 'an asset.txt');
     await writeFile(asset, 'hello');
-    const parsed = parseCLIArguments(['build', input, '--asset', asset], project);
+    const parsed = parseArguments(['build', input, '--asset', asset], project);
     expect(parsed.kind).toBe('build');
     if (parsed.kind === 'build') expect(parsed.options.assets).toEqual([{ key: 'an asset.txt', path: asset }]);
 
     const malformed = join(project, 'assets.json');
     await writeFile(malformed, '{nope');
-    expect(() => parseCLIArguments(['build', input, '--resources', malformed], project)).toThrow(
-      /parse resources JSON/u,
-    );
+    expect(() => parseArguments(['build', input, '--resources', malformed], project)).toThrow(/parse resources JSON/u);
   });
 });
 
@@ -134,9 +139,9 @@ test('executable names preserve sensible punctuation and reject path separators'
   expect(getOutputPath({ outDir: '/tmp/release', name: 'my-app.exe' }, { os: 'win32', arch: 'x64' })).toBe(
     '/tmp/release/my-app.exe',
   );
-  expect(parseCLIArguments(['--help']).kind).toEqual('help');
-  expect(parseCLIArguments(['build', '--help']).kind).toEqual('help');
-  expect(parseCLIArguments(['--version']).kind).toEqual('version');
+  expect(parseArguments(['--help']).kind).toEqual('help');
+  expect(parseArguments(['build', '--help']).kind).toEqual('help');
+  expect(parseArguments(['--version']).kind).toEqual('version');
 });
 
 test('target mapping covers every published WebviewJS desktop native package', () => {
@@ -154,6 +159,12 @@ test('target mapping covers every published WebviewJS desktop native package', (
   for (const [target, packageName] of targets) expect(nativePackageName(target)).toBe(packageName);
   expect(() => nativePackageName({ os: 'linux', arch: 'x64', libc: 'musl' })).toThrow(/does not publish/u);
   expect(parseRuntimeTarget('deno', 'aarch64-pc-windows-msvc')).toEqual({ os: 'win32', arch: 'arm64' });
+});
+
+test('standalone executable target selection rejects FreeBSD hosts', () => {
+  expect(() => parseRuntimeTarget('node', undefined, { os: 'freebsd', arch: 'x64' })).toThrow(
+    'WebviewJS executable builds do not support host operating system "freebsd".',
+  );
 });
 
 test('native resolver is project-anchored and never falls back to a host addon', async () => {
@@ -376,32 +387,36 @@ test('Node probe detects SEA support by capability output and macOS legacy injec
   });
 });
 
-test('dry run validates the addon and runtime but does not create output or invoke a compiler', async () => {
-  await withTempDirectory(async (directory) => {
-    const { project, input } = await makeProject(directory, 'dry-run-app');
-    const addon = join(project, 'custom-native.node');
-    const outDir = join(directory, 'release output');
-    await writeFile(addon, 'native');
-    const fake = createFakeRunner();
-    fake.runner.run = async (executable, args, options = {}) => {
-      fake.calls.push({ executable, args: [...args], cwd: options.cwd });
-      return {
-        code: 0,
-        stdout: args[0] === '--version' ? 'v24.21.0' : 'Usage: node [options]',
-        stderr: '',
+test.skipIf(!supportsExecutableHost)(
+  'dry run validates the addon and runtime but does not create output or invoke a compiler',
+  async () => {
+    await withTempDirectory(async (directory) => {
+      const { project, input } = await makeProject(directory, 'dry-run-app');
+      const addon = join(project, 'custom-native.node');
+      const outDir = join(directory, 'release output');
+      await writeFile(addon, 'native');
+      const fake = createFakeRunner();
+      fake.runner.run = async (executable, args, options = {}) => {
+        fake.calls.push({ executable, args: [...args], cwd: options.cwd });
+        return {
+          code: 0,
+          stdout: args[0] === '--version' ? 'v24.21.0' : 'Usage: node [options]',
+          stderr: '',
+        };
       };
-    };
-    const result = await buildExecutable(
-      { input, cwd: project, outDir, nativeAddon: addon, dryRun: true },
-      {
-        runner: fake.runner,
-        packageRoot,
-        nodeExecutable: process.execPath,
-        logger: { info() {}, success() {}, warn() {}, error() {} },
-      },
-    );
-    expect(result.dryRun).toBe(true);
-    expect(existsSync(outDir)).toBe(false);
-    expect(fake.calls.map((call) => call.args[0])).toEqual(['--version', '--help']);
-  });
-});
+      const result = await buildExecutable(
+        { input, cwd: project, outDir, nativeAddon: addon, dryRun: true },
+        {
+          runner: fake.runner,
+          packageRoot,
+          platform: testHostPlatform,
+          nodeExecutable: process.execPath,
+          logger: { info() {}, success() {}, warn() {}, error() {} },
+        },
+      );
+      expect(result.dryRun).toBe(true);
+      expect(existsSync(outDir)).toBe(false);
+      expect(fake.calls.map((call) => call.args[0])).toEqual(['--version', '--help']);
+    });
+  },
+);

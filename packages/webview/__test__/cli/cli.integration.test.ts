@@ -23,7 +23,10 @@ import {
 
 const packageRoot = join(import.meta.dirname, '..', '..');
 const fixture = join(import.meta.dirname, 'fixtures/executable-version.mjs');
-const hostTarget = parseRuntimeTarget('node', undefined, getHostPlatform());
+const hostPlatform = getHostPlatform();
+// The standalone executable builder currently supports only these hosts.
+const supportsExecutableHost = ['darwin', 'linux', 'win32'].includes(hostPlatform.os);
+const hostTarget = supportsExecutableHost ? parseRuntimeTarget('node', undefined, hostPlatform) : undefined;
 
 function executableOnPath(command: string): string {
   const result = spawnSync(command, ['-p', 'process.execPath'], { encoding: 'utf8' });
@@ -36,33 +39,38 @@ function runtimeAvailable(command) {
 }
 
 let addonPath: string | undefined;
-try {
-  addonPath = resolveNativeAddon(hostTarget, packageRoot, packageRoot).path;
-} catch {
-  addonPath = undefined;
+if (hostTarget) {
+  try {
+    addonPath = resolveNativeAddon(hostTarget, packageRoot, packageRoot).path;
+  } catch {
+    addonPath = undefined;
+  }
 }
 // Reuse the preflight result; repeating the createRequire lookup after the
 // fixture adds a symlinked consumer package can return a different result in Bun.
 const addonAvailable = addonPath !== undefined;
 
 async function runStandalone(runtime) {
+  const target = hostTarget;
+  const resolvedAddonPath = addonPath;
+  if (!target || !resolvedAddonPath) {
+    throw new Error('Executable integration tests require a supported host and its native addon.');
+  }
   const directory = mkdtempSync(join(tmpdir(), 'webview-cli-integration-'));
   try {
     const projectRoot = join(directory, 'consumer project');
     const appNodeModules = join(projectRoot, 'node_modules/@webviewjs');
-    const platformPackage = join(appNodeModules, nativePackageName(hostTarget).slice('@webviewjs/'.length));
+    const platformPackage = join(appNodeModules, nativePackageName(target).slice('@webviewjs/'.length));
     const typesDirectory = join(projectRoot, 'node_modules/@types');
     mkdirSync(join(projectRoot, 'src'), { recursive: true });
     mkdirSync(platformPackage, { recursive: true });
     mkdirSync(typesDirectory, { recursive: true });
     symlinkSync(packageRoot, join(appNodeModules, 'webview'), 'dir');
     symlinkSync(join(packageRoot, 'node_modules/@types/node'), join(typesDirectory, 'node'));
-    if (!addonPath) throw new Error('The host native addon was not resolved for this integration test.');
-    const addon = addonPath;
-    symlinkSync(addon, join(platformPackage, nativeAddonFileName(hostTarget)));
+    symlinkSync(resolvedAddonPath, join(platformPackage, nativeAddonFileName(target)));
     writeFileSync(
       join(platformPackage, 'package.json'),
-      JSON.stringify({ name: nativePackageName(hostTarget), main: nativeAddonFileName(hostTarget) }),
+      JSON.stringify({ name: nativePackageName(target), main: nativeAddonFileName(target) }),
     );
     writeFileSync(
       join(projectRoot, 'package.json'),
@@ -102,7 +110,7 @@ async function runStandalone(runtime) {
   }
 }
 
-test.skipIf(!addonAvailable)(
+test.skipIf(!supportsExecutableHost || !addonAvailable)(
   'Node SEA embeds and loads WebviewJS without project node_modules',
   async () => {
     await runStandalone('node');
@@ -110,7 +118,7 @@ test.skipIf(!addonAvailable)(
   60_000,
 );
 
-test.skipIf(!addonAvailable || !runtimeAvailable('bun'))(
+test.skipIf(!supportsExecutableHost || !addonAvailable || !runtimeAvailable('bun'))(
   'Bun standalone embeds and loads WebviewJS N-API addon when Bun is installed',
   async () => {
     await runStandalone('bun');
@@ -118,7 +126,7 @@ test.skipIf(!addonAvailable || !runtimeAvailable('bun'))(
   60_000,
 );
 
-test.skipIf(!addonAvailable || !runtimeAvailable('deno'))(
+test.skipIf(!supportsExecutableHost || !addonAvailable || !runtimeAvailable('deno'))(
   'Deno self-extracting executable embeds and loads WebviewJS N-API addon when Deno is installed',
   async () => {
     await runStandalone('deno');
