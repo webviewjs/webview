@@ -12,13 +12,13 @@ apps/docs/             Static Next.js + Fumadocs site for webview.js.org
   content/docs/        Markdown/MDX documentation source
   public/CNAME          GitHub Pages custom domain
   out/                 Static export output (generated)
-apps/examples/          Runnable .mjs examples and their assets
+apps/examples/          Runnable TypeScript examples and their assets
 packages/webview/       Published @webviewjs/webview package
   src/                  Rust NAPI-RS bindings
   lib/                  Handwritten TypeScript public API layer
   cli/                  Shipped ESM webview/webviewjs CLI
   scripts/              Build helpers
-  __test__/             Node.js built-in test runner tests
+  __test__/             Bun test suites, fakes, static checks, and type fixtures
   npm/                  Per-platform NAPI packages
   js-bindings.js        Generated and tracked NAPI-RS bindings
   js-bindings.d.ts      Generated and tracked NAPI-RS declarations
@@ -32,15 +32,15 @@ skills/                 WebviewJS skill content
 
 ## Tech stack
 
-| Layer                | Tool                          |
-| -------------------- | ----------------------------- |
-| Monorepo             | Bun workspaces + Turborepo    |
-| Rust bindings        | NAPI-RS (`@napi-rs/cli`)      |
-| Package manager      | Bun 1.3.14                    |
-| JS runtime for tests | Node.js >= 24 (`node --test`) |
-| Linter               | Root Oxlint                   |
-| Formatter            | Root Prettier                 |
-| Rust formatter       | `cargo fmt`                   |
+| Layer           | Tool                       |
+| --------------- | -------------------------- |
+| Monorepo        | Bun workspaces + Turborepo |
+| Rust bindings   | NAPI-RS (`@napi-rs/cli`)   |
+| Package manager | Bun 1.3.14                 |
+| JS test harness | Bun 1.3.14 (`bun:test`)    |
+| Linter          | Root Oxlint                |
+| Formatter       | Root Prettier              |
+| Rust formatter  | `cargo fmt`                |
 
 ## Common commands
 
@@ -65,7 +65,7 @@ To build the published package directly:
 bun --filter @webviewjs/webview build
 ```
 
-Run an example after building the package with `node apps/examples/simple.mjs`. To work on docs, use `bun --filter @webviewjs/docs dev` or `bun --filter @webviewjs/docs build`.
+Run an example after building the package with `bun apps/examples/simple.ts`. To work on docs, use `bun --filter @webviewjs/docs dev` or `bun --filter @webviewjs/docs build`.
 
 ## Key conventions
 
@@ -73,7 +73,15 @@ Run an example after building the package with `node apps/examples/simple.mjs`. 
 - Native NAPI classes remain the public runtime objects. TypeScript explicitly augments them with JS-only lifecycle, event, protocol, and IPC behavior.
 - Do not edit `packages/webview/js-bindings.js` or `packages/webview/js-bindings.d.ts`; NAPI-RS generates them from Rust source and both generated files are intentionally tracked.
 - `packages/webview/cli/index.mjs` is the permanent plain ESM npm bin shim. The TypeScript CLI implementation lives in `packages/webview/lib/cli/` and builds to `packages/webview/dist/cli/`.
-- Tests live in `packages/webview/__test__/` and use `node:test`, not Bun test, Jest, Vitest, or AVA.
+- Tests use Bun's built-in `bun:test` harness and TypeScript files. Use `expect(...)` assertions; do not use `node:test`, `node:assert`, Jest, Vitest, AVA, or `@ts-nocheck`.
+- `packages/webview/__test__/runtime/` tests the normal compiled `dist/index.js` API with the shared fake binding registered by `__test__/native/register.ts`. Do not load the real N-API addon, create a GUI, or add special public test classes.
+- Extend `packages/webview/__test__/native/bindings.ts` and `harness.ts` when a test needs native behavior. Fakes should record arguments and calls, isolate state per instance, allow deterministic event delivery, enforce lifecycle invariants, and throw for unsupported behavior instead of silently accepting it.
+- Put pure internal JavaScript behavior tests in `packages/webview/__test__/internal/`; put runtime boundary tests in `runtime/`; put CLI behavior tests in `cli/`; and keep README/example/declaration inspections in `static/` or TypeScript compile fixtures in `types/`. Do not use source regexes as substitutes for runtime or Rust behavior tests.
+- Public type fixtures belong in `packages/webview/__test__/types/`; use valid examples and `@ts-expect-error` for invalid API usage, and run them with `tsc --noEmit`.
+- Tests for `packages/create-webview` also use `bun:test`, `expect(...)`, and `.test.ts` files. Keep temporary filesystem cleanup attached to the test lifecycle with Bun's test hooks.
+- Use Bun's timer mocks from `bun:test` for timer behavior; do not replace global timer functions by hand.
+- Add Rust behavior tests beside the implementation under `#[cfg(test)]`. Keep them independent of a display server or GUI session, and run them with `cargo test --manifest-path packages/webview/Cargo.toml --lib`.
+- The root `bun run test` runs package tests and strict example typechecking. `.github/workflows/run-test.yml` runs that suite and the Rust unit tests.
 - Examples in `apps/examples/` import `@webviewjs/webview` through the Bun workspace dependency so they use the same package entry point as consumers.
 - Documentation lives in `apps/docs/content/docs/`. Its public routes start at the domain root, such as `/getting-started/installation` and `/api/application`.
 - Keep repository-level tools in the root package. Application and package dependencies belong to their respective workspaces.

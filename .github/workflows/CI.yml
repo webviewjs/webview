@@ -593,6 +593,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           npm_config_provenance: 'true'
+          npm_config_tag: ${{ needs.release-version.outputs.tag }}
         run: |
           bun run build:lib
           bun run prepublish:napi
