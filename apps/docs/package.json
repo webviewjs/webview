@@ -8,6 +8,7 @@
     "check": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "cn": "^0.3.0",
     "fumadocs-core": "16.15.17",
     "fumadocs-mdx": "15.4.5",
