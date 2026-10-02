@@ -6,8 +6,8 @@ export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
       title: (
-        <span className="wjs-wordmark">
-          <WebviewLogo className="size-7" />
+        <span className="inline-flex items-center gap-[10px] text-[15px] font-[650] tracking-[-0.035em] text-inherit [[data-home-layout]_&]:gap-[9px] [[data-home-layout]_&]:tracking-[-0.03em] [[data-home-layout]_&]:max-[700px]:gap-2 [[data-home-layout]_&]:max-[700px]:text-[14px]">
+          <WebviewLogo className="size-7 [[data-home-layout]_&]:size-[27px] [[data-home-layout]_&]:max-[700px]:size-[25px]" />
           <span>{appName}</span>
         </span>
       ),
