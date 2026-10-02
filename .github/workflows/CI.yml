@@ -17,14 +17,6 @@ on:
       - main
     tags-ignore:
       - '**'
-    paths:
-      - packages/webview/**
-      - bun.lock
-      - package.json
-      - turbo.json
-      - .cargo/**
-      - rustfmt.toml
-      - .github/workflows/CI.yml
   pull_request:
     branches:
       - main
@@ -42,8 +34,77 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-version:
+    name: Read release version
+    runs-on: ubuntu-latest
+    outputs:
+      is_release: ${{ steps.version.outputs.is_release }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      should_build: ${{ steps.version.outputs.should_build }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from commit message
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          COMMIT_MSG="$(git log -1 --pretty=%B)"
+          stable_regex='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          prerelease_regex='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[A-Za-z0-9-]+\.(0|[1-9][0-9]*)$'
+
+          if [[ "$COMMIT_MSG" =~ $stable_regex ]]; then
+            VERSION="$COMMIT_MSG"
+            TAG=latest
+            IS_RELEASE=true
+          elif [[ "$COMMIT_MSG" =~ $prerelease_regex ]]; then
+            VERSION="$COMMIT_MSG"
+            TAG="${VERSION#*-}"
+            TAG="${TAG%%.*}"
+            if [[ "$TAG" =~ ^[0-9]+$ || "$TAG" =~ ^[vV][0-9]+$ || "$TAG" == x || "$TAG" == X ]]; then
+              TAG=next
+            fi
+            IS_RELEASE=true
+          else
+            VERSION=
+            TAG=latest
+            IS_RELEASE=false
+          fi
+
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          if [[ "$EVENT_NAME" == pull_request || "$IS_RELEASE" == true ]]; then
+            SHOULD_BUILD=true
+          elif [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
+            SHOULD_BUILD=true
+          elif git diff --quiet "$BEFORE_SHA" "$GITHUB_SHA" -- \
+            packages/webview \
+            bun.lock \
+            package.json \
+            turbo.json \
+            .cargo \
+            rustfmt.toml \
+            .github/workflows/CI.yml; then
+            SHOULD_BUILD=false
+          else
+            SHOULD_BUILD=true
+          fi
+
+          echo "should_build=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
+
   build:
     name: ${{ matrix.settings.os }} - ${{ matrix.settings.target }}
+    needs: release-version
+    if: needs.release-version.outputs.should_build == 'true'
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -396,6 +457,13 @@ jobs:
         if: runner.os == 'Windows'
         run: bun install --frozen-lockfile --linker hoisted
 
+      - name: Set release package version
+        if: needs.release-version.outputs.is_release == 'true'
+        env:
+          VERSION: ${{ needs.release-version.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+        working-directory: packages/webview
+
       - name: Build
         run: ${{ matrix.settings.build_script || format('bun run build --target {0}', matrix.settings.target) }}
         shell: bash
@@ -413,6 +481,8 @@ jobs:
   # to satisfy package managers that resolve the freebsd-x64 optional package.
   # The full wry/wry GUI stack is NOT compiled (see Cargo.toml cfg guards).
   build-freebsd:
+    needs: release-version
+    if: needs.release-version.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     name: FreeBSD x64 (stub)
     timeout-minutes: 90
@@ -441,6 +511,7 @@ jobs:
         env:
           DEBUG: napi:*
           RUSTUP_IO_THREADS: 1
+          RELEASE_VERSION: ${{ needs.release-version.outputs.version }}
         run: |
           . "$HOME/.cargo/env"
           rustc --version
@@ -448,6 +519,9 @@ jobs:
           bun --version
           bun install --frozen-lockfile
           cd packages/webview
+          if [ -n "$RELEASE_VERSION" ]; then
+            npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version
+          fi
           # FreeBSD exports only the unsupported native stub; its generated
           # bindings intentionally omit the public API, so skip the JS typecheck.
           bun run build:native
@@ -467,6 +541,7 @@ jobs:
     needs:
       - build
       - build-freebsd
+      - release-version
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
@@ -487,6 +562,13 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Set release package version
+        if: needs.release-version.outputs.is_release == 'true'
+        env:
+          VERSION: ${{ needs.release-version.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+        working-directory: packages/webview
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -501,41 +583,10 @@ jobs:
         shell: bash
         working-directory: packages/webview
 
-      - name: Extract version from commit message
-        id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-          COMMIT_MSG="$(git log -1 --pretty=%B)"
-          stable_regex='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
-          prerelease_regex='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[A-Za-z0-9-]+\.(0|[1-9][0-9]*)$'
-
-          if [[ "$COMMIT_MSG" =~ $stable_regex ]]; then
-            VERSION="$COMMIT_MSG"
-            TAG=latest
-            IS_RELEASE=true
-          elif [[ "$COMMIT_MSG" =~ $prerelease_regex ]]; then
-            VERSION="$COMMIT_MSG"
-            TAG="${VERSION#*-}"
-            TAG="${TAG%%.*}"
-            if [[ "$TAG" =~ ^[0-9]+$ || "$TAG" =~ ^[vV][0-9]+$ || "$TAG" == x || "$TAG" == X ]]; then
-              TAG=next
-            fi
-            IS_RELEASE=true
-          else
-            VERSION=
-            TAG=latest
-            IS_RELEASE=false
-          fi
-
-          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
       - name: Verify release version
-        if: steps.version.outputs.is_release == 'true'
+        if: needs.release-version.outputs.is_release == 'true'
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.release-version.outputs.version }}
         run: |
           set -euo pipefail
           WEBVIEW_VERSION="$(node -p 'require("./packages/webview/package.json").version')"
@@ -545,20 +596,20 @@ jobs:
           fi
 
       - name: Publish to npm
-        if: steps.version.outputs.is_release == 'true'
+        if: needs.release-version.outputs.is_release == 'true'
         run: |
           npm config set provenance true
-          npm publish --access public --tag "${{ steps.version.outputs.tag }}"
+          npm publish --access public --tag "${{ needs.release-version.outputs.tag }}"
         working-directory: packages/webview
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build and publish creator packages
-        if: steps.version.outputs.is_release == 'true'
+        if: needs.release-version.outputs.is_release == 'true'
         env:
-          VERSION: ${{ steps.version.outputs.version }}
-          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ needs.release-version.outputs.version }}
+          TAG: ${{ needs.release-version.outputs.tag }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -659,6 +710,6 @@ jobs:
           publish_if_missing create-webview-app
 
       - name: Skip publish (not a release)
-        if: steps.version.outputs.is_release == 'false'
+        if: needs.release-version.outputs.is_release == 'false'
         run: |
           echo "Not a release commit, skipping publish"
