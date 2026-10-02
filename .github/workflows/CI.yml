@@ -506,6 +506,8 @@ jobs:
         env:
           DEBUG: napi:*
           RUSTUP_IO_THREADS: 1
+          CARGO_INCREMENTAL: 0
+          CARGO_PROFILE_TEST_DEBUG: 0
         run: |
           . "$HOME/.cargo/env"
           rustc --version
@@ -513,8 +515,11 @@ jobs:
           bun --version
           bun install --frozen-lockfile
           cd packages/webview
-          bun run build --target x86_64-unknown-freebsd
+          # Keep test and release Cargo artifacts from filling the FreeBSD VM disk.
           cargo test --lib
+          cargo clean
+          bun run build --target x86_64-unknown-freebsd
+          cargo clean
           bun run test
 
       - name: Run FreeBSD GTK/WebKitGTK smoke test
