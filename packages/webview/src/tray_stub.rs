@@ -1,7 +1,8 @@
+use napi::bindgen_prelude::FunctionRef;
 use napi::Result;
 use napi_derive::napi;
 
-use crate::types::TrayIconOptions;
+use crate::types::{TrayEventPayload, TrayIconOptions};
 
 #[napi(js_name = "TrayIcon")]
 pub struct JsTrayIcon;
@@ -30,6 +31,10 @@ impl JsTrayIcon {
       menu_on_right_click: None,
     })
   }
+
+  /// Keeps the unsupported tray binding's generated type compatible with the JS wrapper.
+  #[napi(js_name = "_onTrayEvent")]
+  pub fn on_tray_event(&self, _handler: Option<FunctionRef<TrayEventPayload, ()>>) {}
 
   #[napi]
   pub fn dispose(&self) {}
