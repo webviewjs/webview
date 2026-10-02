@@ -18,7 +18,7 @@ function run(args) {
   }
 }
 
-// Forward build flags such as --target to NAPI, while keeping them away from run-s.
+// Forward build flags such as --target to the native NAPI build only.
 run([resolve(__dirname, 'build.js'), ...process.argv.slice(2)]);
 run([resolve(__dirname, 'clean-lib.js')]);
 run([require.resolve('typescript/bin/tsc'), '-p', 'tsconfig.json']);

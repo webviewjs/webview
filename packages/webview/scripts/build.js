@@ -16,7 +16,8 @@ const args = [
 
 console.log(`Executing \x1b[36mnapi ${args.slice(1).join(' ')}\x1b[0m`);
 
-const result = spawnSync(process.execPath, args, {
+// Run NAPI's CLI with Bun so its ESM imports resolve correctly from Bun's isolated install layout.
+const result = spawnSync('bun', args, {
   stdio: 'inherit',
 });
 
