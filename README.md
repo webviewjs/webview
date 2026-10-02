@@ -10,6 +10,8 @@ This repository contains the published package, its documentation site, runnable
 
 [Documentation](https://webview.js.org) · [npm package](https://www.npmjs.com/package/@webviewjs/webview) · [Examples](https://github.com/webviewjs/webview/tree/main/apps/examples) · [Issues](https://github.com/webviewjs/webview/issues)
 
+![WebviewJS preview](https://github.com/webviewjs/webview/raw/main/assets/preview.webp)
+
 ## Repository
 
 | Workspace                 | Purpose                                                        |
