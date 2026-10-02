@@ -461,7 +461,10 @@ jobs:
         if: needs.release-version.outputs.is_release == 'true'
         env:
           VERSION: ${{ needs.release-version.outputs.version }}
-        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+        run: |
+          node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync("package.json", "utf8")); manifest.version = process.env.VERSION; fs.writeFileSync("package.json", `${JSON.stringify(manifest, null, 2)}\n`);'
+          bun run version
+        shell: bash
         working-directory: packages/webview
 
       - name: Build
@@ -520,7 +523,8 @@ jobs:
           bun install --frozen-lockfile
           cd packages/webview
           if [ -n "$RELEASE_VERSION" ]; then
-            npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version
+            node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync("package.json", "utf8")); manifest.version = process.env.RELEASE_VERSION; fs.writeFileSync("package.json", `${JSON.stringify(manifest, null, 2)}\n`);'
+            bun run version
           fi
           # FreeBSD exports only the unsupported native stub; its generated
           # bindings intentionally omit the public API, so skip the JS typecheck.
@@ -566,7 +570,10 @@ jobs:
         if: needs.release-version.outputs.is_release == 'true'
         env:
           VERSION: ${{ needs.release-version.outputs.version }}
-        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+        run: |
+          node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync("package.json", "utf8")); manifest.version = process.env.VERSION; fs.writeFileSync("package.json", `${JSON.stringify(manifest, null, 2)}\n`);'
+          bun run version
+        shell: bash
         working-directory: packages/webview
 
       - name: Download all artifacts
