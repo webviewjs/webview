@@ -1,54 +1,32 @@
 ---
-title: 'Event Loop'
-description: "WebviewJS uses Tao's non-blocking pumpevents() integration so the GUI never blocks Node.js's event loop."
+title: 'Event loop'
+description: 'How the non-blocking native event pump works with the JavaScript runtime.'
 ---
 
-WebviewJS uses **Tao**'s non-blocking `pump_events()` integration so the GUI never blocks Node.js's event loop.
+The native window system has its own event queue. WebviewJS processes it by calling `app.pumpEvents()`; it does not keep a second blocking loop running beside Node.js.
 
-## How it works
+## `run()` and `pumpEvents()`
 
-`app.run()` is a thin JS wrapper that sets up a `setInterval` calling `app.pumpEvents()` on every tick:
-
-```js
-// Equivalent to what app.run() does
-const timer = setInterval(() => {
-  if (!app.pumpEvents()) app.stop();
-}, 16); // ~60 FPS
-```
-
-Each call to `pumpEvents()` drains the OS message queue without waiting, then returns `true` if the app is still alive or `false` when it should shut down.
-
-Because this runs inside a Node.js timer, all Node APIs (file I/O, network, child processes, etc.) work normally alongside the GUI.
-
-## Synchronous running
-
-`app.runSync()` hands control to Tao's native event loop directly and blocks JavaScript until the application exits:
+`app.run()` starts a JavaScript `setInterval` that pumps native events every 16 ms by default. The call returns immediately. The timer runs in the normal JavaScript event loop, so timers, I/O, and promises continue to run.
 
 ```js
-const app = new Application();
-app.runSync();
+app.run({ interval: 16 }); // about 60 event-pump calls per second
 ```
 
-This is the lowest-level way to run the GUI loop. It is appropriate when the current thread is dedicated to the application lifecycle, but it will prevent any other JavaScript from running until the app closes.
+The interval is a polling cadence, not a frame-rate guarantee. `app.run({ ref: false })` calls `unref()` on the timer so it does not by itself keep the runtime alive. Calling `run()` when a timer is already active does not replace it or update its options. Deno added Node-style timer handles in 2.8; on earlier Deno 2 releases, leave `ref` at its default because the global timer returns a number. See [Deno's timer compatibility notes](https://docs.deno.com/runtime/fundamentals/node/#use-node-globals-like-process-and-buffer).
 
-## Application readiness
+`app.pumpEvents()` processes one non-blocking batch and returns `true` while the application is active, or `false` after shutdown. `run()` uses that result to stop its timer. Use `pumpEvents()` directly only if you are managing the cadence yourself.
 
-`app.whenReady()` starts the event pump and resolves when Tao emits the first
-native `Resumed` event:
+## Readiness
+
+The `ready` event is emitted on the first `pumpEvents()` call, or immediately before `runSync()` enters the native event loop. `whenReady()` starts the pump automatically unless `{ autoRun: false }` is passed:
 
 ```js
-app.whenReady().then(() => {
-  console.log('native application is ready');
-});
+await app.whenReady();
+const win = app.createBrowserWindow();
 ```
 
-Configure the implicit timer through readiness options:
-
-```js
-app.whenReady({ interval: 33, ref: false });
-```
-
-For manual control, disable auto-run and then start your own pump:
+Manual mode gives the caller responsibility for pumping at least once:
 
 ```js
 const ready = app.whenReady({ autoRun: false });
@@ -56,40 +34,19 @@ app.pumpEvents();
 await ready;
 ```
 
-`interval` and `ref` are not accepted when `autoRun` is `false`.
+With `autoRun: false`, `interval` and `ref` are invalid options because no timer is created.
 
-## Controlling the interval
+## Blocking mode
 
-```js
-// 30 FPS (more CPU-friendly for simple apps)
-app.run({ interval: 33 });
+`app.runSync()` enters Tao's native event loop on the current thread and blocks JavaScript until the native loop exits. Use it only when stopping JavaScript execution during the GUI loop is acceptable. `run()` is the normal choice when the app also needs Node.js or Bun asynchronous work.
 
-// Let the process exit naturally even while the GUI is open
-// (useful for scripts that should end when async work finishes)
-app.run({ ref: false });
-```
-
-| Option     | Default | Description                                                             |
-| ---------- | ------- | ----------------------------------------------------------------------- |
-| `interval` | `16`    | Milliseconds between event pumps (~60 FPS)                              |
-| `ref`      | `true`  | If `false`, the timer is `unref()`'d so it won't keep the process alive |
-
-## Stopping manually
+## Stop and exit
 
 ```js
-app.stop(); // clears the interval but leaves windows open
-app.exit(); // stop() + hides all windows + marks app as exited
+app.stop(); // stop only the JavaScript timer; windows and native resources remain
+app.exit(); // dispose application-owned native resources and mark the app exited
 ```
 
-`stop()` without `exit()` is useful if you want to take over the loop yourself:
+`stop()` is useful before taking over event pumping yourself. It does not close or dispose windows. `exit()` prevents creation of new resources; a running `run()` timer stops on its next pump. See [Application lifecycle](../guides/application-lifecycle) for shutdown and window-close behavior.
 
-```js
-app.stop();
-// run a tight loop for a CPU-intensive frame:
-while (frames-- > 0) app.pumpEvents();
-app.run(); // hand back to the interval
-```
-
-## macOS note
-
-On macOS the main thread must own the GUI. WebviewJS always runs the event loop on the main thread (the thread that called `new Application()`). Do **not** create Application or BrowserWindow from a worker thread.
+On macOS, create and use `Application` on the main JavaScript thread. Do not move GUI calls to a worker thread.

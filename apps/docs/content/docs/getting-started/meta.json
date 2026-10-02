@@ -1,4 +1,4 @@
 {
   "title": "Getting started",
-  "pages": ["installation", "quick-start", "event-loop"]
+  "pages": ["introduction", "installation", "create-project", "quick-start", "event-loop"]
 }

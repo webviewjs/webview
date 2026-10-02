@@ -1,153 +1,106 @@
 ---
 title: 'Webview'
-description: 'Controls the embedded browser view attached to a BrowserWindow. Created via win.createWebview().'
+description: 'Controls the embedded system browser attached to a BrowserWindow.'
 ---
 
-Controls the embedded browser view attached to a `BrowserWindow`. Created via `win.createWebview()`.
-
-Keep a strong JavaScript reference to each `Webview` for its intended
-lifetime. This preserves access to methods and EventEmitter listeners. The
-root `Application` owns the native webview and disposes it during `app.exit()`.
+`Webview` controls the embedded system browser attached to a `BrowserWindow`. Create it with `win.createWebview()`; `new Webview()` is not supported. Keep a strong reference while your code needs its methods or listeners.
 
 ## Creation options
 
 ```ts
 interface WebviewOptions {
-  url?: string; // URL to load on start
-  html?: string; // Inline HTML to render (mutually exclusive with url)
-  x?: number; // Left offset in logical pixels (child webviews only)
-  y?: number; // Top offset in logical pixels (child webviews only)
-  width?: number; // Width in logical pixels (child webviews only)
-  height?: number; // Height in logical pixels (child webviews only)
-  child?: boolean; // If true, position is relative to parent window
-  enableDevtools?: boolean; // Enable DevTools
-  transparent?: boolean; // Transparent background
-  incognito?: boolean; // Private mode (no persistent storage)
-  userAgent?: string; // Custom user-agent string
-  preload?: string; // JS injected before any page script runs
-  ipcName?: string; // Alias for window.ipc, for example window.bindings
-  webContext?: WebContext; // Shared browser data context
-  navigationHandler?: (url: string) => boolean; // allow or cancel navigation
-  newWindowHandler?: (event: WebviewNewWindowEvent) => boolean; // allow or cancel new windows
+  url?: string;
+  html?: string;
+  child?: boolean;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  enableDevtools?: boolean;
+  incognito?: boolean;
+  userAgent?: string;
+  preload?: string;
+  transparent?: boolean;
+  theme?: Theme; // Windows
+  hotkeysZoom?: boolean;
+  clipboard?: boolean;
+  autoplay?: boolean;
+  backForwardNavigationGestures?: boolean;
+  ipcName?: string;
+  autoNormalizeLoadUrl?: boolean; // Windows
+  useHttpsScheme?: boolean; // Windows custom-protocol URL workaround
+  webContext?: WebContext | null;
+  navigationHandler?: (url: string) => boolean;
+  newWindowHandler?: (event: WebviewNewWindowEvent) => boolean;
 }
 ```
 
-> **Note on bounds:** For top-level webviews (not child), omit `x`/`y`/`width`/`height` so the webview fills the window and resizes with it automatically. Setting explicit bounds fixes the size, which causes the black-border artifact when the window is maximised.
+Choose one initial `url` or `html` source. For a top-level webview, omit its bounds so it fills the window. When `child: true`, `x`, `y`, `width`, and `height` describe a rectangle relative to the parent window in logical pixels. See [Loading application content](../guides/loading-content).
 
-## Navigation
+`preload` is an initialization script run before page scripts. `webContext` shares browser data with other webviews. `incognito` requests a private webview context. See [WebContext](./web-context) and [Cookies and storage](../guides/cookies-and-storage).
+
+On Windows, `theme` selects the WebView2 appearance. `autoNormalizeLoadUrl` controls custom-scheme normalization for later `loadUrl()` and `loadUrlWithHeaders()` calls; it defaults to `true`. `useHttpsScheme` defaults to `false` and selects whether the WebView2 custom-protocol workaround uses an HTTP or HTTPS origin. These two options do not apply to other platforms.
+
+## Loading and navigation
 
 ```ts
 webview.loadUrl(url: string): void
 webview.loadHtml(html: string): void
 webview.loadUrlWithHeaders(url: string, headers: HeaderData[]): void
 webview.reload(): void
-webview.url(): string | null          // currently displayed URL
+webview.url(): string | null
 ```
 
-`navigationHandler` runs synchronously before each navigation and new-window
-request. It receives the URL and can return `false` to cancel it.
+The load methods return `void`; native failures throw through the N-API call. `url()` returns the currently displayed URL or `null` when the native webview has none.
 
-`newWindowHandler` is a synchronous guard for new-window requests. It receives
-the `new-window` event payload, including the URL and any browser-provided
-window size or position hints, and can return `false` to cancel. When both
-guards are set, both must allow the request. Keep either callback fast and do
-not return a Promise. The `navigation` or `new-window` event is still emitted
-whether the request is allowed or cancelled.
+`HeaderData` is `{ key: string; value?: string }`. Use custom protocols to serve packaged local assets; see [Custom Protocols](../guides/custom-protocols).
 
-Navigation events include `target: 'current'`; new-window events include
-`target: 'new-window'`. This identifies the requested browsing context. Wry
-does not expose the original HTML `target` attribute value.
+### Synchronous guards and observation events
 
-See the runnable [navigation handler example](https://github.com/webviewjs/webview/blob/main/apps/examples/navigation-handler.ts).
+`navigationHandler(url)` runs synchronously and must return a boolean. It can cancel normal navigation and is also checked for new-window URLs. `newWindowHandler(event)` synchronously decides whether a new-window request is allowed. If both handlers are set, both must allow the request. Do not return a promise.
 
-## Events
+The `navigation` and `new-window` events observe requests; they are delivered asynchronously to JavaScript and cannot cancel them. Use the synchronous handlers to deny requests. See [Navigation and popups](../guides/navigation-and-popups).
 
-`Webview` implements standard Node.js `EventEmitter` methods, including `on`,
-`once`, `off`, `addListener`, `removeListener`, and `removeAllListeners`.
-
-```js
-webview.on('page-load-started', ({ url }) => {});
-webview.on('page-load-finished', ({ url }) => {});
-webview.on('title-changed', ({ title }) => {});
-webview.on('download-started', ({ url }) => {});
-webview.on('download-completed', ({ url, success }) => {});
-webview.on('navigation', ({ url, target }) => {});
-webview.on('new-window', ({ url, target, windowFeatures }) => {});
-```
-
-The `new-window` event observes attempts from `window.open`,
-`target="_blank"`, and equivalent browser actions. It is dispatched
-asynchronously, so use `newWindowHandler` or `navigationHandler` to cancel a
-request. Download events are observational and do not cancel downloads.
-
-See the runnable [webview events example](https://github.com/webviewjs/webview/blob/main/apps/examples/webview-events.ts).
-
-`HeaderData`:
-
-```ts
-interface HeaderData {
-  key: string;
-  value?: string;
-}
-```
-
-## Script execution
+## Scripts
 
 ```ts
 webview.evaluateScript(script: string): void
 webview.evaluateScriptWithCallback(script: string, callback: (result: string) => void): void
 ```
 
-## Cookies
+`evaluateScript()` runs page JavaScript without a result callback. `evaluateScriptWithCallback()` invokes a one-argument callback with the result converted to a string; it is not an error-first callback.
+
+## IPC and `expose()`
 
 ```ts
-webview.getCookies(url?: string): WebviewCookie[]
-webview.setCookie(cookie: WebviewCookie): void
-webview.deleteCookie(name: string, domain?: string, path?: string): void
-webview.clearAllBrowsingData(): void
+webview.onIpcMessage(handler?: ((message: IpcMessage) => void) | null): void
+webview.expose(name: string, target: ExposedTarget): void
 ```
 
-`WebviewCookie`:
+`onIpcMessage()` receives raw `window.ipc.postMessage()` calls. `expose()` creates a page namespace with asynchronous methods. Both share one native transport. See [IPC messaging](../guides/ipc-messaging) for the message shape, serialization contract, and examples.
 
-```ts
-interface WebviewCookie {
-  name: string;
-  value: string;
-  domain?: string;
-  path?: string;
-  httpOnly?: boolean;
-  secure?: boolean;
-  sameSite?: 'strict' | 'lax' | 'none';
-}
+## Events
+
+`Webview` implements Node's `EventEmitter` methods: `on`, `once`, `off`, `addListener`, `removeListener`, `removeAllListeners`, `listenerCount`, `listeners`, `rawListeners`, `emit`, and `eventNames`.
+
+| Event                | Payload                                                                  |
+| -------------------- | ------------------------------------------------------------------------ |
+| `page-load-started`  | `event`, `url?`                                                          |
+| `page-load-finished` | `event`, `url?`                                                          |
+| `title-changed`      | `event`, `title?`                                                        |
+| `download-started`   | `event`, `url?`                                                          |
+| `download-completed` | `event`, `url?`, `success?`                                              |
+| `navigation`         | `event: 'navigation'`, `url?`, `target: 'current'`                       |
+| `new-window`         | `event: 'new-window'`, `url?`, `target: 'new-window'`, `windowFeatures?` |
+
+Download events are observational; they do not cancel or redirect downloads. `windowFeatures` may contain a requested size and position. The native engine may omit these hints.
+
+```js
+webview.on('title-changed', ({ title }) => console.log(title));
+webview.on('download-completed', ({ url, success }) => console.log(url, success));
 ```
 
-## Appearance
-
-```ts
-webview.setBackgroundColor(r: number, g: number, b: number, a: number): void  // 0-255 each
-```
-
-## Bounds (child webviews)
-
-For child webviews you can reposition or resize the view at runtime:
-
-```ts
-webview.getBounds(): WebviewBounds | null
-webview.setBounds(bounds: WebviewBounds): void
-webview.width: number | null
-webview.height: number | null
-webview.x: number | null
-webview.y: number | null
-```
-
-```ts
-interface WebviewBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-```
+See the runnable [webview events example](https://github.com/webviewjs/webview/blob/main/apps/examples/webview-events.ts).
 
 ## DevTools
 
@@ -157,60 +110,53 @@ webview.closeDevtools(): void
 webview.isDevtoolsOpen(): boolean
 ```
 
-## Focus
+DevTools must be enabled in creation options with `enableDevtools: true` before opening them.
+
+## Cookies and storage
 
 ```ts
-webview.focus(): void        // give keyboard focus to the webview
-webview.focusParent(): void  // return focus to the parent window
+webview.getCookies(url?: string | null): WebviewCookie[]
+webview.setCookie(cookie: WebviewCookie): void
+webview.deleteCookie(name: string, domain?: string | null, path?: string | null): void
+webview.clearAllBrowsingData(): void
 ```
 
-## IPC
+`getCookies()` returns cookies for the URL, or all cookies when no URL is supplied. `deleteCookie()` narrows deletion by optional domain and path. `clearAllBrowsingData()` clears cookies, cache, local storage, and IndexedDB. Browser engines may differ in cookie validation and persistence. See [Cookies and storage](../guides/cookies-and-storage).
 
-The page calls `window.ipc.postMessage(body)` to send a message to Node.
+## Visibility, focus, zoom, and printing
 
-Node registers its handler with `webview.onIpcMessage(handler)`.
-
-Set `ipcName: 'bindings'` to add `window.bindings` as an alias. `window.ipc` always remains available.
-
-See [IPC guide](../guides/ipc-messaging) for a complete walkthrough.
-
-## `expose(name, target)`
-
-Expose JSON static values and Node functions under a page global. Page functions always return Promises, even when the Node implementation is synchronous.
-
-```js
-webview.expose('native', {
-  isCool: true,
-  readFile: async (path) => readFile(path, 'utf8'),
-});
+```ts
+webview.setWebviewVisibility(visible: boolean): void
+webview.focus(): void
+webview.focusParent(): void
+webview.zoom(scaleFactor: number): void
+webview.print(): void
 ```
 
-```js
-// In the page
-console.log(window.native.isCool);
-const text = await window.native.readFile('/tmp/example.txt');
+`zoom(1.25)` sets 125% page zoom. `setWebviewVisibility()` hides or shows the browser surface without hiding its native window. `focus()` gives keyboard focus to page content; `focusParent()` returns it to the host window. `print()` asks the native webview to print the current page and has no return value.
+
+See [Webview controls](../guides/webview-controls).
+
+## Bounds and appearance
+
+```ts
+webview.getBounds(): WebviewBounds | null
+webview.setBounds(bounds: WebviewBounds): void
+webview.width: number | null
+webview.height: number | null
+webview.x: number | null
+webview.y: number | null
+webview.setBackgroundColor(r: number, g: number, b: number, a: number): void
 ```
 
-Only enumerable own data properties are exposed. Getters and setters are ignored. Arguments, static values, and function results must be JSON-serializable. Cyclic structures, `BigInt`, functions as values, and `undefined` results are rejected with `SerializationError`.
-
-The namespace must be a valid JavaScript identifier and can be exposed only once for a webview. See the runnable [expose example](https://github.com/webviewjs/webview/blob/main/apps/examples/expose.ts).
-
-## Custom protocols
-
-Custom protocols are registered on the **`BrowserWindow`** before `createWebview()` is called:
-
-```js
-win.registerProtocol('app', async (request) => {
-  // ...
-  return { statusCode: 200, body: Buffer.from('…'), mimeType: 'text/html' };
-});
-const webview = win.createWebview({ url: 'app://localhost/index.html' });
-```
-
-See [Custom Protocols guide](../guides/custom-protocols) for full details.
+Bounds and offsets are logical pixels relative to the parent window. The geometry properties return `null` when the native webview does not report a value. `setBackgroundColor()` takes red, green, blue, and alpha channels from `0` to `255`.
 
 ## Disposal
 
-Call `webview.dispose()` for early cleanup, or use `Symbol.dispose`. Disposal
-is idempotent. `webview.isDisposed()` reports its state. `app.exit()` also
-disposes every webview created under that application.
+```ts
+webview.dispose(): void
+webview.isDisposed(): boolean
+webview[Symbol.dispose](): void
+```
+
+Disposal is idempotent. Disposing the owning `BrowserWindow` or calling `app.exit()` also disposes the native webview. Later method calls on a disposed instance throw. `Symbol.dispose` delegates to `dispose()`.

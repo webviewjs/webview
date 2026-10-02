@@ -1,62 +1,30 @@
 ---
 title: 'Linux'
+description: 'WebKitGTK requirements, display backends, and GTK menus.'
 ---
 
-## X11 and Wayland window attributes
+## WebKitGTK and build dependencies
 
-X11 creation options expose visual and screen IDs, `WM_CLASS` names,
-override-redirect, `_NET_WM_WINDOW_TYPE`, and base size.
+Linux uses WebKitGTK 4.1 with GTK 3 and libsoup 3. Prebuilt N-API packages still depend on the system webview libraries. To build the native addon from source on Debian or Ubuntu, install the packages used by the repository's Linux build:
 
-Wayland creation options expose the application ID and instance name.
-`getWaylandSurface()` returns Tao's native Wayland surface pointer for
-interoperability, or `0n` when the window uses X11.
-
-See [BrowserWindow platform APIs](../api/browser-window#linux-creation-options).
-
-## WebKitGTK
-
-WebviewJS on Linux uses **WebKitGTK 4.1** (WebKit-based). Install the runtime and development headers before building or running:
-
-```bash
-# Debian / Ubuntu
-sudo apt install libwebkit2gtk-4.1-dev libxdo-dev
-
-# Fedora / RHEL
-sudo dnf install webkit2gtk4.1-devel libxdo-devel
-
-# Arch Linux
-sudo pacman -S webkit2gtk-4.1 xdotool
+```sh
+sudo apt install pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+  libglib2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev \
+  libgdk-pixbuf2.0-dev libgtk-3-dev libxdo-dev
 ```
 
-## Display server support
+Other distributions need equivalent WebKitGTK 4.1, libsoup 3, GTK 3, and XDoTool development packages. See [installation](../getting-started/installation).
 
-WebviewJS supports both **X11** and **Wayland** through Tao. The active backend
-is selected at runtime from the available display environment.
+## X11 and Wayland
 
-No `Cargo.toml` changes or feature flags are needed.
+Tao's GTK window backend can run in X11 and Wayland desktop sessions. Window placement, decorations, taskbar behavior, and capture protection depend on the window manager or Wayland compositor. Absolute positioning may be ignored by compositors.
 
-## Menus
+`win.getWaylandSurface()` returns a native Wayland surface pointer on Wayland and `0n` on X11 or non-Linux targets. WebviewJS does not expose X11 visual/screen IDs or Wayland app-ID creation options.
 
-Native menu bars use Muda's GTK integration. WebviewJS obtains the GTK window
-and default vertical box directly from Tao, so `app.setMenu()`, window menu
-options, and `CustomMenuClick` events work on Linux.
+## Native menus
 
-## Wayland-specific notes
+Muda's GTK integration attaches application and per-window menus to GTK windows. Menu selection events arrive through the application event pump as `custom-menu-click`. Linux menus and their events are supported; run `app.run()` or pump events for callbacks to arrive. See [Menus](../guides/menus) and [Menu API](../api/menu).
 
-- Window decorations on Wayland are drawn client-side (via `adwaita` CSD).
-- Absolute window positioning (`win.setPosition()`) may be ignored on compositors that enforce the XDG Shell placement protocol.
-- Screen capture / content protection APIs are compositor-dependent.
+## Native package and validation scope
 
-## `setSkipTaskbar`
-
-This calls Tao's GTK implementation. The final behavior remains subject to the
-desktop environment and window manager.
-
-## Tested environments
-
-| Distribution | Display         | Status    |
-| ------------ | --------------- | --------- |
-| Ubuntu 22.04 | X11 / Wayland   | Supported |
-| Fedora 40    | Wayland (GNOME) | Supported |
-| Arch Linux   | X11 / Wayland   | Supported |
-| Debian 12    | X11             | Supported |
+Published Linux N-API targets use glibc and include x64, ia32, arm64, and armv7. The repository's CI builds these Linux targets and runs the package/Rust test jobs on Linux. CI does not establish visual behavior on every distribution, desktop environment, display server, or compositor.

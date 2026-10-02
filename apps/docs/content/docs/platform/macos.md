@@ -1,66 +1,44 @@
 ---
 title: 'macOS'
+description: 'System WebKit, application menus, and macOS-specific window attributes.'
 ---
 
-## WebKit
+## WebKit and native package targets
 
-WebviewJS on macOS uses the built-in **WebKit** (WKWebView). No runtime installation is required. macOS 10.15 Catalina or later is supported.
+WebviewJS uses the system WebKit framework through WKWebView. It does not bundle a browser engine. The published N-API packages include macOS x64 and arm64 targets.
 
-## Main thread requirement
+## App menu
 
-macOS enforces that all GUI operations happen on the main thread. WebviewJS handles this automatically — do **not** create `Application` or `BrowserWindow` from a `worker_threads` Worker or any async context that moves the call off the main thread.
+The native menu bar belongs to the application and appears at the top of the screen. `app.setMenu()` configures it; menu roles such as `about`, `hide`, `hideothers`, `showall`, `services`, `bringalltofront`, and `quit` map to native actions. See [Menu](../api/menu#predefined-roles).
 
-## App-level menu bar
+Create the application and call GUI APIs on the runtime's main JavaScript thread. Do not create or use WebviewJS windows from a Node.js `worker_threads` worker.
 
-On macOS the menu bar spans the top of the entire screen and belongs to the application, not any individual window.
+## Window behavior
+
+macOS-specific creation options include:
+
+- macosMovableByWindowBackground for dragging the window by its background.
+- macosTitlebarTransparent, macosTitleHidden, macosTitlebarHidden, and macosTitlebarButtonsHidden for titlebar presentation.
+- macosFullsizeContentView to extend content into the titlebar area.
+- macosDisallowHidpi to disable high-DPI behavior.
+- macosHasShadow and macosTabbingIdentifier for window shadow and tab grouping.
+- visibleOnAllWorkspaces for workspace visibility.
+
+Runtime methods expose simple fullscreen, shadow, tabbing identifier, and document-edited state. These options and methods are described in [BrowserWindow](../api/browser-window#platform-extensions).
+
+`setSkipTaskbar()` is a no-op on macOS. `setIgnoreCursorEvents()` maps to the native click-through behavior. Window icons do not set the application Dock icon; configure the app bundle's icon separately.
+
+## Transparency
+
+Request a transparent native window at creation and set the webview background alpha to zero:
 
 ```js
-app.setMenu({
-  items: [/* … */],
+const win = app.createBrowserWindow({
+  transparent: true,
+  decorations: false,
 });
+const webview = win.createWebview({ html: '<div>Overlay</div>', transparent: true });
+webview.setBackgroundColor(0, 0, 0, 0);
 ```
 
-`init_for_nsapp()` is called automatically when `Application` is created.
-
-## Standard macOS roles
-
-All predefined roles work on macOS, including:
-
-| Role              | Keyboard shortcut |
-| ----------------- | ----------------- |
-| `hide`            | ⌘H                |
-| `hideothers`      | ⌥⌘H               |
-| `showall`         | —                 |
-| `bringalltofront` | —                 |
-| `services`        | Services submenu  |
-| `quit`            | ⌘Q                |
-| `about`           | —                 |
-
-## Fullscreen
-
-```js
-win.setFullscreen(FullscreenType.Borderless); // uses native macOS fullscreen
-```
-
-## Transparent window
-
-```js
-const win = app.createBrowserWindow({ transparent: true, decorations: false });
-```
-
-Combine with `webview.setBackgroundColor(0, 0, 0, 0)` for a fully transparent, frameless window.
-
-## Platform extensions
-
-`BrowserWindowOptions` exposes native titlebar, full-size content, shadow,
-first-mouse, HiDPI, tabbing, Option-as-Alt, and borderless-game attributes.
-Runtime methods support simple fullscreen, shadows, native window tabs,
-document-edited state, Option-as-Alt behavior, and borderless-game mode.
-
-See [BrowserWindow platform APIs](../api/browser-window#macos-creation-options).
-
-## Known limitations
-
-- **`setSkipTaskbar`** is a no-op on macOS (use `NSApplication.setActivationPolicy` for dock hiding, which requires an entitlement).
-- **Click-through** (`setIgnoreCursorEvents`) is supported via `NSWindow.setIgnoresMouseEvents`.
-- **Window icons** are not shown on the macOS dock — the app icon is set via the bundle's `Info.plist`.
+See the [window appearance guide](../guides/window-appearance) and [transparent window example](https://github.com/webviewjs/webview/blob/main/apps/examples/transparent.ts).

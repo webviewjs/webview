@@ -1,111 +1,68 @@
 ---
-title: 'Quick Start'
+title: 'Quick start'
+description: 'Install WebviewJS, create a native window, load a page, and start the event pump.'
 ---
 
-## Create a project
-
-Create a starter application with the official scaffolder:
+Create a Node.js project with the starter template:
 
 ```sh
-npm create webview@latest
+npm create webview@latest my-app
+cd my-app
+npm run dev
 ```
 
-You can pass the project directory directly with `npm create webview@latest
-my-app`. The alternate command `npm create webview-app@latest` invokes the same
-scaffolder; `create-webview` is the canonical package name.
+For an existing project, install the package with your runtime's package manager. See [Installation](./installation) for Node.js, Bun, and Deno imports.
 
-## Minimal example
+The creator's scripts target Node.js. If you save the example below as `src/main.ts`, Node.js runs it with `node src/main.ts` and Bun runs it with `bun src/main.ts`; both use the bare package import. To run it with Deno, change the import to `npm:@webviewjs/webview`, configure the local N-API package setup in [Installation](./installation#running-with-deno), and run `deno run --allow-ffi --allow-read src/main.ts`. The creator does not generate Deno-specific source or scripts.
 
-If you prefer to start from an existing project, install WebviewJS directly:
-
-```sh
-npm install @webviewjs/webview
-```
+## Create a window
 
 ```js
-import { Application, BrowserWindow } from '@webviewjs/webview';
+import { Application } from '@webviewjs/webview';
 
 const app = new Application();
-
 const win = app.createBrowserWindow({
   title: 'My App',
-  width: 1024,
-  height: 768,
+  width: 900,
+  height: 640,
 });
-
-const webview = win.createWebview({ url: 'https://example.com' });
+const webview = win.createWebview({
+  html: '<main><h1>Hello from WebviewJS</h1><p>The system webview is running.</p></main>',
+});
 
 app.run();
 ```
 
-## Loading local HTML
+`Application` owns the native event loop. `BrowserWindow` creates the OS window, and `createWebview()` attaches the system browser surface. Keep references to objects whose methods or event listeners you will use. See [Concepts](./introduction) for the object model.
+
+## Choose what to load
+
+Choose one source when creating a webview. For a remote page:
 
 ```js
-const webview = win.createWebview({
-  html: '<h1>Hello from WebviewJS</h1>',
+win.createWebview({ url: 'https://example.com' });
+```
+
+For a small page, pass an HTML string:
+
+```js
+win.createWebview({
+  html: '<main><h1>Hello</h1><p>Rendered in a native window.</p></main>',
 });
 ```
 
-## Reacting to window events
+For a packaged application with multiple local files, register a custom protocol and serve the files from it. See [Loading application content](../guides/loading-content) and [Custom Protocols](../guides/custom-protocols).
+
+## Handle page-to-host calls
+
+For the `webview` created above, expose a named host function:
 
 ```js
-app.on('window-close-requested', () => {
-  console.log('A window was closed');
-});
-
-app.on('application-close-requested', () => {
-  console.log('All windows closed; exiting');
-  app.exit();
-});
-
-app.on('custom-menu-click', ({ customMenuEvent }) => {
-  console.log('Menu item clicked:', customMenuEvent.id);
-});
+webview.expose('native', { greet: (name) => `Hello, ${name}` });
 ```
 
-## Retaining native handles
+The page can call `await window.native.greet('Ada')`. Raw `window.ipc.postMessage()` is also available for one-way messages. See [IPC Messaging](../guides/ipc-messaging) for both transports and their serialization rules.
 
-Keep strong references to windows, webviews, contexts, and tray icons while
-you need their wrapper methods or event listeners. Store handles in
-application state instead of discarding creation results.
+## Clean up
 
-The root `Application` owns their native resources. Calling `app.exit()`
-disposes all root-created resources. Retained wrappers subsequently return
-`true` from `isDisposed()` and reject further method calls.
-
-## IPC
-
-```js
-const webview = win.createWebview({
-  html: `
-    <button onclick="window.ipc.postMessage('ping')">Ping</button>
-  `,
-});
-
-webview.onIpcMessage((msg) => {
-  console.log('IPC body:', msg.body.toString());
-  webview.evaluateScript('document.body.style.background = "lime"');
-});
-```
-
-For asynchronous page-to-Node calls, use `webview.expose()`:
-
-```js
-webview.expose('native', {
-  getGreeting: async (name) => `Hello, ${name}`,
-});
-```
-
-The page calls `await window.native.getGreeting('Ada')`.
-
-## Using `Symbol.dispose` (auto-cleanup)
-
-```js
-{
-  using app = new Application();
-  // …
-} // app.exit() is called automatically
-```
-
-Each `BrowserWindow`, `Webview`, `WebContext`, and `TrayIcon` also supports
-`dispose()` and `Symbol.dispose` for early cleanup.
+`app.exit()` disposes resources created through the application. The `Application`, `BrowserWindow`, `Webview`, `WebContext`, and `TrayIcon` wrappers also support `dispose()` and `Symbol.dispose` for explicit cleanup. A user close request follows a separate lifecycle path; see [Application lifecycle](../guides/application-lifecycle).

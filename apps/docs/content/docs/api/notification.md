@@ -1,10 +1,9 @@
 ---
 title: 'Notification'
-description: 'Displays a native desktop notification through notify-rust.'
+description: 'Displays a native desktop notification through the platform notification backend.'
 ---
 
-Displays a native desktop notification through
-[notify-rust](https://docs.rs/notify-rust/latest/notify_rust/).
+`Notification` creates a native desktop notification. It is a WebviewJS class exported from `@webviewjs/webview`:
 
 ```js
 import { Notification } from '@webviewjs/webview';
@@ -12,35 +11,17 @@ import { Notification } from '@webviewjs/webview';
 const notification = new Notification('Build complete', {
   body: 'The release executable is ready.',
   icon: './assets/app.png',
-  requireInteraction: true,
 });
 
 notification.on('show', () => console.log('shown'));
-notification.on('click', () => console.log('clicked'));
-notification.on('close', () => console.log('closed'));
-notification.on('error', ({ error }) => console.error(error));
+notification.on('click', ({ action }) => console.log('clicked', action));
 ```
 
-## Permissions
-
-Native application notifications do not use the browser permission model:
-
-```js
-Notification.permission; // "granted"
-await Notification.requestPermission(); // "granted"
-```
-
-`requestPermission()` is a JavaScript compatibility stub and never prompts.
-
-## Constructor
+## Constructor and options
 
 ```ts
 new Notification(title: string, options?: NotificationOptions)
-```
 
-The API accepts familiar Web Notification options:
-
-```ts
 interface NotificationOptions {
   body?: string;
   icon?: string;
@@ -66,104 +47,66 @@ interface NotificationAction {
 }
 ```
 
-notify-rust receives `title`, `body`, `icon`, `image`, and
-`requireInteraction`. Persistent notification actions map their `action` and
-`title` fields to native action buttons. Action icons are retained as readonly
-instance data, but notify-rust does not currently expose per-action icons.
-The remaining values are retained as readonly instance properties for API
-familiarity but are not currently mapped to native backend features.
+The native backend receives `title`, `body`, `icon`, `image`, `requireInteraction`, and each action's `action` and `title`. The `icon` may be a platform icon name or a local file path. `image` is a local file path or encoded image `Buffer`; remote URLs are not downloaded. For a Buffer image, WebviewJS decodes the image. Windows and macOS use a temporary PNG file; Unix backends pass decoded pixels.
 
-`icon` can be a platform icon name or file path. `image` accepts either a local
-file path or a `Buffer` containing an encoded image:
+`actions` must be an array and requires `persistent: true`; otherwise construction throws `TypeError`. The `persistent` flag currently gates action configuration, but the native implementation does not use it to guarantee that an OS notification remains visible or that the JavaScript process stays alive. `requireInteraction` requests an indefinite native timeout where supported.
 
-```js
-import { readFile } from 'node:fs/promises';
+`badge`, `tag`, `data`, `dir`, `lang`, `renotify`, `silent`, `timestamp`, `vibrate`, and action `icon` are retained on the instance but are not applied by the current native backend. Invalid image bytes emit `error` without `show`.
 
-const image = await readFile('./assets/notification.png');
-const notification = new Notification('Image ready', { image });
+## Properties and permission methods
+
+```ts
+Notification.permission: 'granted'
+Notification.requestPermission(): Promise<'granted'>
+
+notification.title: string
+notification.body: string
+notification.icon: string
+notification.image: string | Buffer
+notification.badge: string
+notification.tag: string
+notification.data: unknown
+notification.dir: 'auto' | 'ltr' | 'rtl'
+notification.lang: string
+notification.renotify: boolean
+notification.requireInteraction: boolean
+notification.persistent: boolean
+notification.actions: NotificationAction[]
+notification.silent: boolean
+notification.timestamp: number
+notification.vibrate: number | number[]
 ```
 
-PNG, JPEG, WebP, GIF, BMP, ICO, TIFF, and other formats enabled by the Rust
-`image` crate are decoded from buffers. Invalid encoded data emits `error`
-without emitting `show`.
-
-Linux sends decoded pixels directly to the notification server. Windows and
-macOS use a temporary PNG because their native notification backends require a
-file path. WebviewJS retains and removes that file with the notification
-lifecycle. Remote URL strings are not downloaded and must be fetched into a
-Buffer by application code first. Exact presentation varies by operating
-system and notification server.
-
-## Persistent notifications and actions
-
-Notifications are non-persistent by default. Their native callbacks do not
-keep the Node.js process alive.
-
-Set `persistent: true` when the notification must remain interactive after the
-rest of the application has no active work:
-
-```js
-const notification = new Notification('Download complete', {
-  body: 'The archive is ready.',
-  persistent: true,
-  actions: [
-    { action: 'open', title: 'Open' },
-    { action: 'dismiss', title: 'Dismiss' },
-  ],
-});
-
-notification.on('click', ({ action }) => {
-  if (action === 'open') {
-    // Open the downloaded archive.
-  }
-});
-```
-
-Actions follow the familiar persistent Web Notification shape. A non-empty
-`actions` array requires `persistent: true`; otherwise the constructor throws
-a `TypeError`. A default notification click emits `action: ""`, while clicking
-an action button emits its action identifier.
-
-Because WebviewJS does not have a service worker to restart, a persistent
-notification keeps the Node.js process alive until the native backend reports
-an interaction or closure. On platforms where notify-rust cannot close a
-notification programmatically, calling `close()` cannot release that wait.
+The properties reflect the options supplied to the constructor, with defaults such as an empty `body`, `icon`, and `tag`. They are read-only. `requestPermission()` resolves to `'granted'` and does not prompt the user.
 
 ## Events
 
-Notification instances provide the same EventEmitter methods as other
-WebviewJS event sources. They also support `onclick`, `onclose`, `onerror`, and
-`onshow` properties.
+`Notification` extends Node's `EventEmitter` and also supports `onclick`, `onclose`, `onerror`, and `onshow` callback properties. Assign `null` to clear a property listener.
 
-| Event   | Behavior                                                         |
-| ------- | ---------------------------------------------------------------- |
-| `show`  | The native backend accepted the notification                     |
-| `click` | The backend reported default activation or a notification action |
-| `close` | The backend reported dismissal, expiry, or native closure        |
-| `error` | Display or response handling failed                              |
-
-Interaction event availability depends on the native backend and desktop
-notification server. The event object contains `type`, `target`, optional
-`action`, and optional `error`.
-
-On Windows, WebviewJS checks the global toast setting before submission. If
-notifications are disabled in Windows Settings, the instance emits `error`
-instead of `show`. Other operating-system policies such as Do Not Disturb can
-still suppress presentation after the native backend accepts a notification.
-
-## Closing
-
-```js
-notification.close();
+```ts
+interface NotificationEvent {
+  type: 'click' | 'close' | 'error' | 'show';
+  target: Notification;
+  action?: string;
+  error?: Error;
+}
 ```
 
-Programmatic close is supported where notify-rust exposes it. Currently this
-is available through the Linux/XDG backend. The method is safe but performs no
-native close operation on backends where notify-rust does not expose one.
+| Event   | Meaning                                                                                                                |
+| ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `show`  | The native backend accepted the notification.                                                                          |
+| `click` | The backend reported activation or an action. A default click has `action: ''`; an action click carries its action id. |
+| `close` | The backend reported dismissal, expiry, or native closure.                                                             |
+| `error` | The backend could not display the notification or process its response.                                                |
 
-## Mobile
+Native response events depend on the platform and notification server. On Windows, WebviewJS checks the system toast setting before display; if it is disabled, the instance emits `error` instead of `show`.
 
-Android and iOS expose the JavaScript API but do not display a notification or
-emit native lifecycle events.
+## Close and platform behavior
+
+```ts
+notification.close(): void
+```
+
+Programmatic native close is implemented on Unix notification backends such as Linux and FreeBSD. It is a no-op on Windows and macOS, where the backend does not expose an equivalent close operation. Android and iOS construct the JavaScript object but do not display notifications or emit native lifecycle events.
 
 See the runnable [notification example](https://github.com/webviewjs/webview/blob/main/apps/examples/notification.ts).

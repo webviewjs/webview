@@ -1,57 +1,38 @@
 ---
 title: 'Windows'
+description: 'WebView2 runtime requirements and Windows-specific window behavior.'
 ---
 
-## WebView2 runtime
+## WebView2
 
-WebviewJS on Windows uses the **WebView2** engine (Chromium-based).
-
-- **Windows 11**: WebView2 runtime ships pre-installed.
-- **Windows 10**: The runtime is auto-downloaded and installed the first time it is needed. You can also pre-install it via the [Evergreen bootstrapper](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
-
-Check the installed version at runtime:
+The Windows webview uses the installed Microsoft Edge WebView2 Runtime. A matching runtime must be present on the target computer. If it is missing, install the [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/); do not assume that a build bundles it.
 
 ```js
 import { getWebviewVersion } from '@webviewjs/webview';
-console.log(getWebviewVersion()); // e.g. "128.0.2739.42"
+
+console.log(getWebviewVersion());
 ```
 
-## Menu bar
+`getWebviewVersion()` reports the backend engine version when available. It is separate from the `VERSION` package version.
 
-The menu bar is attached to each window's title bar (standard Win32 behaviour). Each window can have its own menu or share the global one set via `app.setMenu()`.
+## Native package targets
 
-## DPI / HiDPI
+The published N-API packages include Windows x64, ia32, and arm64 targets. The package loader selects an addon for the current process architecture. The desktop runtime still needs WebView2 and the Windows GUI environment.
 
-Tao reports the monitor's scale factor and scales the window accordingly. Use
-`win.scaleFactor()` to get the current DPI ratio, and logical pixels when
-positioning child elements.
+## Menus
 
-## Taskbar integration
+Windows menus appear in the native window. Set an application menu before creating windows that use it, or pass a per-window menu in BrowserWindowOptions. See [Menu](../api/menu).
 
-```js
-// Hide from taskbar (e.g. for system-tray apps)
-win.setSkipTaskbar(true);
+## DPI and window geometry
 
-// Progress ring in the taskbar icon
-win.setProgressBar({ state: ProgressBarState.Normal, progress: 42 });
-```
+`BrowserWindow` sizes and positions use physical pixels by default. Pass `logical: true` to the size and position methods to use logical pixels. `win.scaleFactor()` returns the current display scale factor. See [window geometry](../api/browser-window#size-position-and-monitors).
 
-WebviewJS exposes Tao's Windows window extensions for taskbar icons,
-skip-taskbar state, undecorated shadows, enabled state, and native handles. See
-[Windows extensions](../api/browser-window#windows-extensions).
+## Taskbar and window options
 
-## Content protection
+`setSkipTaskbar()`, `setProgressBar()`, and the Windows-specific taskbar icon methods are available for Windows. `setEnable()` enables or disables the native window. `windowsOwnerWindow`, `windowsClassName`, `windowsNoRedirectionBitmap`, `windowsDragAndDrop`, and `windowsUndecoratedShadow` are Windows-only creation options. See [BrowserWindow](../api/browser-window#windows-creation-options).
 
-Prevents the window contents from appearing in screenshots or screen-recording APIs:
+Transparency must be requested when creating the window with `transparent: true`; the option cannot be toggled later. `setContentProtection()` asks Windows to exclude the window from supported capture paths; verify its behavior for your capture APIs and deployment environment.
 
-```js
-win.setContentProtection(true);
-```
+## Click-through and focus
 
-## Known limitations
-
-- In wry 0.53, a `file:` page that calls `window.ipc.postMessage()` can abort because WebView2 reports the page source as a `file:` URI and wry attempts to convert it to an HTTP request URI. Use an `app://` custom protocol for pages that use IPC or `webview.expose()`.
-- `setIgnoreCursorEvents(true)` (click-through) is supported on Windows via the `WS_EX_TRANSPARENT` extended window style.
-- Window transparency requires `transparent: true` at creation time; it cannot be toggled at runtime.
-- Tao does not expose a window blur or unfocus API. Keyboard focus can be given
-  to the webview via `webview.focus()`.
+`setIgnoreCursorEvents()` is supported on Windows. Tao does not expose a window blur/unfocus method; `webview.focus()` focuses page content. See [window controls](../guides/window-appearance) and [Webview controls](../guides/webview-controls).

@@ -1,171 +1,229 @@
 ---
 title: 'BrowserWindow'
-description: 'Represents an OS window. Created via app.createBrowserWindow().'
+description: 'Represents a native operating-system window created by an Application.'
 ---
 
-Represents an OS window. Created via `app.createBrowserWindow()`.
+`BrowserWindow` is the native OS window. Create one through `Application`, then attach a [`Webview`](./webview).
+
+```js
+const win = app.createBrowserWindow({ title: 'My App', width: 900, height: 640 });
+const webview = win.createWebview({ url: 'https://example.com' });
+```
 
 ## Creation options
 
 ```ts
 interface BrowserWindowOptions {
-  title?: string; // default: "WebviewJS"
-  width?: number; // default: 800 (physical px)
-  height?: number; // default: 600 (physical px)
-  x?: number; // initial left position
-  y?: number; // initial top position
-  logical?: boolean; // interpret size and position as logical pixels
-  resizable?: boolean; // default: true
-  visible?: boolean; // default: true
-  decorations?: boolean; // default: true (title bar + border)
-  transparent?: boolean; // default: false
-  maximized?: boolean; // default: false
-  maximizable?: boolean; // default: true
-  minimizable?: boolean; // default: true
-  focused?: boolean; // default: true
-  alwaysOnTop?: boolean; // default: false
-  alwaysOnBottom?: boolean;
-  contentProtection?: boolean;
-  visibleOnAllWorkspaces?: boolean;
-  fullscreen?: FullscreenType; // 'Exclusive' | 'Borderless'
-  menu?: MenuOptions; // per-window menu (overrides global)
-  showMenu?: boolean; // show the global menu on this window
+  title?: string; // default "WebviewJS"
+  width?: number; // default 800
+  height?: number; // default 600
+  x?: number; // default 0
+  y?: number; // default 0
+  logical?: boolean; // default false; interpret size and position as logical pixels
+  resizable?: boolean; // default true
+  visible?: boolean; // default true
+  decorations?: boolean; // default true
+  transparent?: boolean; // default false
+  maximized?: boolean; // default false
+  maximizable?: boolean; // default true
+  minimizable?: boolean; // default true
+  focused?: boolean; // default true
+  alwaysOnTop?: boolean; // default false
+  alwaysOnBottom?: boolean; // default false
+  contentProtection?: boolean; // default false
+  fullscreen?: FullscreenType;
+  menu?: MenuOptions;
+  showMenu?: boolean; // default true
+  visibleOnAllWorkspaces?: boolean; // macOS
+  // Windows-only options are listed below.
+  // macOS-only options are listed below.
+  // iOS options are listed below.
 }
 ```
 
-## Methods
+Specify `width` and `height` together, and `x` and `y` together. Values are physical pixels unless `logical: true` is set. The initial `fullscreen` option currently creates borderless fullscreen for either enum value; `setFullscreen(FullscreenType.Exclusive)` has a separate runtime path.
 
-### `createWebview(options?)`
+On Windows and GTK-based Linux/FreeBSD, `menu` installs a per-window menu and overrides the global menu. `showMenu` controls whether that window attaches the global menu. On macOS, menus belong to the application: a `menu` option is not attached to the window, and `showMenu` does not hide the application menu. See [Menu](./menu).
+`win.hasMenu(): boolean` reports whether a per-window menu object was assigned; it does not report whether a menu is visible. It is `false` when the window uses the global menu. Android always returns `false`.
 
-Attach a webview to the window. Returns a [`Webview`](./webview).
-
-```ts
-win.createWebview(options?: WebviewOptions): Webview
-```
-
-Keep the returned `Webview` in application state for as long as the view is
-needed. Do not rely on a discarded temporary wrapper.
-
-Pass `options.webContext` to share browser data with other webviews. Pass
-`options.navigationHandler` or `options.newWindowHandler` to synchronously
-allow or reject navigation requests. See the [Webview reference](./webview).
-
-### Window state
+### Windows creation options
 
 ```ts
-win.setTitle(title: string): void
-win.setVisible(visible: boolean): void
-win.show(): void
-win.hide(): void
-win.close(): void
-win.setMinimized(value: boolean): void
-win.setMaximized(value: boolean): void
-win.setFullscreen(type: FullscreenType | null): void
-win.focus(): void
-win.requestRedraw(): void
+windowsOwnerWindow?: bigint;
+windowsTaskbarIcon?: TrayIconImage;
+windowsNoRedirectionBitmap?: boolean;
+windowsDragAndDrop?: boolean;
+windowsSkipTaskbar?: boolean;
+windowsClassName?: string;
+windowsUndecoratedShadow?: boolean;
 ```
 
-### Size & position
-
-```ts
-// Pass true for logical pixels. The default is physical pixels.
-win.getInnerSize(logical?: boolean): Dimensions
-win.getOuterSize(logical?: boolean): Dimensions
-win.setSize(width: number, height: number, logical?: boolean): Dimensions | null
-win.setMinSize(width: number, height: number, logical?: boolean): void
-win.setMaxSize(width: number, height: number, logical?: boolean): void
-
-win.getPosition(logical?: boolean): Position
-win.setPosition(x: number, y: number, logical?: boolean): void
-win.center(): void                               // center on current monitor
-
-win.scaleFactor(): number                        // device-pixel ratio
-```
-
-### Cursor
-
-```ts
-win.setCursor(cursor: CursorType): void
-win.setCursorVisible(visible: boolean): void
-win.setCursorPosition(x: number, y: number): void   // logical px, relative to window
-win.setIgnoreCursorEvents(ignore: boolean): void    // click-through (Win/macOS)
-```
-
-**`CursorType` values:**
-
-`Default`, `Crosshair`, `Hand`, `Arrow`, `Move`, `Text`, `Wait`, `Help`, `Progress`,
-`NotAllowed`, `ContextMenu`, `Cell`, `VerticalText`, `Alias`, `Copy`, `NoDrop`,
-`Grab`, `Grabbing`, `ZoomIn`, `ZoomOut`,
-`ResizeEast`, `ResizeNorth`, `ResizeNorthEast`, `ResizeNorthWest`,
-`ResizeSouth`, `ResizeSouthEast`, `ResizeSouthWest`, `ResizeWest`,
-`ResizeEastWest`, `ResizeNorthSouth`, `ResizeNorthEastSouthWest`,
-`ResizeNorthWestSouthEast`, `ResizeColumn`, `ResizeRow`, `AllScroll`
-
-### Decorations & behaviour
-
-```ts
-win.setResizable(resizable: boolean): void
-win.setMinimizable(minimizable: boolean): void
-win.setMaximizable(maximizable: boolean): void
-win.setClosable(closable: boolean): void
-win.setAlwaysOnTop(always: boolean): void
-win.setAlwaysOnBottom(always: boolean): void
-win.setContentProtection(enabled: boolean): void
-win.setDecorations(decorated: boolean): void
-win.setSkipTaskbar(skip: boolean): void         // Windows and Linux
-```
-
-### Icon & progress
-
-```ts
-win.setWindowIcon(rgba: Buffer, width: number, height: number): void
-win.setProgressBar(progress: JsProgressBar): void
-```
-
-### Windows extensions
-
-These methods call Tao's `WindowExtWindows` API on Windows and return neutral
-results or do nothing on other platforms:
-
-Creation options expose the matching native attributes:
-
-```ts
-windowsOwnerWindow?: bigint
-windowsTaskbarIcon?: TrayIconImage
-windowsNoRedirectionBitmap?: boolean
-windowsDragAndDrop?: boolean
-windowsSkipTaskbar?: boolean
-windowsClassName?: string
-windowsUndecoratedShadow?: boolean
-```
-
-Use the existing `menu` option instead of a raw Win32 `HMENU`.
-
-```ts
-win.setEnable(enabled: boolean): void
-win.setTaskbarIcon(data: Buffer, width?: number, height?: number): void
-win.removeTaskbarIcon(): void
-win.setUndecoratedShadow(shadow: boolean): void
-win.getNativeHandleAnyThread(): bigint
-```
-
-Taskbar icon input follows `setWindowIcon`.
+These options map to Tao's Windows window attributes. `windowsOwnerWindow` accepts a non-negative native handle.
 
 ### macOS creation options
 
 ```ts
-macosMovableByWindowBackground?: boolean
-macosTitlebarTransparent?: boolean
-macosTitleHidden?: boolean
-macosTitlebarHidden?: boolean
-macosTitlebarButtonsHidden?: boolean
-macosFullsizeContentView?: boolean
-macosDisallowHidpi?: boolean
-macosHasShadow?: boolean
-macosTabbingIdentifier?: string
+macosMovableByWindowBackground?: boolean;
+macosTitlebarTransparent?: boolean;
+macosTitleHidden?: boolean;
+macosTitlebarHidden?: boolean;
+macosTitlebarButtonsHidden?: boolean;
+macosFullsizeContentView?: boolean;
+macosDisallowHidpi?: boolean;
+macosHasShadow?: boolean;
+macosTabbingIdentifier?: string;
+visibleOnAllWorkspaces?: boolean;
 ```
 
-### macOS runtime extensions
+### iOS creation options
+
+```ts
+iosScaleFactor?: number;
+iosValidOrientations?: IosValidOrientations;
+iosPrefersHomeIndicatorHidden?: boolean;
+iosDeferredSystemGestureEdges?: number;
+iosPrefersStatusBarHidden?: boolean;
+```
+
+The Rust binding contains iOS-specific code, but the package does not publish an iOS N-API target. These fields do not make iOS available through the npm package; see [iOS platform status](../platform/ios).
+
+## Create and dispose a webview
+
+```ts
+win.createWebview(options?: WebviewOptions | null): Webview
+win.registerProtocol(name: string, handler: BrowserWindowProtocolHandler): void
+win.dispose(): void
+win.isDisposed(): boolean
+win[Symbol.dispose](): void
+```
+
+`createWebview()` attaches a native webview and returns the JavaScript-augmented native class. The window owns the native webview resource. Disposing the window disposes its webviews. See [Webview](./webview).
+
+`registerProtocol()` registers a handler for a scheme such as `app://`. Register schemes before creating webviews that use them. The callback receives a Fetch API `Request` and may return a `Response` or `CustomProtocolResponse`; see [Custom Protocols](../guides/custom-protocols).
+
+## Window state and visibility
+
+```ts
+win.title: string
+win.setTitle(title: string): void
+win.theme: Theme
+win.setTheme(theme: Theme): void
+
+win.isFocused(): boolean
+win.isVisible(): boolean
+win.isDecorated(): boolean
+win.isClosable(): boolean
+win.isMaximizable(): boolean
+win.isMinimizable(): boolean
+win.isMaximized(): boolean
+win.isMinimized(): boolean
+win.isResizable(): boolean
+
+win.setVisible(visible: boolean): void
+win.show(): void
+win.hide(): void
+win.focus(): void
+win.setClosable(closable: boolean): void
+win.setMaximizable(maximizable: boolean): void
+win.setMinimizable(minimizable: boolean): void
+win.setResizable(resizable: boolean): void
+win.setMaximized(maximized: boolean): void
+win.setMinimized(minimized: boolean): void
+win.setDecorations(decorated: boolean): void
+win.setAlwaysOnTop(enabled: boolean): void
+win.setAlwaysOnBottom(enabled: boolean): void
+win.setContentProtection(enabled: boolean): void
+win.requestRedraw(): void
+```
+
+`win.close()` is an alias for immediate disposal. Use `hide()` if the same native window should remain available for `show()`. A user clicking the OS close button follows the cancelable `close` event path described in [Application lifecycle](../guides/application-lifecycle).
+
+`setContentProtection()` requests that the window be excluded from supported screen-capture paths; enforcement depends on the platform and compositor.
+
+## Size, position, and monitors
+
+```ts
+win.setSize(width: number, height: number, logical?: boolean): Dimensions | null
+win.getInnerSize(logical?: boolean): Dimensions
+win.getOuterSize(logical?: boolean): Dimensions
+win.setMinSize(width: number, height: number, logical?: boolean): void
+win.setMaxSize(width: number, height: number, logical?: boolean): void
+
+win.setPosition(x: number, y: number, logical?: boolean): void
+win.getPosition(logical?: boolean): Position
+win.center(): void
+win.scaleFactor(): number
+
+win.width: number
+win.height: number
+win.x: number
+win.y: number
+
+win.getAvailableMonitors(): Monitor[]
+win.getCurrentMonitor(): Monitor | null
+win.getPrimaryMonitor(): Monitor | null
+win.getMonitorFromPoint(x: number, y: number): Monitor | null
+```
+
+Size and position methods use physical pixels by default; pass `true` for logical pixels where the method accepts that argument. `getMonitorFromPoint(x, y)` takes a physical screen point. The `width`, `height`, `x`, and `y` properties report physical window geometry. `scaleFactor()` returns the current display scale factor.
+
+`setSize()` currently returns `null`; the native Tao setter does not return the resulting size. `getCurrentMonitor()`, `getPrimaryMonitor()`, and `getMonitorFromPoint()` return `null` when no monitor is available for the query. `getAvailableMonitors()` returns an empty array when none are reported.
+
+Each `Monitor` contains an optional name, scale factor, physical size and position, and supported video modes. See [shared types](./types#geometry-and-monitors).
+
+## Cursor and input behavior
+
+```ts
+win.setCursor(cursor: CursorType): void
+win.setCursorVisible(visible: boolean): void
+win.setCursorPosition(x: number, y: number): void
+win.setIgnoreCursorEvents(ignore: boolean): void
+win.setSkipTaskbar(skip: boolean): void
+```
+
+`setCursorPosition()` accepts logical coordinates relative to the window. Click-through behavior from `setIgnoreCursorEvents()` is supported by Windows and macOS; other backends may reject it. `setSkipTaskbar()` is implemented on Windows and GTK-based Linux/FreeBSD; it is a no-op on other targets.
+
+`CursorType` includes `Default`, `Crosshair`, `Hand`, `Arrow`, `Move`, `Text`, `Wait`, `Help`, `Progress`, `NotAllowed`, `ContextMenu`, `Cell`, `VerticalText`, `Alias`, `Copy`, `NoDrop`, `Grab`, `Grabbing`, `ZoomIn`, `ZoomOut`, and resize cursors. Import the enum instead of passing its numeric values.
+
+## Fullscreen and window identity
+
+```ts
+win.fullscreen: FullscreenType | null
+win.setFullscreen(type?: FullscreenType | null): void
+win.id(): number
+win.isChild: boolean
+win.getNativeHandle(): bigint
+```
+
+Pass `null` or omit the argument to leave fullscreen. At creation time, either `FullscreenType` option currently selects borderless fullscreen. At runtime, `setFullscreen(FullscreenType.Exclusive)` selects the first reported video mode of the current monitor; if no current mode is available, it clears fullscreen. `id()` is the numeric id assigned to the window. `isChild` identifies windows created with `createChildBrowserWindow()`.
+
+`getNativeHandle()` returns a borrowed platform handle: HWND on Windows, NSView on macOS, an X11 window id or Wayland surface on GTK Unix targets, and `0n` when no supported native handle is available. Do not destroy or free it.
+
+## Icons, taskbar, and progress
+
+```ts
+win.setWindowIcon(icon: Uint8Array | number[], width?: number, height?: number): void
+win.removeWindowIcon(): void
+win.setProgressBar(state: JsProgressBar): void
+```
+
+Pass encoded image bytes without dimensions, or raw RGBA bytes with dimensions. If only `width` is supplied, the image is treated as square; `height` without `width` is invalid. For a non-square raw image, provide both dimensions.
+
+Windows-only methods set the taskbar icon, enable state, or undecorated shadow:
+
+```ts
+win.setEnable(enabled: boolean): void
+win.setTaskbarIcon(icon: Uint8Array | number[], width?: number, height?: number): void
+win.removeTaskbarIcon(): void
+win.setUndecoratedShadow(enabled: boolean): void
+win.getNativeHandleAnyThread(): bigint
+```
+
+These methods are no-ops off Windows; `getNativeHandleAnyThread()` returns `0n` there. `JsProgressBar` accepts an optional `ProgressBarState` and a progress percentage from `0` to `100`.
+
+## Platform extensions
+
+### macOS
 
 ```ts
 win.simpleFullscreen(): boolean
@@ -178,76 +236,42 @@ win.isDocumentEdited(): boolean
 win.setDocumentEdited(edited: boolean): void
 ```
 
-### Linux runtime extensions
+These use Tao's macOS window extensions. On other platforms, setters do nothing and getters return neutral values.
 
-`win.getWaylandSurface()` uses Tao's raw-window-handle support and returns the
-native Wayland surface pointer as a bigint, or `0n` when the window is not
-using Wayland.
+### Linux / Wayland
 
-### iOS options and runtime extensions
+```ts
+win.getWaylandSurface(): bigint
+```
 
-Creation options use the `ios` prefix: `iosScaleFactor`,
-`iosValidOrientations`, `iosPrefersHomeIndicatorHidden`,
-`iosDeferredSystemGestureEdges`, and `iosPrefersStatusBarHidden`.
+Returns the Wayland surface pointer when running on Wayland, or `0n` on X11 and non-Linux targets.
 
-Runtime methods expose scale factor, valid orientations, home-indicator and
-status-bar preferences, and deferred system-gesture edges through Tao's iOS
-extensions.
-
-Screen edges use a bitmask: top `1`, left `2`, bottom `4`, right `8`.
-
-### Android runtime extensions
+### Android
 
 ```ts
 win.androidContentRect(): AndroidContentRect
 win.androidConfig(): string
 ```
 
-`androidConfig()` provides the current native configuration as a diagnostic
-string. Runtime methods on unsupported platforms return neutral values or do
-nothing.
+These expose Android's content inset rectangle and a native configuration diagnostic string. Other platforms return neutral values.
 
-`JsProgressBar`:
+### iOS
 
 ```ts
-interface JsProgressBar {
-  state?: ProgressBarState; // 'None' | 'Normal' | 'Indeterminate' | 'Paused' | 'Error'
-  progress?: number; // 0-100
-}
+win.setIosScaleFactor(value: number): void
+win.setValidOrientations(value: IosValidOrientations): void
+win.setPrefersHomeIndicatorHidden(value: boolean): void
+win.setPreferredScreenEdgesDeferringSystemGestures(edges: number): void
+win.setPrefersStatusBarHidden(value: boolean): void
 ```
 
-### Theme
+Screen-edge bits are top `1`, left `2`, bottom `4`, and right `8`. These Rust binding methods are not available through a published iOS N-API package.
+
+## File dialogs
 
 ```ts
-win.setTheme(theme: Theme): void
-```
+win.openFileDialog(options?: FileDialogOptions | null): string[]
 
-### Menu
-
-Set `menu` in `BrowserWindowOptions` for a per-window menu. Set `showMenu` to
-use the application menu. See the [Menus guide](../guides/menus).
-
-### Custom protocols
-
-Register a URL-scheme handler before creating the webview. Must be called before `createWebview()`.
-
-```ts
-win.registerProtocol(
-  name: string,
-  handler: (request: Request) =>
-    Response | CustomProtocolResponse | Promise<Response | CustomProtocolResponse>
-): void
-```
-
-The handler may perform asynchronous file, database, or network work. See [Custom Protocols guide](../guides/custom-protocols).
-
-### File dialogs
-
-```ts
-win.openFileDialog(options?: FileDialogOptions): Promise<string[]>
-```
-
-```ts
 interface FileDialogOptions {
   multiple?: boolean;
   title?: string;
@@ -256,117 +280,29 @@ interface FileDialogOptions {
 }
 ```
 
-### Monitor info
+The method is synchronous and returns selected paths. It returns `[]` if the user cancels; Android currently returns `[]` without opening a dialog.
 
-```ts
-win.currentMonitor(): Monitor | null
-win.primaryMonitor(): Monitor | null
-win.availableMonitors(): Monitor[]
-```
+## Window events
 
-```ts
-interface Monitor {
-  name?: string;
-  scaleFactor: number;
-  size: Dimensions;
-  position: Position;
-  videoModes: VideoMode[];
-}
-```
+`BrowserWindow` implements Node's `EventEmitter` methods: `on`, `once`, `off`, `addListener`, `removeListener`, `removeAllListeners`, `listenerCount`, `listeners`, `rawListeners`, `emit`, and `eventNames`.
 
-### Identity
+| Event                                                  | Payload fields                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `move`                                                 | `x`, `y`                                                                  |
+| `resize`                                               | `width`, `height`                                                         |
+| `close`                                                | `event`, `defaultPrevented`, `preventDefault()`                           |
+| `focus`, `blur`, `mouse-leave`, `file-hover-cancelled` | `event`                                                                   |
+| `mouse-enter`, `mouse-move`, `mouse-down`, `mouse-up`  | `x`, `y`; button events also include `button` and may include `modifiers` |
+| `scroll`                                               | `deltaX`, `deltaY`                                                        |
+| `key-down`, `key-up`                                   | Optional `key`, `code`, `modifiers`, `isRepeat`                           |
+| `file-drop`, `file-hover`                              | Optional `files: string[]`                                                |
+| `scale-factor-changed`                                 | `scaleFactor`                                                             |
+| `theme-changed`                                        | `text: 'light' \| 'dark'`                                                 |
+| `ime`                                                  | `phase` and optional `text`                                               |
+| `touch`                                                | `x`, `y`, `touchId`, `phase`                                              |
 
-```ts
-win.id(): number          // stable numeric id within this process
-win.isChildWindow(): boolean
-win.getNativeHandle(): bigint
-```
+Event names and payload fields are stable strings/objects; availability depends on the native window system. Position and size payloads are in physical pixels. Keyboard modifier bits are Shift `1`, Ctrl `2`, Alt `4`, and Meta/Super/Command `8`. See [Application lifecycle](../guides/application-lifecycle) for the synchronous close-prevention constraint.
 
-`getNativeHandle()` returns the platform-native handle as a bigint pointer
-value: HWND on Windows, NSView on macOS, XID on X11, or `wl_surface` on
-Wayland. It returns `0` when no supported handle is available. Treat this as a
-borrowed value and do not destroy it.
+## File dialogs and platform examples
 
-### State and geometry properties
-
-```ts
-win.width: number   // inner width in physical pixels
-win.height: number  // inner height in physical pixels
-win.x: number       // outer x position in physical pixels
-win.y: number       // outer y position in physical pixels
-win.getTitle: string
-
-win.isFocused(): boolean
-win.isVisible(): boolean
-win.isDecorated(): boolean
-win.isClosable(): boolean
-win.isMaximizable(): boolean
-win.isMinimizable(): boolean
-win.isMaximized(): boolean
-win.isMinimized(): boolean
-win.isResizable(): boolean
-```
-
-## Window events (EventEmitter)
-
-`BrowserWindow` extends Node's `EventEmitter`. Use the standard `.on()`,
-`.once()`, `.off()` / `.removeListener()`, `.removeAllListeners()` API.
-
-```ts
-win.on('resize',      ({ width, height }) => { … })
-win.on('move',        ({ x, y })          => { … })
-win.on('close',       (event)             => { event.preventDefault(); win.hide(); })
-win.on('focus',       ()                  => { … })
-win.on('blur',        ()                  => { … })
-win.on('mouse-enter', ({ x, y })          => { … })
-win.on('mouse-leave', ()                  => { … })
-win.on('mouse-move',  ({ x, y })          => { … })
-win.on('mouse-down',  ({ x, y, button })  => { … })  // button: 0=left 1=middle 2=right
-win.on('mouse-up',    ({ x, y, button })  => { … })
-win.on('scroll',      ({ deltaX, deltaY })=> { … })
-win.on('key-down',    ({ key, code, modifiers, isRepeat }) => { … })
-win.on('key-up',      ({ key, code, modifiers, isRepeat }) => { … })
-win.on('file-drop',   ({ files }) => { … })
-win.on('file-hover',  ({ files }) => { … })
-win.on('file-hover-cancelled', () => { … })
-win.on('scale-factor-changed', ({ scaleFactor }) => { … })
-win.on('theme-changed', ({ text }) => { … })
-win.on('ime',         ({ text, phase }) => { … })
-win.on('touch',       ({ x, y, touchId, phase }) => { … })
-```
-
-The `close` event is cancelable. Call `event.preventDefault()` synchronously
-to keep the native window, its webviews, and their browser context alive. A
-close event without prevention follows the normal disposal path. The event
-object's `preventDefault()` has no effect after synchronous event dispatch has
-finished.
-
-All positional values (`x`, `y`, `width`, `height`, `deltaX`, `deltaY`) are in
-**physical pixels** at the current DPI. Divide by `win.scaleFactor()` to
-convert to logical (CSS) pixels.
-
-Scroll deltas from a pixel-precise input device (trackpad) are passed through
-as-is; line-scroll deltas (mouse wheel) are multiplied by 20 to produce an
-equivalent pixel distance.
-
-IME phases are `enabled`, `preedit`, `commit`, or `disabled`. Touch phases are
-`started`, `moved`, `ended`, or `cancelled`.
-
-See the runnable [application events example](https://github.com/webviewjs/webview/blob/main/apps/examples/application-events.ts).
-
-### Undecorated-window resize
-
-Windows created with `{ decorations: false, resizable: true }` use Tao's native
-platform behavior for resizing.
-
-```ts
-const win = app.createBrowserWindow({ decorations: false, resizable: true });
-// Resize works without extra code.
-```
-
-## Disposal
-
-Call `win.dispose()` for early cleanup, or use `Symbol.dispose`. Disposal is
-idempotent. `win.isDisposed()` reports its state. Disposing a window also
-disposes its webviews. `app.exit()` disposes every window owned by the
-application.
+See [window appearance](../guides/window-appearance), the [window menus example](https://github.com/webviewjs/webview/blob/main/apps/examples/window-menus.ts), and the [application events example](https://github.com/webviewjs/webview/blob/main/apps/examples/application-events.ts).

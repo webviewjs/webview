@@ -1,85 +1,62 @@
 ---
-title: 'Multiple Windows'
+title: 'Multiple windows'
+description: 'Create, track, reuse, and dispose several native windows in one application.'
 ---
 
-## Opening several windows
+An `Application` can own several `BrowserWindow` instances. All of them share the same native event loop and JavaScript event pump.
 
 ```js
-const app = new Application();
+const windows = new Map();
 
-function createWindow(url) {
-  const win = app.createBrowserWindow({ title: url, width: 900, height: 600 });
+function openWindow(id, url) {
+  const existing = windows.get(id);
+  if (existing && !existing.win.isDisposed()) {
+    existing.win.show();
+    return existing;
+  }
+
+  const win = app.createBrowserWindow({ title: id, width: 900, height: 600 });
   const webview = win.createWebview({ url });
-  return { win, webview };
+  const handles = { win, webview };
+  windows.set(id, handles);
+
+  win.on('close', () => windows.delete(id));
+  return handles;
 }
 
-const win1 = createWindow('https://example.com');
-const win2 = createWindow('https://nodejs.org');
-
+openWindow('docs', 'https://webview.js.org');
+openWindow('reference', 'https://nodejs.org');
 app.run();
 ```
 
-Both windows share the same event loop driven by the single `setInterval` pump.
+The map keeps JavaScript references to the wrappers while the application uses them. A normal allowed close disposes a window and its webviews, so remove that entry from the registry. If a window should be reusable after the close button is pressed, call `event.preventDefault()` synchronously and then `win.hide()`; see [Application lifecycle](./application-lifecycle).
 
-## Tracking windows yourself
+## Child windows
 
-```js
-const windows = new Map(); // id → { win, webview }
-
-function openWindow(id, url) {
-  if (windows.has(id)) {
-    windows.get(id).win.show();
-    return;
-  }
-  const win = app.createBrowserWindow({ title: id });
-  const webview = win.createWebview({ url });
-  windows.set(id, { win, webview });
-}
-
-app.on('window-close-requested', () => {
-  // The window has been hidden by the runtime.
-});
-
-app.on('application-close-requested', () => {
-  app.exit();
-});
-```
-
-## Child (popup) windows
-
-Child windows are positioned relative to a parent window and are useful for dialogs, palettes, and tool panels.
+`app.createChildBrowserWindow()` creates a child-marked native window. Check `win.isChild` to identify it. This is distinct from `WebviewOptions.child`, which positions a webview within its parent window.
 
 ```js
-const child = app.createChildBrowserWindow({
+const dialog = app.createChildBrowserWindow({
   title: 'Settings',
-  width: 400,
-  height: 300,
+  width: 420,
+  height: 320,
 });
-const childWebview = child.createWebview({
-  url: 'app://settings',
-  // x/y/width/height position the webview within the child window
+const dialogView = dialog.createWebview({
+  html: '<main><h1>Settings</h1></main>',
 });
 ```
 
-## Showing / hiding instead of closing
+When `WebviewOptions.child` is true, `x`, `y`, `width`, and `height` define the webview rectangle in logical pixels relative to its containing window. With the default `child: false`, an unbounded webview fills the window.
 
-The runtime hides a window (rather than destroying it) when the user clicks the OS close button. You can reuse it:
+## Track closure and exit
 
-```js
-function toggleWindow(win) {
-  win.setVisible(!win.isVisible()); // or win.show() / win.hide()
-}
-```
-
-## Window lifecycle events
+Listen on each window's `close` event for per-window state. `app`'s `window-close-requested` and `application-close-requested` events do not include a window wrapper. The application emits `application-close-requested` after the last native window is destroyed, including after direct `win.close()` or `win.dispose()`; explicit `app.exit()` suppresses it.
 
 ```js
-app.on('window-close-requested', () => {
-  // One window was hidden.
-});
-
 app.on('application-close-requested', () => {
-  // All tracked windows are now hidden.
-  app.exit();
+  // The final native window has been destroyed.
+  // The application is already finalizing its native resources.
 });
 ```
+
+See [Application lifecycle](./application-lifecycle) for close prevention, `hide()`, `dispose()`, and `exit()` semantics. Runnable examples: [multiple windows](https://github.com/webviewjs/webview/blob/main/apps/examples/multiple.ts) and [multiple webviews](https://github.com/webviewjs/webview/blob/main/apps/examples/multi-webview.ts).

@@ -1,14 +1,11 @@
 ---
 title: 'Menus'
+description: 'Attach application or per-window native menus and handle their events.'
 ---
 
-## Basic setup
+Set the application menu before creating windows on Windows and GTK-based Linux/FreeBSD so those windows can attach it. On macOS, the menu is application-level.
 
 ```js
-import { Application } from '@webviewjs/webview';
-
-const app = new Application();
-
 app.setMenu({
   items: [
     {
@@ -22,96 +19,41 @@ app.setMenu({
         ],
       },
     },
-    {
-      label: 'Edit',
-      submenu: {
-        items: [
-          { role: 'undo' },
-          { role: 'redo' },
-          { role: 'separator' },
-          { role: 'cut' },
-          { role: 'copy' },
-          { role: 'paste' },
-        ],
-      },
-    },
   ],
 });
 
-app.on('custom-menu-click', ({ customMenuEvent }) => {
-  switch (customMenuEvent.id) {
-    case 'new':
-      createNewWindow();
-      break;
-    case 'open':
-      openFilePicker();
-      break;
-  }
-});
-```
-
-## Updating the menu at runtime
-
-```js
-// Replace the whole menu
-app.setMenu({ items: updatedItems });
-
-// Remove entirely
-app.setMenu(null);
-```
-
-## Per-window menus
-
-Windows, child popups, and dialogs can have their own distinct menus:
-
-```js
 const win = app.createBrowserWindow({ title: 'Editor' });
+```
 
-win.setMenu({
-  items: [{ label: 'Editor', submenu: { items: [{ id: 'editor-prefs', label: 'Preferences' }] } }],
+Handle a custom item's id through the application event:
+
+```js
+app.on('custom-menu-click', ({ customMenuEvent }) => {
+  if (customMenuEvent.id === 'open') openDocument();
 });
 ```
 
-Per-window menus override the global menu for that window. Clicking items emits
-`custom-menu-click` on the application.
+The event pump delivers menu events, so call `app.run()` or pump events manually. Linux uses Muda's GTK integration; menu items and `custom-menu-click` work there.
 
-## Nested submenus
+## Per-window menu
+
+Supply a menu in `BrowserWindowOptions` on Windows and GTK-based Linux/FreeBSD. There is no `win.setMenu()` method:
 
 ```js
-{
-  label: 'View',
-  submenu: {
-    items: [
-      {
-        label: 'Zoom',
-        submenu: {
-          items: [
-            { id: 'zoom-in',  label: 'Zoom In',  accelerator: 'CmdOrCtrl+=' },
-            { id: 'zoom-out', label: 'Zoom Out', accelerator: 'CmdOrCtrl+-' },
-            { id: 'zoom-reset', label: 'Reset',  accelerator: 'CmdOrCtrl+0' },
-          ],
-        },
-      },
-      { role: 'fullscreen' },
-    ],
+const settings = app.createBrowserWindow({
+  title: 'Settings',
+  menu: {
+    items: [{ id: 'reset', label: 'Reset settings' }],
   },
-}
+});
 ```
 
-## Accelerator reference
+A per-window menu overrides the global menu on Windows and GTK-based Linux/FreeBSD. `showMenu: false` prevents those windows from attaching the global menu. macOS menus belong to the application: `BrowserWindowOptions.menu` is not attached there, and `showMenu` does not hide the application menu. `win.hasMenu()` checks whether the wrapper owns a per-window menu object, not whether it is visible.
 
-```
-CmdOrCtrl+S          → Cmd+S on macOS, Ctrl+S elsewhere
-Alt+F4               → literal Alt+F4
-Shift+CmdOrCtrl+Z    → redo shortcut
-F5, F11              → function keys
-```
+Calling `app.setMenu()` again replaces the application menu definition, but the native binding does not reattach that replacement to existing Windows or GTK-based Linux/FreeBSD windows. Set it before creating windows that should use it. Pass `null` to clear the global menu; on macOS that restores its default application menu.
 
-## Platform differences
+## Items, roles, and accelerators
 
-| Feature                  | Windows                      | macOS                    | Linux         |
-| ------------------------ | ---------------------------- | ------------------------ | ------------- |
-| Menu bar                 | Per-window, inside title bar | App-level, top of screen | Not supported |
-| Predefined roles         | Most                         | All                      | N/A           |
-| Accelerators             | Yes                          | Yes                      | N/A           |
-| `CustomMenuClick` events | Yes                          | Yes                      | Never fires   |
+Custom items accept `id`, `label`, `enabled`, and `accelerator`. A nested `submenu` creates a submenu. Use a stable id for items your code handles. Predefined roles such as `copy`, `paste`, `undo`, `quit`, and `separator` map to native platform actions. See the complete [Menu API reference](../api/menu#predefined-roles) for role names and platform behavior.
+
+The repository examples show [application menus](https://github.com/webviewjs/webview/blob/main/apps/examples/menu-system.ts) and [window menus](https://github.com/webviewjs/webview/blob/main/apps/examples/window-menus.ts).

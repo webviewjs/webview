@@ -1,220 +1,128 @@
 ---
 title: 'Application'
-description: 'The root object that owns the event loop and all windows.'
+description: 'Owns the native event loop and the windows, contexts, and tray icons created through it.'
 ---
 
-The root object that owns the event loop and all windows.
+`Application` owns the native event loop and root resources. Create one before creating windows, web contexts, or tray icons.
 
 ```js
 import { Application } from '@webviewjs/webview';
+
 const app = new Application();
+const win = app.createBrowserWindow({ title: 'My App' });
+const webview = win.createWebview({ html: '<h1>Hello</h1>' });
+app.run();
 ```
 
 ## Constructor
 
 ```ts
-new Application(options?: ApplicationOptions)
+new Application(options?: ApplicationOptions | null)
 ```
 
-`ApplicationOptions` is accepted but currently unused; pass `null` or omit it.
+`ApplicationOptions` is retained for compatibility and currently ignored. Its fields are `controlFlow`, `waitTime`, and `exitCode`; they do not configure the current non-blocking pump.
 
-## Methods
-
-### `run(options?)`
-
-Start the event pump. Calls `pumpEvents()` on a `setInterval` and returns immediately.
+## Event loop and readiness
 
 ```ts
-app.run(options?: { interval?: number; ref?: boolean }): void
-```
-
-| Option     | Default | Description                                     |
-| ---------- | ------- | ----------------------------------------------- |
-| `interval` | `16`    | Pump interval in ms                             |
-| `ref`      | `true`  | If `false` the timer won't prevent process exit |
-
-### `runSync()`
-
-Run Tao's native event loop on the current thread and block JavaScript until the application exits.
-
-```ts
+app.run(options?: ApplicationRunOptions | null): void
 app.runSync(): void
-```
-
-Use this only when you want the GUI loop to own the thread. In Node.js apps, `run()` is usually the safer default because it keeps the JS event loop available.
-
-### `stop()`
-
-Clear the pump interval. The app object and windows remain valid.
-
-```ts
 app.stop(): void
-```
-
-### `exit()`
-
-Stop the pump, hide all tracked windows, and mark the application as exited. Subsequent `pumpEvents()` calls return `false`.
-
-```ts
-app.exit(): void
-```
-
-### `pumpEvents()`
-
-Process one batch of OS events without blocking. Returns `true` while alive, `false` when the app should exit. Normally called automatically by `run()`.
-
-```ts
 app.pumpEvents(): boolean
-```
-
-### `whenReady(options?)`
-
-Resolve when wry emits its first native `resumed()` lifecycle callback.
-`whenReady()` starts the event pump by default:
-
-```js
-app.whenReady().then(() => {
-  const window = app.createBrowserWindow();
-  window.createWebview({ url: 'https://example.com' });
-});
-```
-
-```ts
-type ApplicationWhenReadyOptions =
-  | { autoRun?: true; interval?: number; ref?: boolean }
-  | { autoRun: false; interval?: never; ref?: never };
-
 app.whenReady(options?: ApplicationWhenReadyOptions): Promise<void>
 app.isReady(): boolean
 ```
 
-`autoRun` defaults to `true`; `interval` and `ref` are forwarded to `run()`.
-Use `{ autoRun: false }` when manually calling `run()` or `pumpEvents()`.
-Manual mode rejects `interval` and `ref` because no implicit timer is created.
-Calls made after readiness still resolve asynchronously.
+| Method                   | Behavior                                                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run({ interval, ref })` | Starts a JavaScript timer that calls `pumpEvents()` every 16 ms by default. Returns immediately. A second call while the timer is active does not replace it. |
+| `runSync()`              | Emits `ready` if needed, then enters the native event loop and blocks JavaScript until the application exits.                                                 |
+| `stop()`                 | Clears the JavaScript pump timer. Native windows remain open and resources remain allocated.                                                                  |
+| `pumpEvents()`           | Processes one non-blocking batch and returns `true` while active, `false` after exit.                                                                         |
+| `whenReady()`            | Resolves after the first pump emits `ready`; starts `run()` by default.                                                                                       |
+| `isReady()`              | Reports whether readiness has been reached by a pump or `runSync()`.                                                                                          |
 
-## Application events
-
-`Application` implements the standard Node.js `EventEmitter` API. Prefer this
-interface for new Node.js code:
-
-```js
-app.on('window-close-requested', (event) => {
-  console.log('window close requested', event);
-});
-
-app.on('application-close-requested', () => {
-  app.exit();
-});
-
-app.on('custom-menu-click', ({ customMenuEvent }) => {
-  console.log(customMenuEvent.id, customMenuEvent.windowId);
-});
-```
-
-| Event                         | Fired when                                                                |
-| ----------------------------- | ------------------------------------------------------------------------- |
-| `window-close-requested`      | A user requests a window close after the window's `close` event allows it |
-| `application-close-requested` | The last window has been closed                                           |
-| `custom-menu-click`           | A custom menu item is selected                                            |
-| `ready`                       | The native event loop is ready                                            |
-
-The usual `on`, `once`, `off`, `addListener`, `removeListener`,
-`removeAllListeners`, `listenerCount`, `listeners`, `rawListeners`, `emit`, and
-`eventNames` methods are available. Listener-registration and removal methods
-are chainable.
-
-See the runnable [application events example](https://github.com/webviewjs/webview/blob/main/apps/examples/application-events.ts).
-
-### Legacy `onEvent(handler)` / `bind(handler)`
-
-Register a callback for application-level events. Both names are equivalent aliases.
+`ApplicationRunOptions`:
 
 ```ts
-app.onEvent(handler: (event: ApplicationEvent) => void): void
-```
-
-`ApplicationEvent`:
-
-```ts
-interface ApplicationEvent {
-  event: string; // e.g. "application-close-requested"
-  customMenuEvent?: { id: string; windowId: number };
+interface ApplicationRunOptions {
+  interval?: number; // milliseconds; default 16
+  ref?: boolean; // whether the timer keeps the runtime alive; default true
 }
 ```
 
-`WebviewApplicationEvent` remains exported for native enum compatibility, but
-event payloads use these stable string names:
+When `ref` is `false`, WebviewJS calls `unref()` on the timer handle. Deno 2.8 and newer provide Node-style timer handles; on earlier Deno 2 releases, keep the default `ref: true`.
 
-| Event name                    | Fired when                                               |
-| ----------------------------- | -------------------------------------------------------- |
-| `window-close-requested`      | A window's `close` event allows the OS close request     |
-| `application-close-requested` | The last window was closed                               |
-| `custom-menu-click`           | A custom menu item was clicked; see `customMenuEvent.id` |
-| `ready`                       | The native event loop emitted its first resume event     |
-
-### `createBrowserWindow(options?)`
-
-Create and return a new [`BrowserWindow`](./browser-window).
-
-```ts
-app.createBrowserWindow(options?: BrowserWindowOptions): BrowserWindow
-```
-
-### `createChildBrowserWindow(options?)`
-
-Create a child/popup window. The webview fills a precise region inside the parent rather than the whole window.
-
-```ts
-app.createChildBrowserWindow(options?: BrowserWindowOptions): BrowserWindow
-```
-
-### `createWebContext(options?)`
-
-Create an isolated browser-data context that can be shared by multiple webviews.
-
-```ts
-app.createWebContext(options?: WebContextOptions): WebContext
-```
-
-Create contexts through the application rather than with `new WebContext()`.
-See the [WebContext reference](./web-context).
-
-### `setMenu(options?)`
-
-Set the global application menu. Pass `null` to remove it.
-
-```ts
-app.setMenu(options?: MenuOptions): void
-```
-
-See [Menus guide](../guides/menus) for the full options shape.
-
-This API remains supported. Match the stable string event name directly:
+`whenReady()` accepts `{ autoRun?: true, interval?: number, ref?: boolean }` or `{ autoRun: false }`. When `autoRun` is false, the caller must pump events; passing `interval` or `ref` then throws.
 
 ```js
-app.onEvent((event) => {
-  if (event.event === 'application-close-requested') {
-    app.exit();
-  }
+await app.whenReady();
+const win = app.createBrowserWindow();
+```
+
+Use `run()` for the normal Node.js/Bun flow where JavaScript async work must continue. See [Event loop](../getting-started/event-loop).
+
+## Create and configure resources
+
+```ts
+app.createBrowserWindow(options?: BrowserWindowOptions | null): BrowserWindow
+app.createChildBrowserWindow(options?: BrowserWindowOptions | null): BrowserWindow
+app.createWebContext(options?: WebContextOptions | null): WebContext
+app.createTrayIcon(options: TrayIconOptions): TrayIcon
+app.setMenu(options?: MenuOptions | null): void
+```
+
+- `createBrowserWindow()` creates a top-level native window.
+- `createChildBrowserWindow()` creates a child-marked native window.
+- `createWebContext()` creates a browser data context. `new WebContext()` is not supported.
+- `createTrayIcon()` creates a native tray icon. Android returns an unsupported-platform error.
+- `setMenu()` replaces the application menu definition; pass `null` to clear it. On macOS, clearing restores the default application menu. See [Menu](./menu).
+
+Create the application menu before creating windows that should display it on Windows or GTK-based Linux/FreeBSD. macOS attaches it at the application level. See [BrowserWindow](./browser-window) for window options.
+
+## Application events
+
+`Application` implements Node's `EventEmitter` API and emits these typed events:
+
+| Event                         | When it fires                                                                                                                                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ready`                       | The first `pumpEvents()` call runs, or `runSync()` enters the native event loop.                                                                                                                            |
+| `window-close-requested`      | A native close request was allowed by the window's synchronous `close` handlers.                                                                                                                            |
+| `application-close-requested` | The last native window was destroyed while an explicit `app.exit()` was not requested. This can follow an allowed OS close request or `win.close()` / `win.dispose()`. Explicit `app.exit()` suppresses it. |
+| `custom-menu-click`           | A native menu event arrives through the event pump. Payload includes `customMenuEvent`.                                                                                                                     |
+
+Use `BrowserWindow`'s `close` event to prevent a user close. Application events are notifications and do not provide `preventDefault()`. See [Application lifecycle](../guides/application-lifecycle).
+
+```js
+app.on('application-close-requested', () => {
+  // The last native window has closed. Application resources are finalizing.
+});
+
+app.on('custom-menu-click', ({ customMenuEvent }) => {
+  console.log(customMenuEvent.id);
 });
 ```
 
-### `Symbol.dispose`
+The standard `on`, `once`, `off`, `addListener`, `removeListener`, `removeAllListeners`, `listenerCount`, `listeners`, `rawListeners`, `emit`, and `eventNames` methods are available. Listener registration/removal methods are chainable.
 
-`Application` implements the TC39 Explicit Resource Management protocol. Use `using` to guarantee cleanup:
+`onEvent(handler)` and `bind(handler)` are legacy aliases for one application-event callback. They may be called with a function or `null`; events are also emitted through the `EventEmitter` API.
+
+## Exit and disposal
+
+```ts
+app.exit(): void
+app[Symbol.dispose](): void
+```
+
+`exit()` marks the application exited and releases its windows, webviews, tray icons, web contexts, menus, and native callbacks. It is terminal: later resource creation fails. It does not hide windows for reuse. Call `stop()` only when stopping the pump while keeping native resources alive.
+
+The application tracks native resources independently of whether JavaScript still holds the wrapper. Retained windows, webviews, contexts, and trays report `isDisposed() === true` after the application disposes them. Individual resources can also be disposed early. `Symbol.dispose` calls `exit()` and supports explicit resource management:
 
 ```js
 {
   using app = new Application();
-  // …
-} // app.exit() called automatically
+  // Create and use resources here.
+} // app.exit() runs here
 ```
 
-### Root-owned disposal
-
-Resources created through an application are owned by that application.
-`app.exit()`, `Symbol.dispose`, and application finalization dispose tray
-icons, webviews, windows, web contexts, menus, and callbacks. Cleanup is
-idempotent. Retained resource wrappers report `isDisposed() === true` and
-reject subsequent method calls. Creating new resources after exit also fails.
+See the runnable [application events example](https://github.com/webviewjs/webview/blob/main/apps/examples/application-events.ts).

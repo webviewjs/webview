@@ -1,16 +1,10 @@
 ---
 title: 'iOS'
-description: 'BrowserWindowOptions supports initial content scale, valid orientations, home-indicator visibility, deferred system-gesture edges, status-bar visibility.'
+description: 'iOS native code exists, but no iOS N-API package is published.'
 ---
 
-`BrowserWindowOptions` supports initial content scale, valid orientations,
-home-indicator visibility, deferred system-gesture edges, status-bar
-visibility.
+The repository contains Rust code behind iOS configuration gates, including orientation, scale-factor, home-indicator, system-gesture, and status-bar methods. The @webviewjs/webview package does not publish an iOS N-API target, so applications cannot use those methods through the supported npm package.
 
-The same settings can be changed at runtime through Tao's iOS window
-extensions.
+The generated declarations contain iOS-related option and method names for native compatibility. They are not evidence of an installable iOS runtime or a supported iOS application target. Current native CI builds desktop targets, FreeBSD x64, and Android addons; it does not build or test an iOS artifact.
 
-Screen-edge values are a bitmask: top `1`, left `2`, bottom `4`, and right
-`8`.
-
-See [BrowserWindow platform APIs](../api/browser-window#ios-options-and-runtime-extensions).
+See [BrowserWindow](../api/browser-window#ios-creation-options) for the declarations and their availability limit.

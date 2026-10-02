@@ -1,11 +1,16 @@
 {
   "title": "Guides",
   "pages": [
+    "application-lifecycle",
+    "loading-content",
+    "navigation-and-popups",
     "building-executables",
     "custom-protocols",
     "ipc-messaging",
     "menus",
     "multiple-windows",
-    "cookies-and-storage"
+    "cookies-and-storage",
+    "window-appearance",
+    "webview-controls"
   ]
 }

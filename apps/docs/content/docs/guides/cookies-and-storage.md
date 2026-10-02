@@ -1,34 +1,72 @@
 ---
-title: 'Cookies and Storage'
+title: 'Cookies and browser data'
+description: 'Share or separate browser profiles and manage cookies and stored data.'
 ---
 
-## Reading cookies
+WebviewJS uses the operating system's browser engine. Persistent cookies,
+cache, local storage, and IndexedDB live in that engine's browser context, not
+in the JavaScript wrapper. Use an explicit [`WebContext`](../api/web-context)
+when your app needs predictable sharing or separation between webviews.
+
+## Share a profile
+
+Create one context and pass it to each webview that should share browser data:
 
 ```js
-// All cookies for a URL
-const cookies = webview.getCookies('https://example.com');
+const profile = app.createWebContext({ dataDirectory: './data/profile' });
 
-// Every cookie the webview has
+const first = firstWindow.createWebview({
+  url: 'https://example.com',
+  webContext: profile,
+});
+
+const second = secondWindow.createWebview({
+  url: 'https://example.com/account',
+  webContext: profile,
+});
+```
+
+`dataDirectory` is an optional native data path. Keep it stable and writable
+when the profile should survive restarts. On Windows, a custom directory can
+keep WebView2 data out of a protected application installation directory.
+Without an explicit context, Wry uses the platform's default context
+behavior; do not rely on that to isolate webviews.
+
+Create separate `WebContext` instances with separate data directories when
+profiles must not share persistent state. A context is an application-owned
+native resource. Dispose it after its webviews are finished; `app.exit()` also
+disposes it. `allowsAutomation` is currently enforced only on Linux, and only
+one context at a time may enable it.
+
+`WebviewOptions.incognito` asks the native engine for private browsing
+behavior. Its storage behavior is provided by each system browser engine.
+Use a separate explicit `WebContext` and directory when you need an
+application-managed persistent profile boundary.
+
+## Read cookies
+
+```js
+const matching = webview.getCookies('https://example.com');
 const all = webview.getCookies();
 
-for (const c of cookies) {
-  console.log(c.name, '=', c.value, '  domain:', c.domain);
+for (const cookie of matching) {
+  console.log(cookie.name, cookie.value, cookie.domain, cookie.path);
 }
 ```
 
-`WebviewCookie` fields:
+`getCookies(url?)` returns cookies matching the URL, or all cookies when the
+argument is omitted. Cookie fields are:
 
-| Field      | Type                           | Description            |
-| ---------- | ------------------------------ | ---------------------- |
-| `name`     | `string`                       | Cookie name            |
-| `value`    | `string`                       | Cookie value           |
-| `domain`   | `string?`                      | Owning domain          |
-| `path`     | `string?`                      | URL path scope         |
-| `httpOnly` | `boolean?`                     | Not accessible from JS |
-| `secure`   | `boolean?`                     | HTTPS-only             |
-| `sameSite` | `'strict' \| 'lax' \| 'none'?` | Cross-site policy      |
+| Field                | Type       | Meaning                                                         |
+| -------------------- | ---------- | --------------------------------------------------------------- |
+| `name`, `value`      | `string`   | Cookie name and value.                                          |
+| `domain`, `path`     | `string?`  | Optional scope reported by the native engine.                   |
+| `httpOnly`, `secure` | `boolean?` | Optional cookie flags.                                          |
+| `sameSite`           | `string?`  | Optional same-site policy, commonly `strict`, `lax`, or `none`. |
 
-## Writing a cookie
+Cookie parsing, defaults, and persistence follow the underlying browser engine.
+
+## Write and delete cookies
 
 ```js
 webview.setCookie({
@@ -40,33 +78,27 @@ webview.setCookie({
   secure: true,
   sameSite: 'strict',
 });
-```
 
-## Deleting a cookie
-
-```js
-// Specific domain + path
 webview.deleteCookie('session', 'example.com', '/');
-
-// Name only (removes across all domains/paths)
-webview.deleteCookie('session');
+webview.deleteCookie('old-session');
 ```
 
-## Clearing all browsing data
+`deleteCookie(name, domain?, path?)` uses the supplied domain and path to
+narrow the match. Omit them to request deletion by name across scopes. The
+browser engine decides how cookies with matching attributes are resolved.
 
-Wipes cookies, cache, local storage, IndexedDB, and session data:
+## Clear browsing data
+
+`clearAllBrowsingData()` asks the native engine to clear cookies, cache, local
+storage, and IndexedDB for that webview's browser context:
 
 ```js
 webview.clearAllBrowsingData();
 ```
 
-## Incognito mode
+This acts on the context used by the webview. If multiple webviews share that
+context, they share the affected browser data. It does not dispose the webview
+or its `WebContext`.
 
-Pass `incognito: true` when creating the webview to start a session with no persistent storage at all — cookies, cache, and local storage are discarded on exit:
-
-```js
-const webview = win.createWebview({
-  url: 'https://example.com',
-  incognito: true,
-});
-```
+See the runnable [WebContext example](https://github.com/webviewjs/webview/blob/main/apps/examples/web-context.ts)
+and the [WebContext API](../api/web-context).

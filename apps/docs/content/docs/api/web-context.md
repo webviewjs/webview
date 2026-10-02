@@ -1,19 +1,17 @@
 ---
 title: 'WebContext'
+description: 'Creates a browser data context that can be shared by multiple webviews.'
 ---
 
-A `WebContext` owns browser data and configuration shared by webviews. Use
-separate contexts for isolated profiles, or reuse one context when webviews
-need the same cookies, cache, local storage, and IndexedDB data.
+`WebContext` configures browser data for webviews. Pass the same context to each webview that should use the same profile. Use separate contexts and data directories when the profiles must be separated.
 
-## Creation
+## Create a context
 
-Create a context through `Application`:
+Create contexts through `Application`; direct construction throws:
 
 ```js
-const context = app.createWebContext({
-  dataDirectory: './browser-data',
-  allowsAutomation: false,
+const profile = app.createWebContext({
+  dataDirectory: './data/main-profile',
 });
 ```
 
@@ -24,29 +22,35 @@ interface WebContextOptions {
 }
 ```
 
-`new WebContext()` is not supported. Keep the context alive for at least as
-long as every webview that uses it.
+`dataDirectory` is an optional native browser-data directory. A relative path is resolved by the native backend from the application's working directory. Keep it writable and stable if data should persist between launches. On Windows, a custom path can keep WebView2 data out of a protected installation directory such as Program Files.
 
-## Using a context
+## Share or separate profiles
 
-Pass the context when creating each webview:
+Pass the same `WebContext` to webviews that should share cookies, cache, and storage:
 
 ```js
 const first = firstWindow.createWebview({
   url: 'https://example.com',
-  webContext: context,
+  webContext: profile,
 });
 
 const second = secondWindow.createWebview({
   url: 'https://example.com',
-  webContext: context,
+  webContext: profile,
 });
 ```
 
-Both webviews use the same browser-data store. A webview created without
-`webContext` uses its own default context.
+When no explicit `webContext` is supplied, Wry uses the platform's default context behavior. Do not rely on omitted contexts to create isolated profiles. Pass an explicit context when sharing or separation matters. `WebviewOptions.incognito` separately requests private browsing behavior from the native engine.
 
-See the runnable [web context example](https://github.com/webviewjs/webview/blob/main/apps/examples/web-context.ts).
+Use a distinct `dataDirectory` for an independent persistent profile:
+
+```js
+const privateProfile = app.createWebContext({
+  dataDirectory: './data/private-profile',
+});
+```
+
+See [Cookies and storage](../guides/cookies-and-storage) for cookie and cleanup examples.
 
 ## Properties and methods
 
@@ -54,16 +58,13 @@ See the runnable [web context example](https://github.com/webviewjs/webview/blob
 context.dataDirectory: string | null
 context.isCustomProtocolRegistered(scheme: string): boolean
 context.setAllowsAutomation(enabled: boolean): void
+context.dispose(): void
+context.isDisposed(): boolean
+context[Symbol.dispose](): void
 ```
 
-`dataDirectory` reports the configured persistent data directory.
-`isCustomProtocolRegistered()` checks the context's native protocol registry.
+`dataDirectory` is `null` when the context has no custom data-directory path. `isCustomProtocolRegistered()` queries the native context. `setAllowsAutomation()` is currently enforced only on Linux, and only one context may allow automation at a time.
 
-Automation is currently enforced only on Linux, where only one context can
-allow automation at a time. Enable it only for controlled testing.
+The application tracks contexts created through it and disposes them during `app.exit()`. Dispose a context only after all webviews using it are finished. Disposal is idempotent.
 
-## Disposal
-
-Call `context.dispose()` for early cleanup, or use `Symbol.dispose`. Disposal
-is idempotent. `context.isDisposed()` reports its state. `app.exit()` disposes
-every context created through that application.
+See the runnable [web context example](https://github.com/webviewjs/webview/blob/main/apps/examples/web-context.ts).

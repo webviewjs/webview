@@ -5,7 +5,7 @@ description: 'Build a self-contained desktop application with the WebviewJS CLI 
 
 The `webview` command builds your application into a standalone executable. The target computer does not need a separate Node.js, Bun, or Deno installation. Your application still needs the platform's desktop webview runtime, such as WebView2 on Windows or WebKit on macOS and Linux.
 
-## Quick start
+## Command and entry file
 
 Install WebviewJS in your application, then build from the project directory:
 
@@ -14,28 +14,34 @@ npm install @webviewjs/webview
 npx webview build src/main.ts
 ```
 
-The CLI uses Node.js SEA by default and writes the executable to `./dist`. The default name comes from your `package.json` name when it is a valid filename, otherwise from the entry file. Scoped names such as `@acme/my-app` produce `my-app`.
+The command is `webview build [entry] [options]`. The default entry is `./index.js`; pass it positionally or with `--input`, but not both. The CLI uses Node.js SEA by default and writes the executable to `./dist`. The default name comes from your `package.json` name when it is a valid filename, otherwise from the entry file. Scoped names such as `@acme/my-app` produce `my-app`.
 
 ```bash
 webview build src/main.ts --name my-app --out-dir ./release
 ```
 
-Use `webview --help`, `webview --version`, and `webview build --help` for command help. The old `webview --build --input src/main.ts` form remains available temporarily and prints a deprecation warning.
+Use `webview --help`, `webview --version`, and `webview build --help` for command help. The old `webview --build --input src/main.ts` and `webview -b --input src/main.ts` forms remain available temporarily and print a deprecation warning. `--input` also works with `webview build` as a positional-entry alternative.
 
 ## Shared options
 
-| Option                      | Description                                                                                                                      |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `--runtime node\|bun\|deno` | Select a runtime. Node is the default.                                                                                           |
-| `--name <name>`             | Executable filename without an automatically added Windows `.exe` suffix. Names may contain letters, numbers, `-`, `_`, and `.`. |
-| `--out-dir <directory>`     | Output directory. Defaults to `./dist`. `--output` remains as an alias.                                                          |
-| `--target <target>`         | Select a runtime-specific target. The matching WebviewJS native package must also be installed.                                  |
-| `--native-addon <path>`     | Advanced override for the target-specific WebviewJS `.node` file.                                                                |
-| `--asset <path>`            | Embed an asset; Node SEA takes files, while Bun and Deno also accept directories. Repeat the option for multiple assets.         |
-| `--resources <json>`        | Read the legacy Node SEA JSON asset map. Resource paths are relative to the JSON file.                                           |
-| `--minify`                  | Request minification from the selected runtime where supported.                                                                  |
-| `--dry-run`                 | Validate inputs and runtime support, then print the planned commands without compiling.                                          |
-| `--verbose`                 | Print subprocess commands with their arguments.                                                                                  |
+| Option                              | Description                                                                                                                           |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `--runtime <node\|bun\|deno>`, `-R` | Select the executable runtime. Node is the default.                                                                                   |
+| `--name <name>`, `-n`               | Output filename. Windows adds `.exe` if the name does not already end with it. Names may contain letters, numbers, `-`, `_`, and `.`. |
+| `--out-dir <directory>`             | Output directory; defaults to `./dist`.                                                                                               |
+| `--output <directory>`, `-o`        | Backwards-compatible alias for `--out-dir`; do not pass both.                                                                         |
+| `--target <target>`                 | Select a Bun or Deno target. Node SEA cannot cross-compile. The matching WebviewJS native addon must be available.                    |
+| `--native-addon <path>`             | Advanced override for the target-specific WebviewJS `.node` file.                                                                     |
+| `--asset <path>`                    | Embed an asset; repeat for more assets. Node SEA accepts files. Bun and Deno accept files or directories.                             |
+| `--resources <json>`, `-r`          | Node SEA compatibility option for a JSON object mapping asset names to file paths. Paths are relative to the JSON file.               |
+| `--minify`                          | Request minification from the selected runtime.                                                                                       |
+| `--verbose`                         | Print subprocess commands and arguments.                                                                                              |
+| `--dry-run`, `-d`                   | Validate inputs and runtime support, then print the planned commands without compiling.                                               |
+| `--help`, `-h`                      | Print help.                                                                                                                           |
+| `--version`, `-v`                   | Print the WebviewJS CLI version and host runtime.                                                                                     |
+| `--input <file>`, `-i`              | Specify the entry as an option instead of a positional argument.                                                                      |
+
+`--out-dir`/`--output` is resolved from the current project directory. An output name defaults to the package name when valid, otherwise to the entry file basename. The CLI rejects path separators and reserved Windows device names in `--name`.
 
 For Node SEA, `--asset file.txt` uses the file's basename as its SEA key. A resources map can choose explicit keys:
 
@@ -46,7 +52,7 @@ For Node SEA, `--asset file.txt` uses the file's basename as its SEA key. A reso
 }
 ```
 
-Read Node SEA assets with `require('node:sea').getAsset('config.json')`. The private WebviewJS addon asset name is reserved.
+Read Node SEA assets with `require('node:sea').getAsset('config.json')`. The private WebviewJS addon asset name is reserved. Repeating an asset key is an error.
 
 ## Node.js
 
@@ -85,11 +91,11 @@ webview build src/main.ts --runtime deno
 
 The CLI runs `deno compile --bundle --self-extracting --allow-all`. A temporary target adapter gives Deno the selected `.node` file and maps unrelated optional N-API packages to build-only stubs, so it bundles the target addon without changing your project. The compiled entry locates Deno's extracted addon and sets `NAPI_RS_NATIVE_LIBRARY_PATH` before importing your app. The CLI passes `--no-check` because Deno 2.9 reports three unresolved internal callback aliases in WebviewJS's NAPI-RS-generated declaration file; this lets JavaScript and Node-style TypeScript projects package normally. Run `deno check` on application source separately when you want Deno's type diagnostics. User assets are passed through Deno 2.9's `--include` option; Deno also treats included `.js` and `.ts` files as module roots.
 
-The CLI recognizes `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`, and `aarch64-unknown-linux-gnu`. The Deno integration smoke test covered the current `aarch64-apple-darwin` host only; cross-target Deno executables are not claimed as verified.
+The CLI recognizes `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`, and `aarch64-unknown-linux-gnu` targets. When `--minify` is set, the CLI passes it to `deno compile`. The Deno integration smoke test covered the current `aarch64-apple-darwin` host only; cross-target Deno executables are not claimed as verified.
 
 ## Native packages and cross-compilation
 
-WebviewJS currently publishes native packages for macOS x64 and arm64; Windows x64, arm64, and ia32; and glibc Linux x64, arm64, ia32, and arm. Runtime targets are accepted only when both the runtime compiler and WebviewJS provide a matching target. The CLI resolves that target package from your project first, then checks the matching native file in a WebviewJS development checkout. It never substitutes the host addon for a different target.
+For executable builds, the CLI supports published desktop native packages for macOS x64 and arm64; Windows x64, arm64, and ia32; and glibc Linux x64, arm64, ia32, and arm. WebviewJS also publishes experimental FreeBSD x64 and Android arm64/armv7 addons, but this CLI does not target FreeBSD or Android. Runtime targets are accepted only when both the runtime compiler and WebviewJS provide a matching target. The CLI resolves that target package from your project first, then checks the matching native file in a WebviewJS development checkout. It never substitutes the host addon for a different target.
 
 If the target package is not installed, install the optional dependency for the target platform or pass `--native-addon` with a matching `.node` file. The CLI checks a recognizable target in the filename and reports when it does not match. It does not change your dependency installation during cross-compilation.
 
