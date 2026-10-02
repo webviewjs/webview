@@ -494,19 +494,23 @@ impl BrowserWindow {
       use tao::platform::macos::WindowExtMacOS;
       self.window().ns_view() as u64
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(gtk_unix)]
     {
       use tao::rwh_06::{HasWindowHandle, RawWindowHandle};
-      if let Ok(handle) = self.window().window_handle() {
-        return match handle.as_raw() {
+      self
+        .window()
+        .window_handle()
+        .ok()
+        .map(|handle| match handle.as_raw() {
+          // Xlib's `c_ulong` is 32-bit on 32-bit targets and 64-bit on 64-bit targets.
+          #[allow(clippy::unnecessary_cast)]
           RawWindowHandle::Xlib(handle) => handle.window as u64,
           RawWindowHandle::Wayland(handle) => handle.surface.as_ptr() as u64,
           _ => 0,
-        };
-      }
-      return 0;
+        })
+        .unwrap_or(0)
     }
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos", gtk_unix)))]
     0
   }
 
@@ -1344,12 +1348,12 @@ impl BrowserWindow {
       use tao::platform::windows::WindowExtWindows;
       let _ = self.window().set_skip_taskbar(skip);
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(gtk_unix)]
     {
       use tao::platform::unix::WindowExtUnix;
       let _ = self.window().set_skip_taskbar(skip);
     }
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", gtk_unix)))]
     let _ = skip;
   }
 

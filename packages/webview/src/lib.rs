@@ -5,26 +5,14 @@ pub mod custom_protocol_workaround;
 pub mod types;
 pub mod version;
 
-// FreeBSD x64 is a stub-only target: the real GUI stack (Wry/Tao) is not
-// compiled.  Every exported API throws a clear runtime error on that platform.
-#[cfg(target_os = "freebsd")]
-mod freebsd_stub;
-
-// ── Real implementation (all other platforms) ─────────────────────────────────
-#[cfg(not(target_os = "freebsd"))]
 pub mod app;
-#[cfg(not(target_os = "freebsd"))]
 pub mod browser_window;
-#[cfg(not(target_os = "freebsd"))]
 pub mod menu;
-#[cfg(not(target_os = "freebsd"))]
 pub mod notifications;
-#[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+#[cfg(not(target_os = "android"))]
 pub mod tray;
 #[cfg(target_os = "android")]
 #[path = "tray_stub.rs"]
 pub mod tray;
-#[cfg(not(target_os = "freebsd"))]
 pub mod web_context;
-#[cfg(not(target_os = "freebsd"))]
 pub mod webview;

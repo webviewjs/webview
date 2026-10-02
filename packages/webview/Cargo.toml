@@ -14,23 +14,21 @@ napi = { version = "3.8.2", default-features = true, features = ["napi9"] }
 napi-derive = "3.5.1"
 serde_json = "1"
 
-# Full GUI stack — not available / not needed on the FreeBSD stub build.
-[target.'cfg(not(target_os = "freebsd"))'.dependencies]
-tao = { version = "0.35.3", features = ["rwh_06"] }
+tao = { version = "0.37.1", features = ["rwh_06"] }
 wry = { version = "0.55.1", features = ["devtools", "fullscreen", "protocol"] }
 dpi = "0.1"
 image = "0.25.10"
 
-[target.'cfg(not(any(target_os = "android", target_os = "freebsd")))'.dependencies]
+[target.'cfg(not(target_os = "android"))'.dependencies]
 rfd = "0.15.4"
 muda = { version = "0.19.3", features = ["libxdo"] }
 tray-icon = "0.24.1"
 
-[target.'cfg(not(any(target_os = "android", target_os = "ios", target_os = "freebsd")))'.dependencies]
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 notify-rust = { version = "4.18.0", features = ["images_no_default_features"] }
 tempfile = "3"
 
-[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "android", target_os = "ios", target_os = "freebsd"))))'.dependencies]
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "android", target_os = "ios"))))'.dependencies]
 futures-lite = "2.6.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -42,7 +40,7 @@ windows-sys = { version = "0.52", features = [
 ] }
 
 [patch.crates-io]
-tao = { git = "https://github.com/webviewjs/tao", rev = "32c943587948455a34c1a7b5f6a7147ac44ec456" }
+tao = { git = "https://github.com/webviewjs/tao", rev = "895c1cf9678c365d333520c254559b0e50eca1cc" }
 
 [build-dependencies]
 napi-build = "2"

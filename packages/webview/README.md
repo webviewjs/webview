@@ -121,20 +121,20 @@ For distribution and platform-specific behavior, review the complete
 
 ## Supported platforms
 
-| Target                          | Platform | Architecture | Status       | Notes                                          |
-| ------------------------------- | -------- | ------------ | ------------ | ---------------------------------------------- |
-| `x86_64-pc-windows-msvc`        | Windows  | x64          | Supported    | WebView2                                       |
-| `i686-pc-windows-msvc`          | Windows  | x86          | Supported    | WebView2                                       |
-| `aarch64-pc-windows-msvc`       | Windows  | arm64        | Supported    | WebView2                                       |
-| `x86_64-apple-darwin`           | macOS    | x64          | Supported    | WebKit                                         |
-| `aarch64-apple-darwin`          | macOS    | arm64        | Supported    | WebKit                                         |
-| `x86_64-unknown-linux-gnu`      | Linux    | x64          | Supported    | WebKitGTK 4.1, X11, and Wayland                |
-| `i686-unknown-linux-gnu`        | Linux    | x86          | Supported    | WebKitGTK 4.1, X11, and Wayland                |
-| `aarch64-unknown-linux-gnu`     | Linux    | arm64        | Supported    | WebKitGTK 4.1, X11, and Wayland                |
-| `armv7-unknown-linux-gnueabihf` | Linux    | armv7        | Supported    | WebKitGTK 4.1, X11, and Wayland                |
-| `aarch64-linux-android`         | Android  | arm64        | Experimental | Platform APIs are still evolving               |
-| `armv7-linux-androideabi`       | Android  | armv7        | Experimental | Platform APIs are still evolving               |
-| `x86_64-unknown-freebsd`        | FreeBSD  | x64          | Stub         | Package resolution only; no GUI implementation |
+| Target                          | Platform | Architecture | Status       | Notes                            |
+| ------------------------------- | -------- | ------------ | ------------ | -------------------------------- |
+| `x86_64-pc-windows-msvc`        | Windows  | x64          | Supported    | WebView2                         |
+| `i686-pc-windows-msvc`          | Windows  | x86          | Supported    | WebView2                         |
+| `aarch64-pc-windows-msvc`       | Windows  | arm64        | Supported    | WebView2                         |
+| `x86_64-apple-darwin`           | macOS    | x64          | Supported    | WebKit                           |
+| `aarch64-apple-darwin`          | macOS    | arm64        | Supported    | WebKit                           |
+| `x86_64-unknown-linux-gnu`      | Linux    | x64          | Supported    | WebKitGTK 4.1, X11, and Wayland  |
+| `i686-unknown-linux-gnu`        | Linux    | x86          | Supported    | WebKitGTK 4.1, X11, and Wayland  |
+| `aarch64-unknown-linux-gnu`     | Linux    | arm64        | Supported    | WebKitGTK 4.1, X11, and Wayland  |
+| `armv7-unknown-linux-gnueabihf` | Linux    | armv7        | Supported    | WebKitGTK 4.1, X11, and Wayland  |
+| `aarch64-linux-android`         | Android  | arm64        | Experimental | Platform APIs are still evolving |
+| `armv7-linux-androideabi`       | Android  | armv7        | Experimental | Platform APIs are still evolving |
+| `x86_64-unknown-freebsd`        | FreeBSD  | x64          | Experimental | WebKitGTK 4.1 / GTK              |
 
 ## Examples
 

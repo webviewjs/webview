@@ -1,4 +1,4 @@
 {
   "title": "Platform",
-  "pages": ["windows", "macos", "linux", "ios", "android"]
+  "pages": ["windows", "macos", "linux", "freebsd", "ios", "android"]
 }

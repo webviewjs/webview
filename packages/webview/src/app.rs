@@ -6,12 +6,12 @@ use std::sync::{Arc, Mutex};
 use crate::browser_window::{BrowserWindow, WindowCloseState, WindowResource};
 #[cfg(target_os = "android")]
 use crate::tray::JsTrayIcon;
-#[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+#[cfg(not(target_os = "android"))]
 use crate::tray::{event_payload, JsTrayIcon, TrayEventHandler, TrayResource};
 use crate::types::*;
 use crate::web_context::{JsWebContext, WebContextOptions, WebContextResource};
 use crate::webview::WebviewResource;
-#[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))]
+#[cfg(not(target_os = "android"))]
 use muda::Menu;
 use napi::bindgen_prelude::*;
 use napi::Result;
@@ -80,9 +80,9 @@ struct AppState {
   current_modifiers: ModifiersState,
   #[cfg(not(target_os = "android"))]
   menu_event_receiver: Option<muda::MenuEventReceiver>,
-  #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+  #[cfg(not(target_os = "android"))]
   tray_handlers: HashMap<String, TrayEventHandler>,
-  #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+  #[cfg(not(target_os = "android"))]
   tray_resources: Vec<TrayResource>,
   web_contexts: Vec<WebContextResource>,
 }
@@ -141,7 +141,7 @@ impl AppState {
     if self.should_exit {
       return;
     }
-    #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+    #[cfg(not(target_os = "android"))]
     {
       for resource in self.tray_resources.drain(..) {
         release_resource(&resource);
@@ -228,7 +228,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
 
   match event {
     WindowEvent::Resized(new_size) => {
-      #[cfg(not(target_os = "linux"))]
+      #[cfg(not(gtk_unix))]
       {
         if let Some(views) = state.webviews.get(&window_id) {
           let rect = wry::Rect {
@@ -801,9 +801,9 @@ impl Application {
             None
           }
         },
-        #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+        #[cfg(not(target_os = "android"))]
         tray_handlers: HashMap::new(),
-        #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+        #[cfg(not(target_os = "android"))]
         tray_resources: Vec::new(),
         web_contexts: Vec::new(),
       },
@@ -875,7 +875,7 @@ impl Application {
       ));
     }
     let tray = JsTrayIcon::create(options)?;
-    #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+    #[cfg(not(target_os = "android"))]
     {
       self
         .state
@@ -1080,7 +1080,7 @@ impl Application {
       }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+    #[cfg(not(target_os = "android"))]
     while let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
       if let Some(handler) = self.state.tray_handlers.get(&event.id().0) {
         let callback = handler.borrow();
@@ -1273,9 +1273,9 @@ mod tests {
       current_modifiers: ModifiersState::default(),
       #[cfg(not(target_os = "android"))]
       menu_event_receiver: None,
-      #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+      #[cfg(not(target_os = "android"))]
       tray_handlers: HashMap::new(),
-      #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+      #[cfg(not(target_os = "android"))]
       tray_resources: Vec::new(),
       web_contexts: Vec::new(),
     }

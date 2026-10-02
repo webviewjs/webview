@@ -13,7 +13,10 @@ type NotificationEventThreadsafeFunction = ThreadsafeFunction<
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use napi::threadsafe_function::ThreadsafeFunctionCallMode;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(
+  unix,
+  not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+))]
 use std::sync::{Arc, Mutex};
 
 #[napi(object)]
@@ -135,7 +138,10 @@ fn emit_response(
 
 #[napi(js_name = "NativeNotification")]
 pub struct JsNotification {
-  #[cfg(target_os = "linux")]
+  #[cfg(all(
+    unix,
+    not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+  ))]
   handle: Arc<Mutex<Option<Arc<notify_rust::NotificationHandle>>>>,
 }
 
@@ -189,7 +195,10 @@ impl JsNotification {
               Some(format!("Failed to decode notification image: {error}")),
             );
             return Ok(Self {
-              #[cfg(target_os = "linux")]
+              #[cfg(all(
+                unix,
+                not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+              ))]
               handle: Arc::new(Mutex::new(None)),
             });
           }
@@ -206,7 +215,10 @@ impl JsNotification {
             Err(error) => {
               emit(&callback, "error", None, Some(error.to_string()));
               return Ok(Self {
-                #[cfg(target_os = "linux")]
+                #[cfg(all(
+                  unix,
+                  not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+                ))]
                 handle: Arc::new(Mutex::new(None)),
               });
             }
@@ -223,7 +235,10 @@ impl JsNotification {
             Err(error) => {
               emit(&callback, "error", None, Some(error));
               return Ok(Self {
-                #[cfg(target_os = "linux")]
+                #[cfg(all(
+                  unix,
+                  not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+                ))]
                 handle: Arc::new(Mutex::new(None)),
               });
             }
@@ -238,7 +253,10 @@ impl JsNotification {
         Ok(handle) => {
           emit(&callback, "show", None, None);
 
-          #[cfg(target_os = "linux")]
+          #[cfg(all(
+            unix,
+            not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+          ))]
           {
             let handle = Arc::new(handle);
             let stored_handle = Arc::new(Mutex::new(Some(Arc::clone(&handle))));
@@ -254,7 +272,10 @@ impl JsNotification {
             });
           }
 
-          #[cfg(not(target_os = "linux"))]
+          #[cfg(not(all(
+            unix,
+            not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+          )))]
           {
             std::thread::spawn(move || {
               let _temporary_image = temporary_image;
@@ -281,14 +302,20 @@ impl JsNotification {
     }
 
     Ok(Self {
-      #[cfg(target_os = "linux")]
+      #[cfg(all(
+        unix,
+        not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+      ))]
       handle: Arc::new(Mutex::new(None)),
     })
   }
 
   #[napi]
   pub fn close(&self) {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(
+      unix,
+      not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+    ))]
     {
       let handle = self.handle.lock().ok().and_then(|mut slot| slot.take());
       if let Some(handle) = handle {

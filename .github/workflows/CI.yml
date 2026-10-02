@@ -470,14 +470,12 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # FreeBSD x64 — stub-only build.  The addon throws at runtime; it exists only
-  # to satisfy package managers that resolve the freebsd-x64 optional package.
-  # The full wry/wry GUI stack is NOT compiled (see Cargo.toml cfg guards).
+  # FreeBSD x64 uses the same GTK/WebKitGTK implementation as Linux and BSD GTK targets.
   build-freebsd:
     needs: release-version
     if: needs.release-version.outputs.should_build == 'true'
     runs-on: ubuntu-latest
-    name: FreeBSD x64 (stub)
+    name: FreeBSD x64 (GTK/WebKitGTK)
     timeout-minutes: 90
     defaults:
       run:
@@ -495,7 +493,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo pkg install -y -f curl node npm
+          sudo pkg install -y -f \
+            curl node24 npm-node24 \
+            gtk3 webkit2-gtk_41 libsoup3 pkgconf \
+            xdotool libappindicator \
+            dbus xorg-vfbserver
           sudo npm install -g bun@1.4.2
           curl https://sh.rustup.rs -sSf --output rustup.sh
           sh rustup.sh -y --profile minimal --default-toolchain stable
@@ -511,9 +513,20 @@ jobs:
           bun --version
           bun install --frozen-lockfile
           cd packages/webview
-          # FreeBSD exports only the unsupported native stub; its generated
-          # bindings intentionally omit the public API, so skip the JS typecheck.
-          bun run build:native
+          bun run build --target x86_64-unknown-freebsd
+          cargo test --lib
+          bun run test
+
+      - name: Run FreeBSD GTK/WebKitGTK smoke test
+        run: |
+          cd packages/webview
+          ./node_modules/.bin/tsc --noEmit --target ES2022 --module CommonJS --moduleResolution Node --strict --skipLibCheck --types node ./__test__/freebsd-smoke.ts
+          Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/tmp/webview-freebsd-xvfb.log 2>&1 &
+          XVFB_PID=$!
+          trap 'kill "$XVFB_PID" 2>/dev/null || true' EXIT
+          sleep 2
+          kill -0 "$XVFB_PID"
+          DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- node --experimental-strip-types ./__test__/freebsd-smoke.ts
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

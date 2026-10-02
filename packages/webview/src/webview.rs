@@ -22,10 +22,10 @@ use crate::browser_window::next_protocol_id;
 use crate::types::*;
 use crate::web_context::JsWebContext;
 
-#[cfg(target_os = "linux")]
+#[cfg(gtk_unix)]
 use tao::platform::unix::WindowExtUnix;
 
-#[cfg(target_os = "linux")]
+#[cfg(gtk_unix)]
 use wry::WebViewBuilderExtUnix;
 
 /// Shared reference to the webview event dispatch callback.
@@ -556,7 +556,7 @@ impl JsWebview {
     #[cfg(target_os = "macos")]
     let built = webview.build_as_child(window).map_err(err)?;
 
-    #[cfg(target_os = "linux")]
+    #[cfg(gtk_unix)]
     let built = if options.child.unwrap_or(false) {
       // Keep existing child behavior for this experiment.
       webview.build_as_child(window).map_err(err)?
@@ -571,7 +571,7 @@ impl JsWebview {
       webview.build_gtk(container).map_err(err)?
     };
 
-    #[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+    #[cfg(not(any(target_os = "macos", gtk_unix)))]
     let built = if options.child.unwrap_or(false) {
       webview.build_as_child(window).map_err(err)
     } else {
