@@ -2,6 +2,7 @@
 
 import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
+import { HighlightedCode } from './highlighted-code';
 
 const example = [
   "import { Application } from '@webviewjs/webview';",
@@ -18,9 +19,6 @@ const example = [
   '',
   'app.run();',
 ].join('\n');
-
-const lineClass = 'code-line';
-const numberClass = 'code-number';
 
 export function CodeEditor() {
   const [copied, setCopied] = useState(false);
@@ -49,70 +47,7 @@ export function CodeEditor() {
       </div>
       <div className="code-scroll">
         <pre aria-label="JavaScript example that creates a native window">
-          <code>
-            <span className={lineClass}>
-              <span className={numberClass}>1</span>
-              <span className="code-keyword">import</span>
-              {' { Application } '}
-              <span className="code-keyword">from</span> <span className="code-string">'@webviewjs/webview'</span>;
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>2</span>
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>3</span>
-              <span className="code-keyword">const</span>
-              {' app = '}
-              <span className="code-keyword">new</span>
-              {' Application();'}
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>4</span>
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>5</span>
-              <span className="code-keyword">const</span>
-              {' window = app.'}
-              <span className="code-accent">createBrowserWindow</span>({'{'}
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>6</span>
-              {'  title: '}
-              <span className="code-string">'My App'</span>,
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>7</span>
-              {'  width: '}
-              <span className="code-number-value">1024</span>,
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>8</span>
-              {'  height: '}
-              <span className="code-number-value">768</span>,
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>9</span>
-              {'});'}
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>10</span>
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>11</span>
-              {'window.'}
-              <span className="code-accent">createWebview</span>({'{ url: '}
-              <span className="code-string">'https://example.com'</span>
-              {' });'}
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>12</span>
-            </span>
-            <span className={lineClass}>
-              <span className={numberClass}>13</span>
-              {'app.'}
-              <span className="code-accent">run</span>();
-            </span>
-          </code>
+          <HighlightedCode source={example} />
         </pre>
       </div>
     </div>

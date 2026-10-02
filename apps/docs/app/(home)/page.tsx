@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import { Executable } from '@/components/home/executable';
+import { EventLoopIntegration } from '@/components/home/event-loop-integration';
 import { Hero } from '@/components/home/hero';
 import { HeroFeatures } from '@/components/home/hero-features';
 import { JavaScriptNative } from '@/components/home/javascript-native';
+import { RuntimeCompatibility } from '@/components/home/runtime-compatibility';
 import { SystemWebview } from '@/components/home/system-webview';
 
 const title = 'WebviewJS | Native webviews. JavaScript.';
@@ -32,6 +34,8 @@ export default function Page() {
       <Hero />
       <HeroFeatures />
       <SystemWebview />
+      <RuntimeCompatibility />
+      <EventLoopIntegration />
       <JavaScriptNative />
       <Executable />
     </main>
