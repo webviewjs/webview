@@ -1,0 +1,9 @@
+{
+  "name": "@webviewjs/examples",
+  "private": true,
+  "dependencies": {
+    "@webviewjs/webview": "workspace:*",
+    "hono": "^4.12.32",
+    "nodeia": "^0.0.1"
+  }
+}

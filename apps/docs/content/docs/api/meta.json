@@ -1,0 +1,4 @@
+{
+  "title": "API",
+  "pages": ["application", "browser-window", "webview", "web-context", "tray", "notification", "menu", "types"]
+}

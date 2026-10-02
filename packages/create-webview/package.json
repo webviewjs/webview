@@ -1,0 +1,48 @@
+{
+  "name": "create-webview",
+  "version": "0.0.0",
+  "description": "Create a WebviewJS desktop application.",
+  "type": "module",
+  "bin": {
+    "create-webview": "./dist/index.js",
+    "create-webview-app": "./dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/webviewjs/webview.git",
+    "directory": "packages/create-webview"
+  },
+  "license": "MIT",
+  "keywords": [
+    "webview",
+    "webviewjs",
+    "desktop",
+    "native",
+    "create",
+    "scaffold",
+    "javascript",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "bun run build && node --test __test__/args.test.mjs __test__/create.test.mjs __test__/package.test.mjs",
+    "clean": "node scripts/clean.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.3"
+  }
+}

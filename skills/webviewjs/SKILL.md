@@ -12,13 +12,21 @@ windows with the webview engine supplied by the operating system.
 Use the hosted documentation as the API authority:
 
 - [Documentation](https://webview.js.org)
-- [Quickstart](https://webview.js.org/quickstart.md)
-- [Installation](https://webview.js.org/installation.md)
+- [Quickstart](https://webview.js.org/getting-started/quick-start)
+- [Installation](https://webview.js.org/getting-started/installation)
 - [API index](https://webview.js.org/llms.txt)
 
 ## Install and prepare the host
 
-Install the package with the package manager used by the application:
+For a new project, start with the official scaffolder:
+
+```bash
+npm create webview@latest
+```
+
+`npm create webview-app@latest` runs the same scaffolder from its published
+alias. Use the `create-webview` skill for starter options and project-generation
+guidance. To add WebviewJS to an existing project, use its package manager:
 
 ```bash
 npm install @webviewjs/webview
@@ -39,7 +47,7 @@ Native prerequisites vary by host:
   packages are `libwebkit2gtk-4.1-dev` and `libxdo-dev`.
 
 For the complete prerequisite list, use the [installation
-guide](https://webview.js.org/installation.md).
+guide](https://webview.js.org/getting-started/installation).
 
 ## Create an application
 
@@ -71,9 +79,9 @@ exclusive. The application owns native resources created through it, and
 process.on('SIGINT', () => app.exit());
 ```
 
-Read the [Application API](https://webview.js.org/api/application.md),
-[BrowserWindow API](https://webview.js.org/api/browser-window.md), and
-[Webview API](https://webview.js.org/api/webview.md) before relying on
+Read the [Application API](https://webview.js.org/api/application),
+[BrowserWindow API](https://webview.js.org/api/browser-window), and
+[Webview API](https://webview.js.org/api/webview) before relying on
 platform-specific behavior.
 
 ## Use common features
@@ -88,10 +96,10 @@ platform-specific behavior.
   handlers for application actions and dispose explicitly when ownership is
   no longer needed.
 
-Use the [IPC guide](https://webview.js.org/guides/ipc-messaging.md), [custom
-protocol guide](https://webview.js.org/guides/custom-protocols.md), [menus
-guide](https://webview.js.org/guides/menus.md), and [system tray
-guide](https://webview.js.org/guides/tray.md) for complete examples.
+Use the [IPC guide](https://webview.js.org/guides/ipc-messaging), [custom
+protocol guide](https://webview.js.org/guides/custom-protocols), [menus
+guide](https://webview.js.org/guides/menus), and [system tray
+guide](https://webview.js.org/api/tray) for complete examples.
 
 ## Respect native platform boundaries
 
@@ -108,20 +116,21 @@ but it cannot make a native addon portable.
 
 ## Build a standalone executable
 
-The `webview --build` CLI delegates to the selected JavaScript runtime:
+Use `webview build <entry>`; Node.js SEA is the default runtime:
 
-- Node.js uses Node's Single Executable Application (SEA) workflow.
-- Deno uses `deno compile`.
-- Bun uses `bun build --compile`.
+```bash
+webview build src/main.ts
+webview build src/main.ts --runtime bun
+webview build src/main.ts --runtime deno
+```
 
-This CLI is not a desktop installer builder, package manager, or general
-application bundler. It does not perform cross-compilation. Build on the
-target operating system and architecture so the matching WebviewJS `.node`
-addon is available, or prepare that addon and its runtime toolchain manually
-before packaging. Use platform distribution tools for installers, signing,
-notarization, and release metadata.
+All runtimes need a matching WebviewJS `.node` addon. Node SEA is host-only;
+Bun and Deno accept runtime-specific target identifiers when that target addon
+is installed. Cross-target output is not covered by the current host
+integration smoke tests. This CLI does not create desktop installers or
+perform Windows certificate signing.
 
-See the [standalone executable guide](https://webview.js.org/guides/building-executables.md)
+See the [standalone executable guide](https://webview.js.org/guides/building-executables)
 for runtime-specific options and asset handling.
 
 ## Troubleshoot systematically
