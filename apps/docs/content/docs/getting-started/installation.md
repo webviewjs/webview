@@ -23,7 +23,17 @@ sudo dnf install webkit2gtk4.1-devel libxdo-devel
 sudo pacman -S webkit2gtk-4.1 xdotool
 ```
 
-## NPM
+## Create a project
+
+For a new application, use the official project creator:
+
+```bash
+npm create webview@latest
+```
+
+The `npm create webview-app@latest` alias runs the same scaffolder.
+
+## Install from npm
 
 ```bash
 npm install @webviewjs/webview

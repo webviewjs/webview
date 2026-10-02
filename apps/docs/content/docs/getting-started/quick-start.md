@@ -2,7 +2,25 @@
 title: 'Quick Start'
 ---
 
+## Create a project
+
+Create a starter application with the official scaffolder:
+
+```sh
+npm create webview@latest
+```
+
+You can pass the project directory directly with `npm create webview@latest
+my-app`. The alternate command `npm create webview-app@latest` invokes the same
+scaffolder; `create-webview` is the canonical package name.
+
 ## Minimal example
+
+If you prefer to start from an existing project, install WebviewJS directly:
+
+```sh
+npm install @webviewjs/webview
+```
 
 ```js
 import { Application, BrowserWindow } from '@webviewjs/webview';

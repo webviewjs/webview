@@ -489,27 +489,160 @@ jobs:
 
       - name: Extract version from commit message
         id: version
+        shell: bash
         run: |
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          if echo "$COMMIT_MSG" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]+$"; then
-            echo "is_release=true" >> $GITHUB_OUTPUT
-            echo "tag=latest" >> $GITHUB_OUTPUT
-          elif echo "$COMMIT_MSG" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]"; then
-            echo "is_release=true" >> $GITHUB_OUTPUT
-            echo "tag=next" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          COMMIT_MSG="$(git log -1 --pretty=%B)"
+          stable_regex='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          prerelease_regex='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[A-Za-z0-9-]+\.(0|[1-9][0-9]*)$'
+
+          if [[ "$COMMIT_MSG" =~ $stable_regex ]]; then
+            VERSION="$COMMIT_MSG"
+            TAG=latest
+            IS_RELEASE=true
+          elif [[ "$COMMIT_MSG" =~ $prerelease_regex ]]; then
+            VERSION="$COMMIT_MSG"
+            TAG="${VERSION#*-}"
+            TAG="${TAG%%.*}"
+            if [[ "$TAG" =~ ^[0-9]+$ || "$TAG" =~ ^[vV][0-9]+$ || "$TAG" == x || "$TAG" == X ]]; then
+              TAG=next
+            fi
+            IS_RELEASE=true
           else
-            echo "is_release=false" >> $GITHUB_OUTPUT
+            VERSION=
+            TAG=latest
+            IS_RELEASE=false
+          fi
+
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Verify release version
+        if: steps.version.outputs.is_release == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          WEBVIEW_VERSION="$(node -p 'require("./packages/webview/package.json").version')"
+          if [[ "$WEBVIEW_VERSION" != "$VERSION" ]]; then
+            echo "Release version $VERSION does not match packages/webview/package.json version $WEBVIEW_VERSION." >&2
+            exit 1
           fi
 
       - name: Publish to npm
         if: steps.version.outputs.is_release == 'true'
         run: |
           npm config set provenance true
-          npm publish --access public --tag ${{ steps.version.outputs.tag }}
+          npm publish --access public --tag "${{ steps.version.outputs.tag }}"
         working-directory: packages/webview
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Build and publish creator packages
+        if: steps.version.outputs.is_release == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          WEBVIEW_VERSION="$(node -p 'require("./packages/webview/package.json").version')"
+          if [[ "$WEBVIEW_VERSION" != "$VERSION" ]]; then
+            echo "Refusing creator publish: release version $VERSION does not match WebviewJS version $WEBVIEW_VERSION." >&2
+            exit 1
+          fi
+
+          bun --filter create-webview build
+
+          STAGING_DIR="$(mktemp -d "$RUNNER_TEMP/create-webview.XXXXXX")"
+          cp packages/create-webview/package.json "$STAGING_DIR/package.json"
+          cp packages/create-webview/README.md "$STAGING_DIR/README.md"
+          cp packages/create-webview/LICENSE "$STAGING_DIR/LICENSE"
+          cp -R packages/create-webview/dist "$STAGING_DIR/dist"
+
+          node --input-type=module - "$STAGING_DIR/package.json" "$VERSION" <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises';
+          const [manifestPath, version] = process.argv.slice(2);
+          const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+          manifest.name = 'create-webview';
+          manifest.version = version;
+          if (manifest.bin?.['create-webview'] !== './dist/index.js' || manifest.bin?.['create-webview-app'] !== './dist/index.js') {
+            throw new Error('Staged creator manifest does not contain both shared CLI aliases.');
+          }
+          await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+          NODE
+
+          node --input-type=module - "$STAGING_DIR/package.json" "$VERSION" <<'NODE'
+          import { access, readFile, readdir } from 'node:fs/promises';
+          const [manifestPath, version] = process.argv.slice(2);
+          const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+          const files = (await readdir(new URL('.', `file://${manifestPath}`))).sort();
+          if (manifest.name !== 'create-webview' || manifest.version !== version) {
+            throw new Error(`Unexpected staged manifest identity: ${manifest.name}@${manifest.version}`);
+          }
+          for (const expected of ['LICENSE', 'README.md', 'dist', 'package.json']) {
+            if (!files.includes(expected)) throw new Error(`Missing staged package file: ${expected}`);
+          }
+          await access(new URL('./dist/index.js', `file://${manifestPath}`));
+          NODE
+
+          npm config set provenance true
+
+          package_version_exists() {
+            local package_name="$1"
+            local output
+            if output="$(npm view "${package_name}@${VERSION}" version --json 2>&1)"; then
+              echo "${package_name}@${VERSION} is already published; skipping."
+              return 0
+            fi
+
+            if [[ "$output" == *E404* ]]; then
+              return 10
+            fi
+
+            printf '%s\n' "$output" >&2
+            echo "Could not verify whether ${package_name}@${VERSION} exists." >&2
+            return 2
+          }
+
+          publish_if_missing() {
+            local package_name="$1"
+            local status=0
+            package_version_exists "$package_name" || status=$?
+
+            if [[ "$status" -eq 0 ]]; then
+              return 0
+            elif [[ "$status" -ne 10 ]]; then
+              return "$status"
+            fi
+
+            echo "Publishing ${package_name}@${VERSION} with npm tag ${TAG}."
+            npm publish --access public --tag "$TAG"
+          }
+
+          cd "$STAGING_DIR"
+          publish_if_missing create-webview
+
+          node --input-type=module - "package.json" <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises';
+          const manifest = JSON.parse(await readFile('package.json', 'utf8'));
+          manifest.name = 'create-webview-app';
+          await writeFile('package.json', `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+          NODE
+
+          node --input-type=module - "$VERSION" <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const [version] = process.argv.slice(2);
+          const manifest = JSON.parse(await readFile('package.json', 'utf8'));
+          if (manifest.name !== 'create-webview-app' || manifest.version !== version) {
+            throw new Error('Mirror package identity changed unexpectedly.');
+          }
+          NODE
+          publish_if_missing create-webview-app
 
       - name: Skip publish (not a release)
         if: steps.version.outputs.is_release == 'false'

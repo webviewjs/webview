@@ -22,6 +22,7 @@ packages/webview/       Published @webviewjs/webview package
   npm/                  Per-platform NAPI packages
   js-bindings.js        Generated and tracked NAPI-RS bindings
   js-bindings.d.ts      Generated and tracked NAPI-RS declarations
+packages/create-webview/ Official WebviewJS project scaffolder
 .cargo/                 Root Cargo configuration
 .github/workflows/      Native CI, repository checks, and Pages deployment
 .husky/                 Root Git hooks
@@ -115,3 +116,4 @@ The entry file is positional, for example `webview build src/main.ts`. Use `--as
 - Native build outputs and Cargo's `target/` directory live under `packages/webview/`.
 - Native builds are platform-specific and are not cached by Turborepo.
 - Publishing the public package must run from `packages/webview/`, never from the private repository root.
+- The creator source lives only in `packages/create-webview/`. `create-webview` is the canonical npm package; `create-webview-app` is published by mirroring that exact package during release. There is intentionally no `packages/create-webview-app/` workspace.

@@ -12,11 +12,12 @@ This repository contains the published package, its documentation site, runnable
 
 ## Repository
 
-| Workspace          | Purpose                                                        |
-| ------------------ | -------------------------------------------------------------- |
-| `packages/webview` | Published `@webviewjs/webview` native binding and CLI          |
-| `apps/docs`        | Documentation site at [webview.js.org](https://webview.js.org) |
-| `apps/examples`    | Runnable JavaScript examples                                   |
+| Workspace                 | Purpose                                                        |
+| ------------------------- | -------------------------------------------------------------- |
+| `packages/webview`        | Published `@webviewjs/webview` native binding and CLI          |
+| `packages/create-webview` | Official WebviewJS project scaffolder (`create-webview`)       |
+| `apps/docs`               | Documentation site at [webview.js.org](https://webview.js.org) |
+| `apps/examples`           | Runnable JavaScript examples                                   |
 
 ## Development
 
@@ -64,6 +65,7 @@ apps/
   examples/             Runnable examples
 packages/
   webview/              @webviewjs/webview package
+  create-webview/       Official WebviewJS project scaffolder
 ```
 
 ## Contributing

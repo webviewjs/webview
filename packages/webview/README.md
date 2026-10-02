@@ -96,6 +96,14 @@ bun add @webviewjs/webview
 pnpm add @webviewjs/webview
 ```
 
+To create a starter application instead, run:
+
+```bash
+npm create webview@latest
+```
+
+`npm create webview-app@latest` is an alias for the same project scaffolder.
+
 Keep optional dependencies enabled when installing. They contain the native
 addon selected for the current operating system and architecture.
 
