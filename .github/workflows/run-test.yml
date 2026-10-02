@@ -47,4 +47,21 @@ jobs:
             libxdo-dev
           )
           sudo apt-get install --no-install-recommends -y "${packages[@]}"
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('packages/webview/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+      - name: Cache Cargo build
+        uses: actions/cache@v4
+        with:
+          path: packages/webview/target/
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('packages/webview/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ hashFiles('packages/webview/Cargo.lock') }}-
       - run: cargo test --manifest-path packages/webview/Cargo.toml --lib
