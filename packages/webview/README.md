@@ -10,7 +10,7 @@ WebviewJS is a typed N-API binding built on [`tao`](https://github.com/tauri-app
 
 [Documentation](https://webview.js.org) · [Quick start](https://webview.js.org/getting-started/quick-start) · [API](https://webview.js.org/api/application) · [Examples](https://github.com/webviewjs/webview/tree/main/apps/examples)
 
-![WebviewJS preview](https://github.com/webviewjs/webview/raw/main/assets/preview.png)
+![WebviewJS preview](https://github.com/webviewjs/webview/raw/main/assets/preview.webp)
 
 ## Get started
 
