@@ -20,6 +20,11 @@ export function baseOptions(): BaseLayoutProps {
         url: `https://github.com/${gitConfig.user}/${gitConfig.repo}/tree/${gitConfig.branch}/apps/examples`,
         external: true,
       },
+      {
+        text: 'Sponsor',
+        url: 'https://buymemomo.com/twilight',
+        external: true,
+      },
     ],
     githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
   };

@@ -1,74 +1,80 @@
+function PlatformMark({ platform }: { platform: 'windows' | 'macos' | 'linux' }) {
+  if (platform === 'windows') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M2 5.3 10.5 4v7H2zM12 3.8 22 2.3V11H12zM2 13h8.5v7L2 18.7zM12 13h10v8.7L12 20z" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  if (platform === 'macos') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M17.7 12.8c0-2.3 1.9-3.4 2-3.5a4.4 4.4 0 0 0-3.5-1.9c-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.8a4.9 4.9 0 0 0-4.1 2.5c-1.8 3.1-.5 7.7 1.2 10.2.8 1.2 1.7 2.5 3 2.4 1.2-.1 1.7-.8 3.3-.8s2.1.8 3.4.8 2.1-1.2 2.9-2.4a10 10 0 0 0 1.3-2.7 4 4 0 0 1-2.4-4.7ZM15.2 5.8a4.2 4.2 0 0 0 1-3.1 4.3 4.3 0 0 0-2.8 1.5 4 4 0 0 0-1 3 3.6 3.6 0 0 0 2.8-1.4Z"
+          fill="currentColor"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 2.2c-2.5 0-3.9 2-3.9 4.9v2.5L5.2 15c-.8 1.5-.3 2.8 1.2 3.1l1.7.3 1.8 2.2c.8 1 1.8 1.4 2.2.5l.8-1.8 2.1 1.8c.9.7 1.8.1 1.7-1.2l-.1-2.2 2.7-1.1c1.5-.6 1.7-1.8.6-3l-3-3.1V7.1c0-2.9-1.7-4.9-4.9-4.9Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9 9.6h6M9 13.1l-2.4 2.7m8.4-2.7 2.1 2.2M10 18l2 .7 2.2-.7"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+      <circle cx="10.4" cy="7.1" r=".6" fill="currentColor" />
+      <circle cx="13.7" cy="7.1" r=".6" fill="currentColor" />
+    </svg>
+  );
+}
+
 const platforms = [
-  { name: 'Windows', engine: 'WebView2' },
-  { name: 'macOS', engine: 'WebKit' },
-  { name: 'Linux', engine: 'WebKitGTK' },
+  { name: 'Windows', engine: 'WEBVIEW2', platform: 'windows' as const },
+  { name: 'macOS', engine: 'WEBKIT', platform: 'macos' as const },
+  { name: 'Linux', engine: 'WEBKITGTK', platform: 'linux' as const },
 ];
 
 export function SystemWebview() {
   return (
-    <section className="relative overflow-hidden bg-[#070707] py-28 sm:py-36 lg:py-40">
-      <div className="mx-auto w-[calc(100%_-_2.5rem)] max-w-[1500px] sm:w-[calc(100%_-_5rem)] xl:w-[calc(100%_-_8rem)]">
-        <div className="grid gap-7 md:grid-cols-[1.08fr_0.92fr] md:items-end md:gap-16">
-          <h2 className="max-w-[12ch] text-[clamp(2.7rem,5.1vw,5.2rem)] font-medium leading-[0.98] tracking-[-0.065em] text-[#f5f5f5] [text-wrap:balance]">
-            The browser is already there.
+    <section className="home-section platform-section" aria-labelledby="platform-title">
+      <div className="home-container">
+        <div className="home-section-heading">
+          <h2 className="home-section-title" id="platform-title">
+            The browser
+            <br />
+            is already there<span>.</span>
           </h2>
-          <p className="max-w-[510px] pb-1 text-base leading-7 text-[#949494] sm:text-[17px] sm:leading-8 md:justify-self-end">
+          <p>
             WebviewJS uses the webview supplied by the operating system instead of shipping another browser engine with
             your app.
           </p>
         </div>
-
-        <div
-          className="relative mt-16 min-h-[300px] sm:mt-20 lg:mt-24"
-          role="img"
-          aria-label="Windows, macOS, and Linux provide their own webview engines."
-        >
-          <svg
-            className="pointer-events-none absolute inset-x-0 top-0 h-[255px] w-full"
-            viewBox="0 0 1200 260"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <defs>
-              <filter id="system-line-glow" x="-20%" y="-50%" width="140%" height="200%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-            <path
-              d="M0 207h112v-45h176m0 0h162v30h150v-57h150m0 0h164v42h174m0 0h112"
-              fill="none"
-              stroke="#C8152F"
-              strokeOpacity=".82"
-              strokeWidth="1"
-              filter="url(#system-line-glow)"
-            />
-            <circle cx="288" cy="162" r="3" fill="#FF2347" />
-            <circle cx="600" cy="135" r="3" fill="#FF2347" />
-            <circle cx="914" cy="177" r="3" fill="#FF2347" />
+        <div className="platform-flow" role="list" aria-label="Native webview engines by platform">
+          <svg className="platform-connectors" viewBox="0 0 1200 112" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M200 100h150V78h118m132 22h150V78h118" fill="none" stroke="#b90c2b" strokeWidth="1.2" />
+            <circle cx="200" cy="100" r="2.5" fill="#ff1744" />
+            <circle cx="600" cy="100" r="2.5" fill="#ff1744" />
           </svg>
-          <div className="relative grid grid-cols-3 gap-2 sm:gap-6">
-            {platforms.map(({ name, engine }, index) => (
-              <div className="relative flex flex-col items-center" key={name}>
-                <svg
-                  className={`relative z-10 h-[115px] w-full max-w-[245px] text-white/[0.3] sm:h-[145px] ${index === 1 ? 'sm:-mt-5 sm:h-[165px]' : ''}`}
-                  viewBox="0 0 260 150"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path d="M18.5 20.5h223v112h-223z" stroke="currentColor" />
-                  <path d="M19 43h222" stroke="currentColor" />
-                  <path d="M31 32h5m8 0h5m8 0h5" stroke="currentColor" />
-                  <path d="M38 62h91m-91 13h67m-67 13h108m-108 13h55" stroke="currentColor" />
-                  <path d="M169 62h53v39h-53z" stroke="#C8152F" strokeOpacity=".8" />
-                </svg>
-                <div className="relative z-10 mt-4 flex flex-col items-center gap-1 bg-[#070707] px-2 text-center sm:mt-6">
-                  <span className="text-sm font-medium tracking-[-0.02em] text-white/90 sm:text-base">{name}</span>
-                  <span className="font-mono text-[10px] tracking-[0.12em] text-white/40 sm:text-[11px]">{engine}</span>
-                </div>
+          <div className="platform-grid">
+            {platforms.map(({ name, engine, platform }) => (
+              <div className="platform-card" key={platform} role="listitem">
+                <span className="platform-mark">
+                  <PlatformMark platform={platform} />
+                </span>
+                <span className="platform-copy">
+                  <strong>{name}</strong>
+                  <small>{engine}</small>
+                </span>
               </div>
             ))}
           </div>

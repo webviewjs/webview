@@ -1,103 +1,120 @@
+import { Bell, Blocks, Braces, CircleCheck, LayoutDashboard, Menu, PanelBottom, Package, Settings } from 'lucide-react';
 import { CodeEditor } from './code-editor';
+
+const features = [
+  { label: 'Menus', Icon: Menu },
+  { label: 'Tray Icons', Icon: PanelBottom },
+  { label: 'Notifications', Icon: Bell },
+  { label: 'IPC', Icon: Braces },
+  { label: 'Custom Protocols', Icon: Package },
+];
+
+const navigation = [
+  { id: 'projects', Icon: Blocks },
+  { id: 'activity', Icon: Bell },
+  { id: 'settings', Icon: Settings },
+];
 
 export function JavaScriptNative() {
   return (
-    <section className="relative overflow-hidden bg-[#030303] py-28 sm:py-36 lg:py-40">
-      <div className="mx-auto w-[calc(100%_-_2.5rem)] max-w-[1500px] sm:w-[calc(100%_-_5rem)] xl:w-[calc(100%_-_8rem)]">
-        <div className="grid gap-7 md:grid-cols-[1.08fr_0.92fr] md:items-end md:gap-16">
-          <h2 className="max-w-[12ch] text-[clamp(2.7rem,5.1vw,5.2rem)] font-medium leading-[0.98] tracking-[-0.065em] text-[#f5f5f5] [text-wrap:balance]">
-            JavaScript controls the window.
+    <section className="home-section javascript-section" aria-labelledby="javascript-title">
+      <div className="home-container">
+        <div className="home-section-heading">
+          <h2 className="home-section-title" id="javascript-title">
+            JavaScript
+            <br />
+            controls the window<span>.</span>
           </h2>
-          <p className="max-w-[550px] pb-1 text-base leading-7 text-[#949494] sm:text-[17px] sm:leading-8 md:justify-self-end">
+          <p>
             Create a window, load a page, and add menus, notifications, tray icons, IPC, browser contexts, or custom
-            protocols through one API.
+            protocols through one simple API.
           </p>
         </div>
-
-        <div className="relative mt-14 grid items-center gap-12 xl:mt-20 xl:grid-cols-[1.08fr_0.92fr] xl:gap-20">
+        <div className="javascript-showcase">
           <CodeEditor />
-          <svg
-            className="pointer-events-none absolute inset-0 z-20 hidden h-full w-full overflow-visible xl:block"
-            viewBox="0 0 1400 620"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <defs>
-              <filter id="webviewjs-code-glow" x="-60%" y="-60%" width="220%" height="220%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-            <path
-              d="M730 183h108V95h132"
-              fill="none"
-              stroke="#C8152F"
-              strokeWidth="1"
-              filter="url(#webviewjs-code-glow)"
-            />
-            <circle cx="730" cy="183" r="3" fill="#FF2347" />
-            <circle cx="970" cy="95" r="3" fill="#FF2347" />
-            <path
-              d="M730 433h138v83h72"
-              fill="none"
-              stroke="#C8152F"
-              strokeWidth="1"
-              filter="url(#webviewjs-code-glow)"
-            />
-            <circle cx="730" cy="433" r="3" fill="#FF2347" />
-            <circle cx="940" cy="516" r="3" fill="#FF2347" />
-          </svg>
-
-          <div className="relative z-10 min-w-0 px-0 py-3 sm:px-3 sm:py-5 xl:pl-4">
+          <div className="application-showcase">
             <div
-              className="absolute inset-x-[10%] bottom-[16%] h-[42%] rounded-full bg-[#c8152f]/10 blur-[70px]"
-              aria-hidden="true"
-            />
-            <div className="relative mx-auto max-w-[650px]">
-              <div className="mb-4 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.14em] text-white/40 sm:mb-5">
-                <span>BrowserWindow</span>
-                <span>01 / 01</span>
+              className="application-demo"
+              role="img"
+              aria-label="A native application dashboard built with WebviewJS."
+            >
+              <div className="application-titlebar">
+                <span className="window-controls" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <span>My App</span>
+                <span className="application-title-mark" aria-hidden="true" />
               </div>
-              <div className="overflow-hidden rounded-[10px] border border-white/[0.14] bg-[#0a0a0b] shadow-[0_30px_85px_rgba(0,0,0,0.6),0_0_30px_rgba(200,21,47,0.08)]">
-                <div className="flex h-10 items-center justify-between border-b border-white/[0.08] bg-[#101011] px-4 text-[10px] text-white/55 sm:h-11 sm:px-5">
-                  <span className="flex gap-1.5" aria-hidden="true">
-                    <i className="size-1.5 rounded-full bg-white/25" />
-                    <i className="size-1.5 rounded-full bg-white/25" />
-                    <i className="size-1.5 rounded-full bg-white/25" />
+              <div className="application-shell">
+                <aside className="application-sidebar" aria-hidden="true">
+                  <span className="application-brand-mark">W</span>
+                  <span className="application-nav-item is-active">
+                    <LayoutDashboard />
                   </span>
-                  <span>My App</span>
-                  <span className="h-2 w-5 border-y border-white/20" aria-hidden="true" />
-                </div>
-                <div className="p-2 sm:p-3">
-                  <div className="min-h-[300px] bg-[#09090a] text-[#f5f5f5] sm:min-h-[370px]">
-                    <div className="flex h-8 items-center gap-2 border-b border-white/[0.08] bg-[#0c0c0d] px-4 font-mono text-[9px] text-white/40">
-                      <span className="size-1.5 rounded-full bg-[#c8152f]" aria-hidden="true" />
-                      example.com
+                  {navigation.map(({ id, Icon }) => (
+                    <span className="application-nav-item" key={id}>
+                      <Icon />
+                    </span>
+                  ))}
+                </aside>
+                <div className="application-main">
+                  <div className="application-toolbar">
+                    <div>
+                      <span className="application-overline">Workspace</span>
+                      <h3>Project overview</h3>
                     </div>
-                    <div className="relative flex min-h-[268px] flex-col justify-center overflow-hidden px-7 py-9 sm:min-h-[330px] sm:px-10">
-                      <span className="mb-6 h-[2px] w-10 bg-[#c8152f]" />
-                      <p className="text-[12px] tracking-wide text-white/50 sm:text-sm">Your page.</p>
-                      <div className="mt-5 max-w-[260px] space-y-2.5" aria-hidden="true">
-                        <i className="block h-1.5 w-full bg-white/[0.1]" />
-                        <i className="block h-1.5 w-4/5 bg-white/[0.07]" />
-                        <i className="block h-1.5 w-2/3 bg-white/[0.05]" />
-                      </div>
+                    <span className="application-status">
+                      <CircleCheck aria-hidden="true" />
+                      All systems ready
+                    </span>
+                  </div>
+                  <div className="application-metrics">
+                    <div className="application-metric">
+                      <span>Active projects</span>
+                      <strong>12</strong>
+                      <small>+3 this month</small>
+                    </div>
+                    <div className="application-metric">
+                      <span>Latest build</span>
+                      <strong>Passed</strong>
+                      <small>2 minutes ago</small>
+                    </div>
+                  </div>
+                  <div className="application-activity">
+                    <div className="application-activity-heading">
+                      <strong>Recent activity</strong>
+                      <span>View all</span>
+                    </div>
+                    <div className="application-activity-row">
+                      <i aria-hidden="true" />
+                      <span>
+                        <strong>Desktop client</strong>
+                        <small>Updated just now</small>
+                      </span>
+                      <em>Running</em>
+                    </div>
+                    <div className="application-activity-row">
+                      <i aria-hidden="true" />
+                      <span>
+                        <strong>Webview runtime</strong>
+                        <small>Build completed</small>
+                      </span>
+                      <em>Ready</em>
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[10px] tracking-wide text-white/45 sm:mt-7 sm:gap-x-7 sm:text-[11px]">
-                <span className="flex items-center gap-2">
-                  <i className="size-1 bg-[#c8152f]" /> Menu
-                </span>
-                <span>TrayIcon</span>
-                <span>Notification</span>
-                <span>IPC</span>
-              </div>
             </div>
+            <ul className="feature-icons" aria-label="Native features">
+              {features.map(({ label, Icon }) => (
+                <li key={label}>
+                  <Icon aria-hidden="true" />
+                  <span>{label}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </div>

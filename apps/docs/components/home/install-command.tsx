@@ -1,13 +1,20 @@
 'use client';
 
-import { Check, Copy } from 'lucide-react';
+import { Bot, Check, Copy, UserRound } from 'lucide-react';
 import { useState } from 'react';
 
-const command = 'npm i @webviewjs/webview';
+const commands = {
+  humans: 'npm i @webviewjs/webview',
+  agents: 'npx skills add webviewjs/webview',
+} as const;
+
+type InstallMode = keyof typeof commands;
 
 export function InstallCommand() {
+  const [mode, setMode] = useState<InstallMode>('humans');
   const [copied, setCopied] = useState(false);
   const [message, setMessage] = useState('');
+  const command = commands[mode];
 
   async function copyCommand() {
     try {
@@ -22,28 +29,62 @@ export function InstallCommand() {
   }
 
   return (
-    <div className="mt-7 max-w-[420px] sm:mt-8">
-      <div className="group flex min-w-0 items-center gap-3 border-b border-white/20 py-3 font-mono text-[12px] sm:text-[13px]">
-        <span aria-hidden="true" className="select-none text-[#c8152f]">
-          $
-        </span>
-        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-white/75">{command}</code>
+    <div className="hero-install-panel">
+      <div className="hero-install-tabs" role="tablist" aria-label="Choose how to install WebviewJS">
+        <button
+          type="button"
+          id="hero-install-tab-humans"
+          role="tab"
+          aria-selected={mode === 'humans'}
+          aria-controls="hero-install-command"
+          className={mode === 'humans' ? 'hero-install-tab is-active' : 'hero-install-tab'}
+          onClick={() => {
+            setMode('humans');
+            setCopied(false);
+            setMessage('');
+          }}
+        >
+          <UserRound aria-hidden="true" />
+          For Humans
+        </button>
+        <button
+          type="button"
+          id="hero-install-tab-agents"
+          role="tab"
+          aria-selected={mode === 'agents'}
+          aria-controls="hero-install-command"
+          className={mode === 'agents' ? 'hero-install-tab is-active' : 'hero-install-tab'}
+          onClick={() => {
+            setMode('agents');
+            setCopied(false);
+            setMessage('');
+          }}
+        >
+          <Bot aria-hidden="true" />
+          For Agents
+        </button>
+      </div>
+      <div
+        className="hero-install"
+        id="hero-install-command"
+        role="tabpanel"
+        aria-labelledby={mode === 'humans' ? 'hero-install-tab-humans' : 'hero-install-tab-agents'}
+      >
+        <span aria-hidden="true">$</span>
+        <code>
+          <span>{command.split(' ')[0]}</span> {command.slice(command.indexOf(' ') + 1)}
+        </code>
         <button
           type="button"
           aria-label={copied ? 'Install command copied' : 'Copy install command'}
           onClick={copyCommand}
-          className="inline-flex size-8 shrink-0 items-center justify-center text-white/45 transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff2347]"
         >
-          {copied ? (
-            <Check aria-hidden="true" className="size-4 text-[#ff2347]" />
-          ) : (
-            <Copy aria-hidden="true" className="size-4" />
-          )}
+          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
         </button>
       </div>
-      <p aria-live="polite" className="min-h-5 pt-1.5 text-[11px] text-white/45">
+      <span className="sr-only" aria-live="polite">
         {message}
-      </p>
+      </span>
     </div>
   );
 }
