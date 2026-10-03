@@ -498,6 +498,9 @@ jobs:
             gtk3 webkit2-gtk_41 libsoup3 pkgconf \
             xdotool libappindicator \
             dbus xorg-vfbserver
+          # The downloaded .pkg archives are no longer needed after installation.
+          sudo pkg clean -ay
+          df -h /
           sudo npm install -g bun@1.4.2
           curl https://sh.rustup.rs -sSf --output rustup.sh
           sh rustup.sh -y --profile minimal --default-toolchain stable
@@ -507,17 +510,16 @@ jobs:
           DEBUG: napi:*
           RUSTUP_IO_THREADS: 1
           CARGO_INCREMENTAL: 0
-          CARGO_PROFILE_TEST_DEBUG: 0
         run: |
           . "$HOME/.cargo/env"
           rustc --version
           node -v
           bun --version
           bun install --frozen-lockfile
+          df -h /
           cd packages/webview
-          # Keep test and release Cargo artifacts from filling the FreeBSD VM disk.
-          cargo test --lib
-          cargo clean
+          # Reuse release-profile dependencies for the N-API addon build.
+          cargo test --lib --release
           bun run build --target x86_64-unknown-freebsd
           cargo clean
           bun run test
