@@ -8,10 +8,12 @@ pub mod version;
 pub mod app;
 pub mod browser_window;
 pub mod menu;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub(crate) mod mobile;
 pub mod notifications;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod tray;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 #[path = "tray_stub.rs"]
 pub mod tray;
 pub mod web_context;

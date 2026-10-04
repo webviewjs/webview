@@ -69,6 +69,8 @@ WebviewJS uses the webview provided by each platform:
 
 Android, iOS, and FreeBSD targets are experimental.
 
+An experimental iOS XCFramework can be cross-built on macOS with `bun run build:ios`. It is a compile artifact, not an npm iOS package or a working UIKit runtime, and requires an app-provided Node-API host. See the [iOS platform notes](https://webview.js.org/platform/ios) for host requirements and limits.
+
 See the [platform documentation](https://webview.js.org) for requirements and platform-specific behavior.
 
 ## Build executables

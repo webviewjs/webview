@@ -107,6 +107,6 @@ Native response events depend on the platform and notification server. On Window
 notification.close(): void
 ```
 
-Programmatic native close is implemented on Unix notification backends such as Linux and FreeBSD. It is a no-op on Windows and macOS, where the backend does not expose an equivalent close operation. Android and iOS construct the JavaScript object but do not display notifications or emit native lifecycle events.
+Programmatic native close is implemented on Unix notification backends such as Linux and FreeBSD. It is a no-op on Windows and macOS, where the backend does not expose an equivalent close operation. Android constructs the JavaScript object but does not display notifications or emit native lifecycle events. The experimental iOS binding reports native notifications as unsupported.
 
 See the runnable [notification example](https://github.com/webviewjs/webview/blob/main/apps/examples/notification.ts).

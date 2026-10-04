@@ -2,13 +2,13 @@
 //!  - **Windows**: per-window menu bar attached via Win32 HWND.
 //!  - **macOS**: app-level NSApplication menu bar (no per-window attachment).
 //!  - **GTK Unix (Linux and BSD)**: per-window GTK menu bar attached through Tao's GTK handles.
-//!  - **Android**: menu system is completely disabled.
+//!  - **Android and iOS**: menu system is unavailable.
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::types::{MenuItemOptions, MenuOptions};
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use muda::{accelerator::Accelerator, Menu, MenuItem, PredefinedMenuItem, Submenu};
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use napi::Result;
 
 /// Build a minimal macOS-style app menu (App > About/Hide/Quit) and install it
@@ -42,7 +42,7 @@ pub fn make_default_macos_menu() -> muda::Menu {
 /// On macOS the caller is expected to call `menu.init_for_nsapp()` to make
 /// this the active menu bar.  A macOS-style "App" submenu (About/Hide/Quit)
 /// is prepended automatically so it appears as the first item.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn create_menu_from_options(options: MenuOptions) -> Result<Menu> {
   let menu = Menu::new();
 
@@ -74,7 +74,7 @@ pub fn create_menu_from_options(options: MenuOptions) -> Result<Menu> {
 }
 
 /// Attach `menu` to a native window on the platforms that support it.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn init_menu_for_window(menu: &Menu, window: &tao::window::Window) -> Result<()> {
   #[cfg(target_os = "windows")]
   {
@@ -101,7 +101,7 @@ pub fn init_menu_for_window(menu: &Menu, window: &tao::window::Window) -> Result
 
 // ── Recursive item builders ───────────────────────────────────────────────────
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn add_item_to_menu(menu: &Menu, item: MenuItemOptions) -> Result<()> {
   if let Some(sub_opts) = item.submenu {
     let sub = Submenu::new(item.label.as_deref().unwrap_or(""), true);
@@ -117,7 +117,7 @@ fn add_item_to_menu(menu: &Menu, item: MenuItemOptions) -> Result<()> {
   Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn add_item_to_submenu(submenu: &Submenu, item: MenuItemOptions) -> Result<()> {
   if let Some(sub_opts) = item.submenu {
     let nested = Submenu::new(item.label.as_deref().unwrap_or(""), true);
@@ -135,7 +135,7 @@ fn add_item_to_submenu(submenu: &Submenu, item: MenuItemOptions) -> Result<()> {
   Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn role_to_predefined(role: &str) -> Result<PredefinedMenuItem> {
   Ok(match role {
     // Editing
@@ -169,7 +169,7 @@ fn role_to_predefined(role: &str) -> Result<PredefinedMenuItem> {
   })
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn make_menu_item(item: &MenuItemOptions) -> Result<MenuItem> {
   Ok(MenuItem::with_id(
     muda::MenuId(
@@ -187,7 +187,7 @@ fn make_menu_item(item: &MenuItemOptions) -> Result<MenuItem> {
   ))
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn menu_err(e: impl std::fmt::Display) -> napi::Error {
   napi::Error::new(napi::Status::GenericFailure, e.to_string())
 }

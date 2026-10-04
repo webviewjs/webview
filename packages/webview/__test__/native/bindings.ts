@@ -186,6 +186,13 @@ class Application {
     return state.ready;
   }
 
+  _assertEventLoopSupported(): void {
+    const state = recordCall(this, '_assertEventLoopSupported');
+    if (state.values.eventLoopSupported === false) {
+      throw new Error('iOS does not support event-loop pumping');
+    }
+  }
+
   exit(): void {
     const state = recordCall(this, 'exit');
     state.exited = true;

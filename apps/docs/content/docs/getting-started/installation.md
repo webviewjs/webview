@@ -69,7 +69,7 @@ The embedded browser engine is supplied by the operating system. The app does no
 | Linux    | WebKitGTK 4.1, GTK 3, libsoup 3, and `libxdo`.                                                                                      |
 | FreeBSD  | GTK 3, WebKitGTK 4.1, libsoup 3, and `xdotool`/`libxdo`; see [FreeBSD](../platform/freebsd).                                        |
 | Android  | Android native webview support; Android addons are published for arm64 and armv7, with more limited feature coverage.               |
-| iOS      | There is no published iOS N-API package.                                                                                            |
+| iOS      | There is no published iOS N-API package. Experimental app-embedding builds are available on macOS; see [iOS](../platform/ios).      |
 
 On Debian and Ubuntu, install the packages used by the repository's Linux build:
 
