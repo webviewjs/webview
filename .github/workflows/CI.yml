@@ -543,6 +543,47 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  build-ios:
+    name: iOS device and simulator (experimental)
+    needs: release-version
+    if: needs.release-version.outputs.should_build == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build experimental iOS XCFramework
+        run: bun run build:ios
+        working-directory: packages/webview
+
+      - name: Upload iOS XCFramework
+        uses: actions/upload-artifact@v4
+        with:
+          name: webview-ios-xcframework
+          path: packages/webview/target/ios/release/Webview.xcframework
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
@@ -550,6 +591,7 @@ jobs:
     needs:
       - build
       - build-freebsd
+      - build-ios
       - release-version
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 

@@ -26,8 +26,13 @@ export class ApplicationEventLoop {
     const interval = options.interval ?? 16;
     const shouldRef = options.ref ?? true;
     const timer = setInterval(() => {
-      if (!this.#pumpEvents()) {
+      try {
+        if (!this.#pumpEvents()) {
+          this.stop();
+        }
+      } catch (error) {
         this.stop();
+        throw error;
       }
     }, interval);
 

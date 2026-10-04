@@ -1,12 +1,12 @@
 use crate::types::*;
 use dpi::Size;
 use image::GenericImageView;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use muda::Menu;
 use napi::Either;
 use napi::{bindgen_prelude::FunctionRef, Env, Result};
 use napi_derive::*;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use rfd::FileDialog;
 use std::cell::{Cell, Ref, RefCell};
 use std::collections::{hash_map::DefaultHasher, HashMap};
@@ -65,7 +65,7 @@ pub(crate) type WindowCloseState = Rc<CloseRequestState>;
 #[cfg(target_os = "windows")]
 use tao::platform::windows::WindowExtWindows;
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::menu::{create_menu_from_options, init_menu_for_window};
 use crate::webview::{
   protocol_error_response, JsWebview, ProtocolCounterRef, ProtocolPendingMap, ProtocolRegistration,
@@ -152,7 +152,7 @@ pub struct BrowserWindow {
   is_child_window: bool,
   pub(crate) window: WindowResource,
   window_id: u32,
-  #[cfg(not(target_os = "android"))]
+  #[cfg(not(any(target_os = "android", target_os = "ios")))]
   window_menu: Option<Menu>,
   webviews: Rc<RefCell<Vec<WebviewResource>>>,
   event_handler: Rc<RefCell<Option<FunctionRef<WindowEventPayload, ()>>>>,
@@ -170,10 +170,17 @@ impl BrowserWindow {
     event_loop: &EventLoop<()>,
     options: Option<BrowserWindowOptions>,
     child: bool,
-    #[cfg(not(target_os = "android"))] global_menu: Rc<RefCell<Option<Menu>>>,
-    #[cfg(target_os = "android")] _global_menu: Rc<RefCell<Option<()>>>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))] global_menu: Rc<
+      RefCell<Option<Menu>>,
+    >,
+    #[cfg(any(target_os = "android", target_os = "ios"))] _global_menu: Rc<RefCell<Option<()>>>,
   ) -> Result<Self> {
     let options = options.unwrap_or_default();
+
+    #[cfg(target_os = "ios")]
+    if options.menu.is_some() {
+      return Err(crate::mobile::unsupported_feature_error("native menus"));
+    }
 
     let mut builder = WindowBuilder::new();
 
@@ -358,7 +365,7 @@ impl BrowserWindow {
     window.id().hash(&mut hasher);
     let window_id = hasher.finish() as u32;
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let window_menu = if let Some(menu_options) = options.menu {
       let menu = create_menu_from_options(menu_options)?;
       init_menu_for_window(&menu, &window)?;
@@ -378,7 +385,7 @@ impl BrowserWindow {
       window: Rc::new(RefCell::new(Some(window))),
       is_child_window: child,
       window_id,
-      #[cfg(not(target_os = "android"))]
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
       window_menu,
       webviews: Rc::new(RefCell::new(Vec::new())),
       event_handler: Rc::new(RefCell::new(None)),
@@ -674,7 +681,7 @@ impl BrowserWindow {
 
   #[napi]
   pub fn open_file_dialog(&self, options: Option<FileDialogOptions>) -> Result<Vec<String>> {
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
       let mut dialog = FileDialog::new();
       if let Some(opts) = options.as_ref() {
@@ -709,6 +716,11 @@ impl BrowserWindow {
       let _ = options;
       Ok(vec![])
     }
+    #[cfg(target_os = "ios")]
+    {
+      let _ = options;
+      Err(crate::mobile::unsupported_feature_error("file dialogs"))
+    }
   }
 
   #[napi]
@@ -718,11 +730,11 @@ impl BrowserWindow {
 
   #[napi]
   pub fn has_menu(&self) -> bool {
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
       self.window_menu.is_some()
     }
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
       false
     }
@@ -768,7 +780,7 @@ impl BrowserWindow {
       responder.respond(protocol_error_response("BrowserWindow has been disposed"));
     }
     self.protocols.clear();
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     self.window_menu.take();
   }
 
@@ -1063,7 +1075,7 @@ impl BrowserWindow {
     {
       use tao::platform::ios::{ScreenEdge, WindowExtIOS};
       self
-        .window
+        .window()
         .set_preferred_screen_edges_deferring_system_gestures(ScreenEdge::from_bits_truncate(
           edges,
         ));

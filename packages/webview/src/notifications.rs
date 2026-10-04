@@ -296,18 +296,27 @@ impl JsNotification {
       }
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(target_os = "ios")]
     {
       let _ = (options, callback);
+      return Err(crate::mobile::unsupported_feature_error(
+        "native notifications",
+      ));
     }
 
-    Ok(Self {
-      #[cfg(all(
-        unix,
-        not(any(target_os = "macos", target_os = "android", target_os = "ios"))
-      ))]
-      handle: Arc::new(Mutex::new(None)),
-    })
+    #[cfg(not(target_os = "ios"))]
+    {
+      #[cfg(target_os = "android")]
+      let _ = (options, callback);
+
+      Ok(Self {
+        #[cfg(all(
+          unix,
+          not(any(target_os = "macos", target_os = "android", target_os = "ios"))
+        ))]
+        handle: Arc::new(Mutex::new(None)),
+      })
+    }
   }
 
   #[napi]

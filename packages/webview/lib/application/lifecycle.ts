@@ -71,6 +71,7 @@ export function bind(this: Application, handler?: ((event: ApplicationEvent) => 
  * @param options Polling interval and Node.js timer reference behavior.
  */
 export function run(this: Application, options?: ApplicationRunOptions | null): void {
+  this._assertEventLoopSupported();
   ensureApplicationEvents(this);
   stateFor(this).eventLoop.start(options ?? undefined);
 }
@@ -93,6 +94,10 @@ export function whenReady(this: Application, options: ApplicationWhenReadyOption
     if (Object.prototype.hasOwnProperty.call(options, 'ref')) {
       throw new TypeError('ref is not supported when autoRun is false');
     }
+  }
+
+  if (autoRun) {
+    this._assertEventLoopSupported();
   }
 
   const ready = this.isReady()

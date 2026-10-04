@@ -37,6 +37,21 @@ test('native application events subscribe once and use isolated EventEmitters', 
   expect(first.listenerCount('custom-menu-click')).toBe(0);
 });
 
+test('unsupported event loops fail before run or automatic whenReady installs a timer or listener', () => {
+  jest.useFakeTimers();
+  try {
+    const app = new Application();
+    native.application(app).setEventLoopSupported(false);
+    expect(() => app.run()).toThrow('iOS does not support event-loop pumping');
+    expect(() => app.whenReady()).toThrow('iOS does not support event-loop pumping');
+    expect(jest.getTimerCount()).toBe(0);
+    expect(app.listenerCount('ready')).toBe(0);
+    expect(calls(app, 'pumpEvents')).toHaveLength(0);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 test('run is idempotent, defaults to 16ms, honors ref false, and stop clears its timer', () => {
   jest.useFakeTimers();
   try {

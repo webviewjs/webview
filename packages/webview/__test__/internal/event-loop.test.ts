@@ -46,3 +46,26 @@ test('event loop stops itself when native pumping returns false', () => {
     jest.useRealTimers();
   }
 });
+
+test('a native pump error stops polling and preserves the original error', () => {
+  jest.useFakeTimers();
+  const intervalSpy = jest.spyOn(globalThis, 'setInterval');
+  try {
+    const failure = new Error('iOS does not support event-loop pumping');
+    let pumps = 0;
+    const loop = new ApplicationEventLoop(() => {
+      pumps += 1;
+      throw failure;
+    });
+
+    loop.start();
+    const tick = intervalSpy.mock.calls[0][0] as () => void;
+    expect(tick).toThrow(failure);
+    expect(jest.getTimerCount()).toBe(0);
+    jest.advanceTimersByTime(100);
+    expect(pumps).toBe(1);
+  } finally {
+    intervalSpy.mockRestore();
+    jest.useRealTimers();
+  }
+});

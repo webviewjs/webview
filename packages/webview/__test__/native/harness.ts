@@ -67,6 +67,10 @@ const native = {
         if (typeof result !== 'boolean') throw new TypeError('setPumpResult requires a boolean');
         binding.__stateFor(application, 'application').pumpResult = result;
       },
+      setEventLoopSupported(supported: boolean): void {
+        if (typeof supported !== 'boolean') throw new TypeError('setEventLoopSupported requires a boolean');
+        binding.__stateFor(application, 'application').values.eventLoopSupported = supported;
+      },
       setReady(ready = true): void {
         binding.__stateFor(application, 'application').ready = ready;
       },

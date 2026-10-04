@@ -5,6 +5,8 @@ export declare class Application {
   onEvent(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void
   bind(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void
   isReady(): boolean
+  /** Checks whether the JavaScript timer can drive this platform's event loop. */
+  _assertEventLoopSupported(): void
   exit(): void
   /** Creates a new WebContext with the given options. */
   createWebContext(options?: WebContextOptions | undefined | null): JsWebContext

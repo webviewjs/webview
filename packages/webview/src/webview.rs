@@ -80,6 +80,16 @@ fn new_window_response(navigation_allowed: bool, request_allowed: bool) -> NewWi
   }
 }
 
+fn validate_child_webview(ios: bool, child: bool) -> Result<()> {
+  if ios && child {
+    return Err(napi::Error::new(
+      napi::Status::GenericFailure,
+      "iOS does not support child webviews",
+    ));
+  }
+  Ok(())
+}
+
 pub(crate) fn protocol_error_response(
   message: &str,
 ) -> wry::http::Response<std::borrow::Cow<'static, [u8]>> {
@@ -185,6 +195,7 @@ impl JsWebview {
     web_context: Option<&mut crate::web_context::JsWebContext>,
     create_context: WebviewCreateContext<'_>,
   ) -> Result<Self> {
+    validate_child_webview(cfg!(target_os = "ios"), options.child.unwrap_or(false))?;
     let WebviewCreateContext {
       protocols,
       protocol_responders,
@@ -1062,7 +1073,15 @@ fn js_to_cookie(c: &WebviewCookie) -> wry::cookie::Cookie<'static> {
 
 #[cfg(test)]
 mod tests {
-  use super::{new_window_response, NewWindowResponse};
+  use super::{new_window_response, validate_child_webview, NewWindowResponse};
+
+  #[test]
+  fn ios_rejects_child_webviews_before_native_creation() {
+    assert!(validate_child_webview(true, false).is_ok());
+    assert!(validate_child_webview(false, true).is_ok());
+    let error = validate_child_webview(true, true).unwrap_err();
+    assert_eq!(error.reason, "iOS does not support child webviews");
+  }
 
   #[test]
   fn new_window_requires_both_navigation_and_popup_handlers_to_allow() {

@@ -56,6 +56,7 @@
     "artifacts": "napi artifacts",
     "build": "node ./scripts/build-all.js --release",
     "build:native": "node ./scripts/build.js --release",
+    "build:ios": "node ./scripts/build-ios.js",
     "build:lib": "run-s build:lib:clean build:lib:tsc",
     "build:lib:clean": "node ./scripts/clean-lib.js",
     "build:lib:tsc": "tsc -p tsconfig.json",

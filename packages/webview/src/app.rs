@@ -4,14 +4,13 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use crate::browser_window::{BrowserWindow, WindowCloseState, WindowResource};
-#[cfg(target_os = "android")]
 use crate::tray::JsTrayIcon;
-#[cfg(not(target_os = "android"))]
-use crate::tray::{event_payload, JsTrayIcon, TrayEventHandler, TrayResource};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::tray::{event_payload, TrayEventHandler, TrayResource};
 use crate::types::*;
 use crate::web_context::{JsWebContext, WebContextOptions, WebContextResource};
 use crate::webview::WebviewResource;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use muda::Menu;
 use napi::bindgen_prelude::*;
 use napi::Result;
@@ -78,11 +77,11 @@ struct AppState {
   cursor_positions: HashMap<WindowId, (f64, f64)>,
   /// Last known modifier state.
   current_modifiers: ModifiersState,
-  #[cfg(not(target_os = "android"))]
+  #[cfg(not(any(target_os = "android", target_os = "ios")))]
   menu_event_receiver: Option<muda::MenuEventReceiver>,
-  #[cfg(not(target_os = "android"))]
+  #[cfg(not(any(target_os = "android", target_os = "ios")))]
   tray_handlers: HashMap<String, TrayEventHandler>,
-  #[cfg(not(target_os = "android"))]
+  #[cfg(not(any(target_os = "android", target_os = "ios")))]
   tray_resources: Vec<TrayResource>,
   web_contexts: Vec<WebContextResource>,
 }
@@ -141,7 +140,7 @@ impl AppState {
     if self.should_exit {
       return;
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
       for resource in self.tray_resources.drain(..) {
         release_resource(&resource);
@@ -152,7 +151,7 @@ impl AppState {
       release_resource(&context);
     }
     self.handler.borrow_mut().take();
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
       self.menu_event_receiver = None;
     }
@@ -740,7 +739,7 @@ fn handle_window_event(state: &mut AppState, window_id: WindowId, event: WindowE
 pub struct Application {
   event_loop: Option<EventLoop<()>>,
   state: AppState,
-  #[cfg(not(target_os = "android"))]
+  #[cfg(not(any(target_os = "android", target_os = "ios")))]
   global_menu: Rc<RefCell<Option<Menu>>>,
   window_ids: Arc<Mutex<HashMap<String, u32>>>,
 }
@@ -760,7 +759,7 @@ impl Application {
     // functional from the start.  Store it in global_menu so the ObjC delegate
     // is kept alive (it would be freed if the Menu were dropped here).
     // set_menu() will replace this with the user-supplied menu.
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let initial_global_menu: Option<Menu> = {
       #[cfg(target_os = "macos")]
       {
@@ -788,7 +787,7 @@ impl Application {
         webview_lifecycles: HashMap::new(),
         cursor_positions: HashMap::new(),
         current_modifiers: ModifiersState::default(),
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         menu_event_receiver: {
           // On macOS we always have a menu from startup so start receiving events
           // immediately.  On other platforms the receiver is set when set_menu is called.
@@ -801,13 +800,13 @@ impl Application {
             None
           }
         },
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tray_handlers: HashMap::new(),
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tray_resources: Vec::new(),
         web_contexts: Vec::new(),
       },
-      #[cfg(not(target_os = "android"))]
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
       global_menu: Rc::new(RefCell::new(initial_global_menu)),
       window_ids: Arc::new(Mutex::new(HashMap::new())),
     })
@@ -828,6 +827,17 @@ impl Application {
     self.state.ready
   }
 
+  /// Checks whether the JavaScript timer can drive this platform's event loop.
+  #[napi(js_name = "_assertEventLoopSupported")]
+  pub fn assert_event_loop_supported(&self) -> Result<()> {
+    #[cfg(target_os = "ios")]
+    return Err(crate::mobile::unsupported_feature_error(
+      "event-loop pumping",
+    ));
+    #[cfg(not(target_os = "ios"))]
+    Ok(())
+  }
+
   #[napi]
   pub fn exit(&mut self) {
     if self.state.should_exit || self.state.exit_requested {
@@ -842,7 +852,7 @@ impl Application {
     let window_ids: Vec<_> = self.state.windows.keys().copied().collect();
     if window_ids.is_empty() {
       self.state.finalize_shutdown();
-      #[cfg(not(target_os = "android"))]
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
       self.global_menu.borrow_mut().take();
       return;
     }
@@ -875,7 +885,7 @@ impl Application {
       ));
     }
     let tray = JsTrayIcon::create(options)?;
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
       self
         .state
@@ -907,19 +917,19 @@ impl Application {
 
     #[allow(unused_mut)]
     let mut window_options = options.unwrap_or_default();
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if window_options.menu.is_none() && self.global_menu.borrow().is_some() {
       window_options.show_menu = Some(true);
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let window = BrowserWindow::new(
       event_loop,
       Some(window_options),
       false,
       self.global_menu.clone(),
     )?;
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     let window = BrowserWindow::new(
       event_loop,
       Some(window_options),
@@ -974,9 +984,9 @@ impl Application {
       )
     })?;
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let window = BrowserWindow::new(event_loop, options, true, self.global_menu.clone())?;
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     let window = BrowserWindow::new(event_loop, options, true, Rc::new(RefCell::new(None)))?;
 
     let wid = window.tao_window_id();
@@ -1010,115 +1020,236 @@ impl Application {
         "Application has been disposed",
       ));
     }
-    #[cfg(not(target_os = "android"))]
+
+    #[cfg(target_os = "ios")]
     {
-      if let Some(options) = menu_options {
-        let m = crate::menu::create_menu_from_options(options)?;
-        #[cfg(target_os = "macos")]
-        m.init_for_nsapp();
-        self.state.menu_event_receiver = Some(muda::MenuEvent::receiver().clone());
-        *self.global_menu.borrow_mut() = Some(m);
-      } else {
-        // On macOS restoring the default menu keeps the app menu bar functional.
-        #[cfg(target_os = "macos")]
-        {
-          let default_menu = crate::menu::make_default_macos_menu();
-          *self.global_menu.borrow_mut() = Some(default_menu);
-          // Keep the receiver — menu events can still arrive from predefined items.
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-          *self.global_menu.borrow_mut() = None;
-          self.state.menu_event_receiver = None;
+      let _ = menu_options;
+      return Err(crate::mobile::unsupported_feature_error("native menus"));
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
+      {
+        if let Some(options) = menu_options {
+          let m = crate::menu::create_menu_from_options(options)?;
+          #[cfg(target_os = "macos")]
+          m.init_for_nsapp();
+          self.state.menu_event_receiver = Some(muda::MenuEvent::receiver().clone());
+          *self.global_menu.borrow_mut() = Some(m);
+        } else {
+          // On macOS restoring the default menu keeps the app menu bar functional.
+          #[cfg(target_os = "macos")]
+          {
+            let default_menu = crate::menu::make_default_macos_menu();
+            *self.global_menu.borrow_mut() = Some(default_menu);
+            // Keep the receiver — menu events can still arrive from predefined items.
+          }
+          #[cfg(not(target_os = "macos"))]
+          {
+            *self.global_menu.borrow_mut() = None;
+            self.state.menu_event_receiver = None;
+          }
         }
       }
+      #[cfg(target_os = "android")]
+      let _ = menu_options;
+      Ok(())
     }
-    #[cfg(target_os = "android")]
-    let _ = menu_options;
-    Ok(())
   }
 
   /// Pump the tao event loop once without blocking. Returns `true` while
   /// the app is alive, `false` when it should stop. Drive this from the
   /// public JavaScript Application.run() wrapper.
   #[napi]
-  pub fn pump_events(&mut self) -> bool {
-    use tao::event::Event;
-
-    #[cfg(target_os = "macos")]
-    use tao::platform::macos::{EventLoopExtPumpEvents, PumpStatus};
-
-    #[cfg(not(target_os = "macos"))]
-    use tao::platform::run_return::EventLoopExtRunReturn;
-
-    if self.state.should_exit {
-      return false;
-    }
-
-    // Fire the ready event on the first pump.
-    if !self.state.ready {
-      self.state.ready = true;
-      self.state.fire(ApplicationEvent {
-        event: WebviewApplicationEvent::Ready.name().to_owned(),
-        custom_menu_event: None,
-      });
-    }
-
-    // Drain menu events before pumping the window event loop.
-    #[cfg(not(target_os = "android"))]
+  pub fn pump_events(&mut self) -> Result<bool> {
+    #[cfg(target_os = "ios")]
     {
-      if let Some(rx) = &self.state.menu_event_receiver {
-        while let Ok(ev) = rx.try_recv() {
-          self.state.fire(ApplicationEvent {
-            event: WebviewApplicationEvent::CustomMenuClick.name().to_owned(),
-            custom_menu_event: Some(CustomMenuEvent {
-              id: ev.id().0.clone(),
-              window_id: 0,
-            }),
-          });
+      let _ = self;
+      return Err(crate::mobile::unsupported_feature_error(
+        "event-loop pumping",
+      ));
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+      use tao::event::Event;
+
+      #[cfg(target_os = "macos")]
+      use tao::platform::macos::{EventLoopExtPumpEvents, PumpStatus};
+
+      #[cfg(not(target_os = "macos"))]
+      use tao::platform::run_return::EventLoopExtRunReturn;
+
+      if self.state.should_exit {
+        return Ok(false);
+      }
+
+      // Fire the ready event on the first pump.
+      if !self.state.ready {
+        self.state.ready = true;
+        self.state.fire(ApplicationEvent {
+          event: WebviewApplicationEvent::Ready.name().to_owned(),
+          custom_menu_event: None,
+        });
+      }
+
+      // Drain menu events before pumping the window event loop.
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
+      {
+        if let Some(rx) = &self.state.menu_event_receiver {
+          while let Ok(ev) = rx.try_recv() {
+            self.state.fire(ApplicationEvent {
+              event: WebviewApplicationEvent::CustomMenuClick.name().to_owned(),
+              custom_menu_event: Some(CustomMenuEvent {
+                id: ev.id().0.clone(),
+                window_id: 0,
+              }),
+            });
+          }
         }
       }
-    }
 
-    #[cfg(not(target_os = "android"))]
-    while let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
-      if let Some(handler) = self.state.tray_handlers.get(&event.id().0) {
-        let callback = handler.borrow();
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
+      while let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
+        if let Some(handler) = self.state.tray_handlers.get(&event.id().0) {
+          let callback = handler.borrow();
 
-        if let Some(callback) = callback.as_ref() {
-          if let Ok(function) = callback.borrow_back(&self.state.env) {
-            if let Some(payload) = event_payload(event) {
-              let _ = function.call(payload);
+          if let Some(callback) = callback.as_ref() {
+            if let Ok(function) = callback.borrow_back(&self.state.env) {
+              if let Some(payload) = event_payload(event) {
+                let _ = function.call(payload);
+              }
             }
           }
         }
       }
+
+      if self.state.should_exit {
+        return Ok(false);
+      }
+
+      // Split borrows so the event handler can mutate application state.
+      let event_loop = match &mut self.event_loop {
+        Some(event_loop) => event_loop,
+        None => return Ok(false),
+      };
+
+      let state = &mut self.state;
+
+      /*
+       * macOS
+       *
+       * Use WebviewJS's patched Tao pump API. Returning from one pump does not
+       * destroy the event loop or set ControlFlow::Exit.
+       */
+      #[cfg(target_os = "macos")]
+      {
+        let status = event_loop.pump_events(|event, _target, control_flow| {
+          use tao::event_loop::ControlFlow;
+
+          *control_flow = ControlFlow::Poll;
+
+          if let Event::WindowEvent {
+            window_id,
+            event: window_event,
+            ..
+          } = event
+          {
+            handle_window_event(state, window_id, window_event);
+          }
+
+          // ControlFlow::Exit is reserved for an actual application exit.
+          if state.should_exit {
+            *control_flow = ControlFlow::Exit;
+          }
+        });
+
+        if let PumpStatus::Exit(_exit_code) = status {
+          state.should_exit = true;
+        }
+      }
+
+      /*
+       * Other desktop platforms
+       *
+       * Continue using Tao's existing run_return implementation.
+       */
+      #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+      {
+        use tao::{event::StartCause, event_loop::ControlFlow};
+
+        event_loop.run_return(|event, _target, control_flow| {
+          *control_flow = ControlFlow::Poll;
+
+          match event {
+            Event::WindowEvent {
+              window_id,
+              event: window_event,
+              ..
+            } => {
+              handle_window_event(state, window_id, window_event);
+            }
+
+            // On these platforms run_return still needs Exit to return control
+            // to Node.js after the current event-loop iteration.
+            Event::MainEventsCleared => {
+              *control_flow = ControlFlow::Exit;
+            }
+
+            Event::NewEvents(StartCause::Poll) => {}
+
+            _ => {}
+          }
+        });
+      }
+
+      Ok(!state.should_exit)
     }
+  }
 
-    if self.state.should_exit {
-      return false;
-    }
-
-    // Split borrows so the event handler can mutate application state.
-    let event_loop = match &mut self.event_loop {
-      Some(event_loop) => event_loop,
-      None => return false,
-    };
-
-    let state = &mut self.state;
-
-    /*
-     * macOS
-     *
-     * Use WebviewJS's patched Tao pump API. Returning from one pump does not
-     * destroy the event loop or set ControlFlow::Exit.
-     */
-    #[cfg(target_os = "macos")]
+  /// Run Tao's native event loop continuously on the current thread.
+  ///
+  /// This blocks JavaScript until the application exits. Use `run()` when the
+  /// Node.js event loop must remain available.
+  #[napi]
+  pub fn run_sync(&mut self) -> Result<()> {
+    #[cfg(target_os = "ios")]
     {
-      let status = event_loop.pump_events(|event, _target, control_flow| {
-        use tao::event_loop::ControlFlow;
+      let _ = self;
+      return Err(crate::mobile::unsupported_feature_error(
+        "Application.runSync",
+      ));
+    }
 
-        *control_flow = ControlFlow::Poll;
+    #[cfg(not(target_os = "ios"))]
+    {
+      use tao::event::Event;
+      use tao::event_loop::ControlFlow;
+      use tao::platform::run_return::EventLoopExtRunReturn;
+
+      if self.state.should_exit {
+        return Ok(());
+      }
+
+      if !self.state.ready {
+        self.state.ready = true;
+        self.state.fire(ApplicationEvent {
+          event: WebviewApplicationEvent::Ready.name().to_owned(),
+          custom_menu_event: None,
+        });
+      }
+
+      let event_loop = self.event_loop.as_mut().ok_or_else(|| {
+        napi::Error::new(
+          napi::Status::GenericFailure,
+          "Event loop is not initialized",
+        )
+      })?;
+      let state = &mut self.state;
+
+      event_loop.run_return(|event, _target, control_flow| {
+        *control_flow = ControlFlow::Wait;
 
         if let Event::WindowEvent {
           window_id,
@@ -1129,102 +1260,13 @@ impl Application {
           handle_window_event(state, window_id, window_event);
         }
 
-        // ControlFlow::Exit is reserved for an actual application exit.
         if state.should_exit {
           *control_flow = ControlFlow::Exit;
         }
       });
 
-      if let PumpStatus::Exit(_exit_code) = status {
-        state.should_exit = true;
-      }
+      Ok(())
     }
-
-    /*
-     * Other desktop platforms
-     *
-     * Continue using Tao's existing run_return implementation.
-     */
-    #[cfg(not(target_os = "macos"))]
-    {
-      use tao::{event::StartCause, event_loop::ControlFlow};
-
-      event_loop.run_return(|event, _target, control_flow| {
-        *control_flow = ControlFlow::Poll;
-
-        match event {
-          Event::WindowEvent {
-            window_id,
-            event: window_event,
-            ..
-          } => {
-            handle_window_event(state, window_id, window_event);
-          }
-
-          // On these platforms run_return still needs Exit to return control
-          // to Node.js after the current event-loop iteration.
-          Event::MainEventsCleared => {
-            *control_flow = ControlFlow::Exit;
-          }
-
-          Event::NewEvents(StartCause::Poll) => {}
-
-          _ => {}
-        }
-      });
-    }
-
-    !state.should_exit
-  }
-
-  /// Run Tao's native event loop continuously on the current thread.
-  ///
-  /// This blocks JavaScript until the application exits. Use `run()` when the
-  /// Node.js event loop must remain available.
-  #[napi]
-  pub fn run_sync(&mut self) -> Result<()> {
-    use tao::event::Event;
-    use tao::event_loop::ControlFlow;
-    use tao::platform::run_return::EventLoopExtRunReturn;
-
-    if self.state.should_exit {
-      return Ok(());
-    }
-
-    if !self.state.ready {
-      self.state.ready = true;
-      self.state.fire(ApplicationEvent {
-        event: WebviewApplicationEvent::Ready.name().to_owned(),
-        custom_menu_event: None,
-      });
-    }
-
-    let event_loop = self.event_loop.as_mut().ok_or_else(|| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        "Event loop is not initialized",
-      )
-    })?;
-    let state = &mut self.state;
-
-    event_loop.run_return(|event, _target, control_flow| {
-      *control_flow = ControlFlow::Wait;
-
-      if let Event::WindowEvent {
-        window_id,
-        event: window_event,
-        ..
-      } = event
-      {
-        handle_window_event(state, window_id, window_event);
-      }
-
-      if state.should_exit {
-        *control_flow = ControlFlow::Exit;
-      }
-    });
-
-    Ok(())
   }
 
   /// Run the application event loop.
@@ -1232,7 +1274,7 @@ impl Application {
   pub fn run(&mut self, _options: Option<ApplicationRunOptions>) -> Result<()> {
     // Note: this is intentionally calling pump_events() once
     // the js side overrides this with a setInterval to keep the event loop alive.
-    self.pump_events();
+    self.pump_events()?;
     Ok(())
   }
 }
@@ -1271,11 +1313,11 @@ mod tests {
       webview_lifecycles: HashMap::new(),
       cursor_positions: HashMap::new(),
       current_modifiers: ModifiersState::default(),
-      #[cfg(not(target_os = "android"))]
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
       menu_event_receiver: None,
-      #[cfg(not(target_os = "android"))]
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
       tray_handlers: HashMap::new(),
-      #[cfg(not(target_os = "android"))]
+      #[cfg(not(any(target_os = "android", target_os = "ios")))]
       tray_resources: Vec::new(),
       web_contexts: Vec::new(),
     }

@@ -134,10 +134,10 @@ test('executable names preserve sensible punctuation and reject path separators'
   expect(normalizeExecutableName('foo.bar', '/tmp', 'src/main.js')).toBe('foo.bar');
   expect(() => normalizeExecutableName('../escape', '/tmp', 'src/main.js')).toThrow(/Invalid executable name/u);
   expect(getOutputPath({ outDir: '/tmp/release', name: 'my-app' }, { os: 'win32', arch: 'x64' })).toBe(
-    '/tmp/release/my-app.exe',
+    join('/tmp/release', 'my-app.exe'),
   );
   expect(getOutputPath({ outDir: '/tmp/release', name: 'my-app.exe' }, { os: 'win32', arch: 'x64' })).toBe(
-    '/tmp/release/my-app.exe',
+    join('/tmp/release', 'my-app.exe'),
   );
   expect(parseArguments(['--help']).kind).toEqual('help');
   expect(parseArguments(['build', '--help']).kind).toEqual('help');
