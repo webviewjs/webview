@@ -4,6 +4,7 @@ const app = new Application();
 const window = app.createBrowserWindow({
   transparent: true,
   decorations: false,
+  windowsNoRedirectionBitmap: true,
 });
 
 const _webview = window.createWebview({

@@ -23,7 +23,7 @@ interface BrowserWindowOptions {
   resizable?: boolean; // default true
   visible?: boolean; // default true
   decorations?: boolean; // default true
-  transparent?: boolean; // default false
+  transparent?: boolean; // default false; Windows may also need windowsNoRedirectionBitmap: true
   maximized?: boolean; // default false
   maximizable?: boolean; // default true
   minimizable?: boolean; // default true
@@ -34,14 +34,40 @@ interface BrowserWindowOptions {
   fullscreen?: FullscreenType;
   menu?: MenuOptions;
   showMenu?: boolean; // default true
-  visibleOnAllWorkspaces?: boolean; // macOS
-  // Windows-only options are listed below.
-  // macOS-only options are listed below.
-  // iOS options are listed below.
+
+  // Windows-only options
+  windowsOwnerWindow?: bigint;
+  windowsTaskbarIcon?: TrayIconImage;
+  windowsNoRedirectionBitmap?: boolean;
+  windowsDragAndDrop?: boolean;
+  windowsSkipTaskbar?: boolean;
+  windowsClassName?: string;
+  windowsUndecoratedShadow?: boolean;
+
+  // macOS-only options
+  macosMovableByWindowBackground?: boolean;
+  macosTitlebarTransparent?: boolean;
+  macosTitleHidden?: boolean;
+  macosTitlebarHidden?: boolean;
+  macosTitlebarButtonsHidden?: boolean;
+  macosFullsizeContentView?: boolean;
+  macosDisallowHidpi?: boolean;
+  macosHasShadow?: boolean;
+  macosTabbingIdentifier?: string;
+  visibleOnAllWorkspaces?: boolean;
+
+  // iOS options
+  iosScaleFactor?: number;
+  iosValidOrientations?: IosValidOrientations;
+  iosPrefersHomeIndicatorHidden?: boolean;
+  iosDeferredSystemGestureEdges?: number;
+  iosPrefersStatusBarHidden?: boolean;
 }
 ```
 
 Specify `width` and `height` together, and `x` and `y` together. Values are physical pixels unless `logical: true` is set. The initial `fullscreen` option currently creates borderless fullscreen for either enum value; `setFullscreen(FullscreenType.Exclusive)` has a separate runtime path.
+
+On Windows, a window created with `transparent: true` may also need `windowsNoRedirectionBitmap: true` to avoid rendering issues such as the window intermittently becoming opaque. See [issue #59](https://github.com/webviewjs/webview/issues/59).
 
 On Windows and GTK-based Linux/FreeBSD, `menu` installs a per-window menu and overrides the global menu. `showMenu` controls whether that window attaches the global menu. On macOS, menus belong to the application: a `menu` option is not attached to the window, and `showMenu` does not hide the application menu. See [Menu](./menu).
 `win.hasMenu(): boolean` reports whether a per-window menu object was assigned; it does not report whether a menu is visible. It is `false` when the window uses the global menu. Android always returns `false`.
