@@ -258,14 +258,15 @@ async function verifyPackage(item, version, tag, integrity, platformPackages, re
   console.log(`Verified ${item.name}@${version} (${tag})`);
 }
 
-async function registryState(packages, version, retryNotFound = false, registryOptions = {}) {
+async function registryState(packages, version, registryOptions = {}) {
   const entries = await Promise.all(
     packages.map(async (item) => {
       const manifest = await registryVersion(item.name, version, {
         ...registryOptions,
-        retryNotFound,
-        maxDurationMs: registryOptions.maxDurationMs ?? (retryNotFound ? 30_000 : registryRetryDefaults.maxDurationMs),
-        notFoundAtExhaustion: 'null',
+        // In a state scan, a 404 means this immutable version is missing. Retry 404s
+        // only after our own publish operation, where the registry may still be
+        // propagating newly published metadata.
+        retryNotFound: false,
       });
       return [item.name, manifest];
     }),
@@ -297,7 +298,7 @@ export async function main(command, { registryOptions = {} } = {}) {
   const packages = [...plan, root];
   if (command === 'unpublished') {
     if (!resume) return requireUnpublished(packages, version, lookup);
-    const state = await registryState(packages, version, true, registryOptions);
+    const state = await registryState(packages, version, registryOptions);
     const present = packages.filter(({ name }) => state.get(name)).map(({ name }) => name);
     const missing = packages.filter(({ name }) => !state.get(name)).map(({ name }) => name);
     console.log(`Resume registry scan for ${version}: ${present.length} already published, ${missing.length} missing.`);
@@ -316,7 +317,7 @@ export async function main(command, { registryOptions = {} } = {}) {
   requireArtifacts(plan, false);
   let existing = new Map();
   if (resume) {
-    existing = await registryState(packages, version, true, registryOptions);
+    existing = await registryState(packages, version, registryOptions);
   } else {
     await requireUnpublished(packages, version, lookup);
   }

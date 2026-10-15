@@ -388,6 +388,40 @@ test('npm lookups preserve the normal already-published safeguard', async () => 
   );
 });
 
+test('resume state scan treats an expected 404 as missing without verification retries', async (t) => {
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+  const plan = await packagePlan(pkg);
+  const fixture = await createFixture(t, {
+    tag: 'latest',
+    resume: true,
+    existingNames: plan.map((item) => item.name),
+  });
+  const mockFetch = globalThis.fetch;
+  let rootLookups = 0;
+  globalThis.fetch = async (input, options) => {
+    const pathname = new URL(input).pathname;
+    const lastSlash = pathname.lastIndexOf('/');
+    const name = decodeURIComponent(pathname.slice(1, lastSlash));
+    if (!pathname.includes('/-/package/') && name === fixture.root.name) {
+      rootLookups += 1;
+      return new Response('', { status: 404 });
+    }
+    return mockFetch(input, options);
+  };
+
+  const messages = [];
+  const originalLog = console.log;
+  console.log = (message) => messages.push(String(message));
+  try {
+    await main('unpublished', { registryOptions: shortRetryOptions(globalThis.fetch) });
+  } finally {
+    console.log = originalLog;
+  }
+
+  assert.equal(rootLookups, 1);
+  assert.ok(messages.some((message) => message.includes('Missing @webviewjs/webview@0.4.8')));
+});
+
 test('missing assembled artifacts abort before any package publication', async (t) => {
   const fixture = await createFixture(t, { tag: 'latest' });
   const item = fixture.plan[0];

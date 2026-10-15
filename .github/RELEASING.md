@@ -42,9 +42,10 @@ Both paths assemble packages with `napi artifacts` and use napi-rs `prePublish`
 for package version synchronization and root `optionalDependencies` generation.
 `prePublish` is told to skip its bulk platform publish; the release script uses
 individual `npm publish` calls with the requested tag and provenance so resume
-never attempts to overwrite an existing immutable version. Registry version and
-dist-tag checks use bounded exponential retries for eventual consistency,
-rate limits, and temporary server errors.
+never attempts to overwrite an existing immutable version. Resume state scans
+treat a 404 as a missing version; post-publish version and dist-tag checks use
+bounded exponential retries for eventual consistency, rate limits, and
+temporary server errors.
 
 A normal manual dispatch can be started from the Actions UI after selecting
 branch `v0`, or with:
@@ -53,8 +54,14 @@ branch `v0`, or with:
 gh workflow run CI.yml --ref v0 -f version=0.4.8 -f npm_tag=latest -f resume=false
 ```
 
-To recover the partial `0.4.8` release, set `resume=true`. Do not unpublish or
-reuse a version to recover a release.
+To recover the partial `0.4.8` release, dispatch the same workflow with
+`resume=true`:
+
+```sh
+gh workflow run CI.yml --ref v0 -f version=0.4.8 -f npm_tag=latest -f resume=true
+```
+
+Do not unpublish or reuse a version to recover a release.
 
 The workflow serializes releases with the shared `npm-release` concurrency
 group and never cancels an active run. It rebuilds the native artifacts for
