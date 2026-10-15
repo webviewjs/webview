@@ -19,7 +19,7 @@ browser engine.
 [Examples](./examples) ·
 [Platform notes](https://webview.js.org/platforms/linux.md)
 
-![WebviewJS preview](https://github.com/webviewjs/webview/raw/main/assets/preview.png)
+![WebviewJS preview](https://github.com/webviewjs/webview/blob/18f1f306b2bbbfa9a639a8b6c668013a12fc25fe/assets/preview.webp)
 
 ## Highlights
 
