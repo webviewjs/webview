@@ -174,9 +174,9 @@ test('workflow structure keeps all automatic events read-only and publishing man
   const { YAML } = await import('bun');
   const { readFileSync } = await import('node:fs');
   const workflow = (name: string) => YAML.parse(readFileSync(`.github/workflows/${name}.yml`, 'utf8')) as any;
-  const ci = workflow('CI');
+  const ci = workflow('Validation');
   const build = workflow('Build');
-  const release = workflow('Release');
+  const release = workflow('CI');
   expect(Object.keys(ci.on).sort()).toEqual(['pull_request', 'push']);
   for (const event of ['push', 'pull_request']) expect(ci.on[event].branches).toEqual(['main', 'v[0-9]']);
   expect(ci.permissions).toEqual({ contents: 'read' });
@@ -194,7 +194,7 @@ test('workflow structure keeps all automatic events read-only and publishing man
   const publishingStep = release.jobs.publish.steps.at(-1);
   expect(publishingStep.env.npm_config_provenance).toBe('true');
   expect(publishingStep.env.npm_config_ignore_scripts).toBe('true');
-  for (const name of ['CI', 'Build']) {
+  for (const name of ['Validation', 'Build']) {
     expect(JSON.stringify(workflow(name))).not.toContain('NPM_TOKEN');
     expect(JSON.stringify(workflow(name))).not.toContain('release.mjs publish');
   }
