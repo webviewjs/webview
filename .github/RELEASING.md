@@ -13,6 +13,8 @@ packages with GitHub Actions, repository `webviewjs/webview`, workflow
 `CI.yml`, and environment `npm-release`. The publish job requests
 `id-token: write` and uses npm provenance. A `NODE_AUTH_TOKEN` secret is not
 required; the release script intentionally does not require one.
+The publish job also requests `contents: write` so it can create or complete a
+GitHub Release after npm publication succeeds.
 
 Create the GitHub environment `npm-release` in repository Settings →
 Environments. Allow only the `v0` branch, do not allow tags, and apply any
@@ -52,6 +54,13 @@ a registry dist-tag points at the requested version, the package is also
 treated as already published. Resume does not install, download, unpack, or
 signature-check existing npm packages. Unexpected registry metadata and
 permanent HTTP errors abort the release.
+
+After all npm publish commands succeed, the workflow creates the GitHub Release
+`v<version>` and attaches all twelve native `.node` build artifacts. New tags
+target the exact `GITHUB_SHA` dispatched from `v0`. Existing tags must point to
+a commit in that run's `v0` history. If the GitHub Release already exists, the
+workflow uploads only missing asset names and leaves existing assets untouched.
+Prerelease versions create GitHub prereleases.
 
 A normal manual dispatch can be started from the Actions UI after selecting
 branch `v0`, or with:
