@@ -1,0 +1,36 @@
+name: Build Validation
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+      - 'v[0-9]'
+    tags-ignore:
+      - '**'
+    paths-ignore:
+      - '**/*.md'
+      - LICENSE
+      - '**/*.gitignore'
+      - .editorconfig
+      - docs/**
+  pull_request:
+    branches:
+      - main
+      - 'v[0-9]'
+    paths-ignore:
+      - '**/*.md'
+      - LICENSE
+      - '**/*.gitignore'
+      - .editorconfig
+      - docs/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/Build.yml
