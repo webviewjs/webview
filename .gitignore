@@ -154,3 +154,7 @@ Cargo.lock
 *.swo
 *~
 .DS_Store
+
+out/
+.turbo/
+target/

@@ -9,8 +9,8 @@ interface BrowserWindowOptions {
   title?: string; // default: "WebviewJS"
   width?: number; // default: 800 (physical px)
   height?: number; // default: 600 (physical px)
-  x?: number; // initial left position
-  y?: number; // initial top position
+  x?: number; // initial left position; defaults to 0 when only y is supplied
+  y?: number; // initial top position; defaults to 0 when only x is supplied
   logical?: boolean; // interpret size and position as logical pixels
   resizable?: boolean; // default: true
   visible?: boolean; // default: true

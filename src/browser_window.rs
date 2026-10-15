@@ -147,6 +147,20 @@ impl Default for BrowserWindowOptions {
   }
 }
 
+fn with_initial_position(builder: WindowBuilder, options: &BrowserWindowOptions) -> WindowBuilder {
+  if options.x.is_none() && options.y.is_none() {
+    return builder;
+  }
+
+  let x = options.x.unwrap_or(0.0);
+  let y = options.y.unwrap_or(0.0);
+  if options.logical == Some(true) {
+    builder.with_position(LogicalPosition::new(x, y))
+  } else {
+    builder.with_position(PhysicalPosition::new(x, y))
+  }
+}
+
 #[napi]
 pub struct BrowserWindow {
   is_child_window: bool,
@@ -189,13 +203,7 @@ impl BrowserWindow {
       }
     }
 
-    if let Some(x) = options.x {
-      if options.logical == Some(true) {
-        builder = builder.with_position(LogicalPosition::new(x, options.y.unwrap()));
-      } else {
-        builder = builder.with_position(PhysicalPosition::new(x, options.y.unwrap()));
-      }
-    }
+    builder = with_initial_position(builder, &options);
 
     if let Some(visible) = options.visible {
       builder = builder.with_visible(visible);
@@ -1471,6 +1479,47 @@ fn monitor_to_js(m: tao::monitor::MonitorHandle) -> Monitor {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn initial_position_defaults_each_missing_coordinate_to_zero() {
+    for logical in [None, Some(false), Some(true)] {
+      for (x, y, expected_x, expected_y) in [
+        (Some(10.0), None, 10.0, 0.0),
+        (None, Some(10.0), 0.0, 10.0),
+        (Some(-20.0), Some(30.0), -20.0, 30.0),
+        (Some(0.0), None, 0.0, 0.0),
+        (None, Some(0.0), 0.0, 0.0),
+      ] {
+        let options = BrowserWindowOptions {
+          x,
+          y,
+          logical,
+          ..Default::default()
+        };
+        let builder = with_initial_position(WindowBuilder::new(), &options);
+        let expected: tao::dpi::Position = if logical == Some(true) {
+          LogicalPosition::new(expected_x, expected_y).into()
+        } else {
+          PhysicalPosition::new(expected_x, expected_y).into()
+        };
+        assert_eq!(builder.window.position, Some(expected));
+      }
+    }
+  }
+
+  #[test]
+  fn initial_position_leaves_platform_default_when_both_coordinates_are_omitted() {
+    for logical in [None, Some(false), Some(true)] {
+      let options = BrowserWindowOptions {
+        x: None,
+        y: None,
+        logical,
+        ..Default::default()
+      };
+      let builder = with_initial_position(WindowBuilder::new(), &options);
+      assert_eq!(builder.window.position, None);
+    }
+  }
 
   #[test]
   fn protocol_ids_are_unique_when_protocols_share_a_counter() {
