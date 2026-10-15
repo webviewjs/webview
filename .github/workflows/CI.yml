@@ -19,8 +19,8 @@ on:
           - beta
           - v0
       resume:
-        description: Resume a partial release after verifying existing packages
-        required: true
+        description: Skip exact versions already on npm and publish missing packages
+        required: false
         default: false
         type: boolean
 

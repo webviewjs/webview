@@ -30,27 +30,24 @@ npm dist-tag, and choose `resume`:
   NAPI platform packages, publishes each platform package, verifies it, and
   publishes the root package last.
 - `resume: true` is for recovery after a partial publish. It scans all twelve
-  platform packages and the root package. Before publishing anything, it
-  verifies npm's registry signatures and provenance for each existing version.
-  The provenance must match the registry's package integrity and identify the
-  trusted `v0` workflow at `.github/workflows/CI.yml`. It also checks package
-  identity, version, platform metadata, root optional dependencies, and the
-  requested dist-tag. Existing immutable packages are reused; missing platform
-  packages are published individually, and a missing root package is published
-  only after all platform packages are verified.
+  platform packages and the root package by exact `name@version`. Existing
+  versions are reused, and only missing packages are published. The release
+  job still builds and assembles the platform packages so it can publish any
+  missing platform package. It publishes a missing root package only after
+  every platform version is present and newly published platform versions have
+  passed registry verification.
 
 Both paths assemble packages with `napi artifacts` and use napi-rs `prePublish`
 for package version synchronization and root `optionalDependencies` generation.
 `prePublish` is told to skip its bulk platform publish; the release script uses
 individual `npm publish` calls with the requested tag and provenance so resume
 never attempts to overwrite an existing immutable version. Resume state scans
-treat a 404 as a missing version; post-publish version and dist-tag checks use
-bounded exponential retries for eventual consistency, rate limits, and
-temporary server errors. Existing packages are checked with `npm audit
-signatures`; resume does not compare rebuilt native binaries or download prior
-workflow artifacts. If an existing package's signature, provenance, registry
-integrity, metadata, or requested tag cannot be verified, resume aborts before
-publishing anything.
+treat a 404 as a missing version. For packages published by this run, version
+and requested dist-tag checks use bounded exponential retries for registry
+propagation, rate limits, and temporary server errors. Resume does not install,
+download, unpack, or signature-check already-published npm packages. An exact
+version lookup must return the expected package name and version; unexpected
+registry metadata and permanent HTTP errors abort the release.
 
 A normal manual dispatch can be started from the Actions UI after selecting
 branch `v0`, or with:

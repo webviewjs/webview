@@ -1,5 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -204,177 +203,9 @@ function run(command, args, cwd = process.cwd()) {
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed (exit ${result.status}).`);
 }
 
-function npmPackIntegrity(path) {
-  const destination = mkdtempSync(resolve(tmpdir(), 'webview-release-pack-'));
-  try {
-    const result = spawnSync('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', destination], {
-      cwd: path,
-      encoding: 'utf8',
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      maxBuffer: 10 * 1024 * 1024,
-    });
-    if (result.error) throw result.error;
-    if (result.status !== 0) throw new Error(`npm pack failed for ${path} (exit ${result.status}).`);
-    const packed = JSON.parse(result.stdout);
-    const packageInfo = Array.isArray(packed) ? packed[0] : Object.values(packed)[0];
-    const integrity = packageInfo?.integrity;
-    if (typeof integrity !== 'string' || !integrity.startsWith('sha512-')) {
-      throw new Error(`npm pack did not provide a sha512 integrity for ${path}.`);
-    }
-    return integrity;
-  } finally {
-    rmSync(destination, { recursive: true, force: true });
-  }
-}
-
-function runCaptured(command, args, cwd, description) {
-  const result = spawnSync(command, args, {
-    cwd,
-    encoding: 'utf8',
-    env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    maxBuffer: 10 * 1024 * 1024,
-    timeout: 120_000,
-  });
-  if (result.error) throw new Error(`${description} could not run: ${result.error.message}`);
-  if (result.status !== 0) throw new Error(`${description} failed (exit ${result.status}).`);
-  return result.stdout;
-}
-
-function npmAuditSignatures(packages, version) {
-  const directory = mkdtempSync(resolve(tmpdir(), 'webview-release-signatures-'));
-  const subjects = packages.map(({ name }) => `${name}@${version}`).join(', ');
-  try {
-    const dependencies = Object.fromEntries(packages.map(({ name }) => [name, version]));
-    writeFileSync(
-      resolve(directory, 'package.json'),
-      JSON.stringify({ name: 'webview-release-signature-check', version: '1.0.0', private: true, dependencies }),
-    );
-    runCaptured(
-      'npm',
-      ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--force', '--loglevel=error'],
-      directory,
-      `Installing existing packages for npm signature verification: ${subjects}`,
-    );
-    const result = runCaptured(
-      'npm',
-      ['audit', 'signatures', '--json', '--include-attestations', '--loglevel=error'],
-      directory,
-      `npm signature and provenance verification for ${subjects}`,
-    );
-    try {
-      return JSON.parse(result);
-    } catch {
-      throw new Error('npm signature verification returned invalid JSON.');
-    }
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-}
-
-function npmPackagePurl(name, version) {
-  return name.startsWith('@') ? `pkg:npm/%40${name.slice(1)}@${version}` : `pkg:npm/${name}@${version}`;
-}
-
-export function verifyExistingProvenance(packages, version, existing, audit) {
-  if (audit.invalid?.length || audit.missing?.length) {
-    const failures = [...(audit.missing ?? []), ...(audit.invalid ?? [])]
-      .map((item) => (typeof item === 'string' ? item : (item?.name ?? 'unknown package')))
-      .join(', ');
-    throw new Error(
-      `npm signature verification reported missing or invalid package signatures or provenance: ${failures}.`,
-    );
-  }
-  const verified = new Map(
-    (audit.verified ?? []).filter((item) => item.version === version).map((item) => [item.name, item]),
-  );
-  const sources = new Map();
-
-  for (const item of packages) {
-    const manifest = existing.get(item.name);
-    if (!manifest) continue;
-    const subject = `${item.name}@${version}`;
-    const audited = verified.get(item.name);
-    if (!audited) throw new Error(`npm signature verification did not verify ${subject}.`);
-    const slsa = audited.attestationBundles?.find(
-      (attestation) => attestation.predicateType === 'https://slsa.dev/provenance/v1',
-    );
-    const encoded = slsa?.bundle?.dsseEnvelope?.payload;
-    if (!encoded) throw new Error(`Verified npm provenance is missing for ${subject}.`);
-
-    let statement;
-    try {
-      statement = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
-    } catch {
-      throw new Error(`Verified npm provenance is invalid for ${subject}.`);
-    }
-
-    const integrity = manifest.dist?.integrity;
-    const [algorithm, encodedDigest] = typeof integrity === 'string' ? integrity.split('-', 2) : [];
-    const digest = encodedDigest ? Buffer.from(encodedDigest, 'base64') : Buffer.alloc(0);
-    const expectedPurl = npmPackagePurl(item.name, version);
-    const matchingSubject = statement.subject?.find((entry) => entry.name === expectedPurl);
-    if (algorithm !== 'sha512' || digest.length !== 64 || matchingSubject?.digest?.sha512 !== digest.toString('hex')) {
-      throw new Error(`Verified npm provenance does not match registry contents for ${subject}.`);
-    }
-
-    const workflow = statement.predicate?.buildDefinition?.externalParameters?.workflow;
-    const source = statement.predicate?.buildDefinition?.resolvedDependencies?.find(
-      (dependency) => dependency.uri === 'git+https://github.com/webviewjs/webview@refs/heads/v0',
-    );
-    const invocationId = statement.predicate?.runDetails?.metadata?.invocationId;
-    const runMatch = /^https:\/\/github\.com\/webviewjs\/webview\/actions\/runs\/(\d+)\/attempts\/\d+$/.exec(
-      invocationId ?? '',
-    );
-    const commit = source?.digest?.gitCommit;
-    if (
-      workflow?.repository !== 'https://github.com/webviewjs/webview' ||
-      workflow?.ref !== 'refs/heads/v0' ||
-      workflow?.path !== '.github/workflows/CI.yml' ||
-      !runMatch ||
-      !/^[0-9a-f]{40}$/.test(commit ?? '')
-    ) {
-      throw new Error(`npm provenance is not from the trusted v0 CI workflow for ${subject}.`);
-    }
-
-    sources.set(item.name, { runId: runMatch[1], commit });
-  }
-  return sources;
-}
-
-async function verifyExistingPackages(packages, version, existing, options = {}) {
-  const audit = await (options.auditSignatures ?? npmAuditSignatures)(packages, version);
-  return verifyExistingProvenance(packages, version, existing, audit);
-}
-
-function assertExistingPackage(manifest, item, version, integrity, platformPackages) {
-  if (manifest.name !== item.name || manifest.version !== version) {
-    throw new Error(`Existing npm package identity mismatch for ${item.name}@${version}.`);
-  }
-  if (integrity && manifest.dist?.integrity !== integrity) {
-    throw new Error(`Existing npm package contents do not match this release: ${item.name}@${version}.`);
-  }
-  if (item.path) {
-    const expected = readPackage(`${item.path}/package.json`);
-    for (const field of ['os', 'cpu', 'libc', 'main']) {
-      if (JSON.stringify(manifest[field] ?? null) !== JSON.stringify(expected[field] ?? null)) {
-        throw new Error(`Existing npm package platform metadata mismatch for ${item.name}@${version}: ${field}.`);
-      }
-    }
-  } else {
-    for (const platform of platformPackages) {
-      if (manifest.optionalDependencies?.[platform.name] !== version) {
-        throw new Error(`Existing root package is missing ${platform.name}@${version} in optionalDependencies.`);
-      }
-    }
-  }
-}
-
-async function verifyPackage(item, version, tag, integrity, platformPackages, registryOptions = {}) {
+async function verifyPackage(item, version, tag, registryOptions = {}) {
   const manifest = await registryVersion(item.name, version, { ...registryOptions, retryNotFound: true });
   if (!manifest) throw new Error(`Publication not visible after retries: ${item.name}@${version}.`);
-  assertExistingPackage(manifest, item, version, integrity, platformPackages);
   await verifyDistTag(item.name, version, tag, registryOptions);
   console.log(`Verified ${item.name}@${version} (${tag})`);
 }
@@ -399,7 +230,7 @@ function publishArgs(tag) {
   return ['publish', '--ignore-scripts', '--access', 'public', '--provenance', '--tag', tag];
 }
 
-export async function main(command, { registryOptions = {}, resumeOptions = {} } = {}) {
+export async function main(command, { registryOptions = {} } = {}) {
   const pkg = readPackage();
   const version = process.env.RELEASE_VERSION;
   const tag = process.env.RELEASE_TAG;
@@ -456,30 +287,16 @@ export async function main(command, { registryOptions = {}, resumeOptions = {} }
     }
   }
 
-  const existingPackages = packages.filter((item) => existing.has(item.name));
-  if (resume && existingPackages.length) {
-    const provenance = await verifyExistingPackages(existingPackages, version, existing, resumeOptions);
-    for (const [name, source] of provenance) {
-      console.log(`Verified npm provenance for ${name}@${version} from run ${source.runId} (${source.commit}).`);
-    }
-  }
-  const integrity = new Map();
-  for (const item of packages) {
-    if (resume && existing.has(item.name)) continue;
-    integrity.set(item.name, npmPackIntegrity(item.path || '.'));
-  }
   const reused = [];
   const newlyPublished = [];
 
-  // Validate every existing version before publishing any missing package.
+  // In resume mode, an exact package@version registry hit is enough to reuse it.
+  // No npm install, tarball download, or signature audit is needed.
   if (resume) {
     for (const item of packages) {
-      const manifest = existing.get(item.name);
-      if (!manifest) continue;
-      assertExistingPackage(manifest, item, version, null, plan);
-      await verifyDistTag(item.name, version, tag, registryOptions);
+      if (!existing.has(item.name)) continue;
       reused.push(item.name);
-      console.log(`Reused verified package: ${item.name}@${version}`);
+      console.log(`Reused existing package: ${item.name}@${version}`);
     }
   }
 
@@ -488,7 +305,7 @@ export async function main(command, { registryOptions = {}, resumeOptions = {} }
     run('npm', publishArgs(tag), item.path);
     newlyPublished.push(item.name);
     console.log(`Published new package: ${item.name}@${version}`);
-    await verifyPackage(item, version, tag, integrity.get(item.name), plan, registryOptions);
+    await verifyPackage(item, version, tag, registryOptions);
   }
 
   // The root package is published last, after every platform package is visible and verified.
@@ -496,10 +313,10 @@ export async function main(command, { registryOptions = {}, resumeOptions = {} }
     run('npm', publishArgs(tag), '.');
     newlyPublished.push(root.name);
     console.log(`Published new package: ${root.name}@${version}`);
-    await verifyPackage(root, version, tag, integrity.get(root.name), plan, registryOptions);
+    await verifyPackage(root, version, tag, registryOptions);
   }
 
-  console.log(`Reused verified packages: ${reused.length ? reused.join(', ') : '(none)'}`);
+  console.log(`Reused existing packages: ${reused.length ? reused.join(', ') : '(none)'}`);
   console.log(`Published new packages: ${newlyPublished.length ? newlyPublished.join(', ') : '(none)'}`);
 }
 

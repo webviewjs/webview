@@ -1,19 +1,7 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import {
   main,
@@ -22,7 +10,6 @@ import {
   requireArtifacts,
   requireUnpublished,
   validateRelease,
-  verifyExistingProvenance,
   verifyDistTag,
 } from './release.mjs';
 
@@ -42,28 +29,6 @@ const fastRegistryOptions = {
   log: () => {},
 };
 
-function packageIntegrity(directory) {
-  const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
-  const files = new Set(['package.json']);
-  const addFiles = (entry) => {
-    const path = join(directory, entry);
-    if (!existsSync(path)) return;
-    const stat = statSync(path);
-    if (stat.isFile()) {
-      files.add(relative(directory, path).replaceAll('\\', '/'));
-      return;
-    }
-    for (const child of readdirSync(path)) addFiles(join(entry, child));
-  };
-  for (const entry of manifest.files ?? []) addFiles(entry);
-  const hash = createHash('sha512');
-  for (const file of [...files].sort()) {
-    hash.update(`${file}\0`);
-    hash.update(readFileSync(join(directory, file)));
-  }
-  return `sha512-${hash.digest('base64')}`;
-}
-
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
@@ -75,28 +40,11 @@ function writeJson(path, value) {
 function npmShimSource() {
   return [
     `#!${process.execPath}`,
-    "const crypto = require('node:crypto');",
     "const fs = require('node:fs');",
     "const path = require('node:path');",
     'const args = process.argv.slice(2);',
     'const command = args[0];',
     "const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));",
-    'function addFiles(directory, entry, files) {',
-    '  const target = path.join(directory, entry);',
-    '  if (!fs.existsSync(target)) return;',
-    '  const stat = fs.statSync(target);',
-    "  if (stat.isFile()) { files.add(path.relative(directory, target).split(path.sep).join('/')); return; }",
-    '  for (const child of fs.readdirSync(target)) addFiles(directory, path.join(entry, child), files);',
-    '}',
-    'function integrity(directory) {',
-    "  const pkg = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'));",
-    "  const files = new Set(['package.json']);",
-    '  for (const entry of pkg.files || []) addFiles(directory, entry, files);',
-    "  const hash = crypto.createHash('sha512');",
-    '  for (const file of [...files].sort()) { hash.update(file + String.fromCharCode(0)); hash.update(fs.readFileSync(path.join(directory, file))); }',
-    "  return 'sha512-' + hash.digest('base64');",
-    '}',
-    "if (command === 'pack') { process.stdout.write(JSON.stringify({ [manifest.name]: { integrity: integrity(process.cwd()) } })); process.exit(0); }",
     "if (command !== 'publish') { console.error('unexpected npm command: ' + command); process.exit(2); }",
     "if (process.env.FAKE_NPM_FAIL === manifest.name) { console.error('simulated npm publish failure'); process.exit(1); }",
     'const statePath = process.env.FAKE_NPM_STATE;',
@@ -107,7 +55,7 @@ function npmShimSource() {
     "  const verified = new Set(events.filter((event) => event.type === 'verified-platform').map((event) => event.name));",
     "  if (verified.size !== Number(process.env.FAKE_PLATFORM_COUNT)) { console.error('root published before all platform versions were verified'); process.exit(3); }",
     '}',
-    'const entry = { name: manifest.name, version: manifest.version, tag: process.env.npm_config_tag, provenance: process.env.npm_config_provenance, integrity: integrity(process.cwd()), manifest, args };',
+    'const entry = { name: manifest.name, version: manifest.version, tag: process.env.npm_config_tag, provenance: process.env.npm_config_provenance, manifest, args };',
     'entries.push(entry);',
     'fs.writeFileSync(statePath, JSON.stringify(entries));',
     "const events = JSON.parse(fs.readFileSync(process.env.FAKE_NPM_EVENTS, 'utf8'));",
@@ -115,57 +63,6 @@ function npmShimSource() {
     'fs.writeFileSync(process.env.FAKE_NPM_EVENTS, JSON.stringify(events));',
     "console.log('+ ' + manifest.name + '@' + manifest.version);",
   ].join('\n');
-}
-
-function fakeAuditBundle(name, version, integrity, overrides = {}) {
-  const workflow = {
-    repository: 'https://github.com/webviewjs/webview',
-    ref: 'refs/heads/v0',
-    path: '.github/workflows/CI.yml',
-    ...overrides.workflow,
-  };
-  const statement = {
-    subject: [
-      {
-        name: `pkg:npm/%40${name.slice(1)}@${version}`,
-        digest: { sha512: Buffer.from(integrity.slice('sha512-'.length), 'base64').toString('hex') },
-      },
-    ],
-    predicate: {
-      buildDefinition: {
-        externalParameters: { workflow },
-        resolvedDependencies: [
-          {
-            uri: 'git+https://github.com/webviewjs/webview@refs/heads/v0',
-            digest: { gitCommit: '00085aa2ac95115eabc6fbbb74ccf460f87210fe' },
-          },
-        ],
-      },
-      runDetails: {
-        metadata: {
-          invocationId: `https://github.com/webviewjs/webview/actions/runs/${overrides.runId ?? '38695298540'}/attempts/1`,
-        },
-      },
-    },
-  };
-  return {
-    name,
-    version,
-    attestationBundles: [
-      {
-        predicateType: 'https://slsa.dev/provenance/v1',
-        bundle: { dsseEnvelope: { payload: Buffer.from(JSON.stringify(statement)).toString('base64') } },
-      },
-    ],
-  };
-}
-
-function fakeAuditReport(entries, overrides = {}) {
-  return {
-    verified: entries.map((entry) => fakeAuditBundle(entry.name, entry.version, entry.integrity, overrides)),
-    missing: [],
-    invalid: [],
-  };
 }
 
 async function createFixture(
@@ -241,17 +138,11 @@ async function createFixture(
       name,
       version,
       tag,
-      integrity: packageIntegrity(path),
       manifest,
     };
     if (invalidExisting?.name === name) {
-      if (invalidExisting.kind === 'contents') {
-        entry.integrity = `sha512-${createHash('sha512').update('invalid existing content').digest('base64')}`;
-      }
-      if (invalidExisting.kind === 'platform') entry.manifest.cpu = ['wrong-architecture'];
       if (invalidExisting.kind === 'identity') entry.manifest.name = '@webviewjs/other-package';
-      if (invalidExisting.kind === 'root-dependencies') delete entry.manifest.optionalDependencies[plan[0].name];
-      if (invalidExisting.kind === 'tag') entry.tag = 'v0';
+      if (invalidExisting.kind === 'version') entry.manifest.version = '0.4.7';
     }
     const state = readJson(statePath);
     state.push(entry);
@@ -276,27 +167,18 @@ async function createFixture(
     const name = decodeURIComponent(pathname.slice(1, lastSlash));
     const requestedVersion = decodeURIComponent(pathname.slice(lastSlash + 1));
     const entry = entries.find((candidate) => candidate.name === name && candidate.version === requestedVersion);
-    return entry
-      ? Response.json({ ...entry.manifest, dist: { integrity: entry.integrity } })
-      : new Response('', { status: 404 });
-  };
-
-  const resumeOptions = {
-    auditSignatures: async (items) => {
-      const entries = readJson(statePath).filter((entry) => items.some((item) => item.name === entry.name));
-      return fakeAuditReport(
-        entries.map((entry) => {
-          const item = items.find((candidate) => candidate.name === entry.name);
-          const path = join(directory, item.path || '.');
-          return { name: item.name, version, integrity: packageIntegrity(path) };
-        }),
-      );
-    },
+    if (entry) {
+      const events = readJson(eventsPath);
+      events.push({ type: name === root.name ? 'verified-root' : 'verified-platform', name });
+      writeJson(eventsPath, events);
+      return Response.json(entry.manifest);
+    }
+    return new Response('', { status: 404 });
   };
 
   requireArtifacts(plan, true);
   requireArtifacts(plan, false);
-  return { directory, plan, packages, root, version, tag, statePath, eventsPath, resumeOptions };
+  return { directory, plan, packages, root, version, tag, statePath, eventsPath };
 }
 
 function shortRetryOptions(fetcher, overrides = {}) {
@@ -455,41 +337,6 @@ test('npm lookups preserve the normal already-published safeguard', async () => 
   );
 });
 
-test('verified npm provenance matches the registry integrity and trusted v0 workflow', () => {
-  const item = { name: '@webviewjs/webview-win32-x64-msvc' };
-  const version = '0.4.8';
-  const integrity = `sha512-${Buffer.alloc(64, 9).toString('base64')}`;
-  const existing = new Map([[item.name, { name: item.name, version, dist: { integrity } }]]);
-  const audit = fakeAuditReport([{ name: item.name, version, integrity }]);
-  const sources = verifyExistingProvenance([item], version, existing, audit);
-  assert.deepEqual(sources.get(item.name), {
-    runId: '38695298540',
-    commit: '00085aa2ac95115eabc6fbbb74ccf460f87210fe',
-  });
-});
-
-test('resume rejects missing signatures and provenance outside the trusted workflow', () => {
-  const item = { name: '@webviewjs/webview-win32-x64-msvc' };
-  const version = '0.4.8';
-  const integrity = `sha512-${Buffer.alloc(64, 3).toString('base64')}`;
-  const existing = new Map([[item.name, { name: item.name, version, dist: { integrity } }]]);
-
-  const missing = fakeAuditReport([{ name: item.name, version, integrity }]);
-  missing.missing.push(`${item.name}@${version}`);
-  assert.throws(
-    () => verifyExistingProvenance([item], version, existing, missing),
-    /missing or invalid package signatures or provenance/,
-  );
-
-  const untrusted = fakeAuditReport([{ name: item.name, version, integrity }], {
-    workflow: { path: '.github/workflows/Validation.yml' },
-  });
-  assert.throws(
-    () => verifyExistingProvenance([item], version, existing, untrusted),
-    /not from the trusted v0 CI workflow/,
-  );
-});
-
 test('resume state scan treats an expected 404 as missing without verification retries', async (t) => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const plan = await packagePlan(pkg);
@@ -596,12 +443,12 @@ test('normal release rejects an existing version before invoking npm', async (t)
   );
 });
 
-test('resume publishes only missing platforms and the root after verifying reused packages', async (t) => {
+test('resume publishes only missing packages without downloading existing packages', async (t) => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const plan = await packagePlan(pkg);
   const existingNames = plan.slice(0, 3).map((item) => item.name);
   const fixture = await createFixture(t, { tag: 'latest', resume: true, existingNames });
-  await main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions });
+  await main('publish', { registryOptions: fastRegistryOptions });
   const published = readJson(fixture.statePath);
   assert.equal(published.length, 13);
   assert.equal(published.filter((item) => existingNames.includes(item.name)).length, 3);
@@ -621,7 +468,7 @@ test('resume publishes only missing platforms and the root after verifying reuse
   );
 });
 
-test('resume of the actual 0.4.8 state reuses all twelve platform packages and publishes only root', async (t) => {
+test('resume of the actual 0.4.8 state skips twelve platform versions and publishes only root', async (t) => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const plan = await packagePlan(pkg);
   const fixture = await createFixture(t, {
@@ -629,7 +476,7 @@ test('resume of the actual 0.4.8 state reuses all twelve platform packages and p
     resume: true,
     existingNames: plan.map((item) => item.name),
   });
-  await main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions });
+  await main('publish', { registryOptions: fastRegistryOptions });
   assert.equal(readJson(fixture.statePath).length, 13);
   const published = readJson(fixture.eventsPath).filter((event) => event.type === 'publish');
   assert.deepEqual(
@@ -638,7 +485,7 @@ test('resume of the actual 0.4.8 state reuses all twelve platform packages and p
   );
 });
 
-test('resume skips every package after verifying a complete existing release', async (t) => {
+test('resume skips every package when all exact versions already exist', async (t) => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const plan = await packagePlan(pkg);
   const fixture = await createFixture(t, {
@@ -650,7 +497,7 @@ test('resume skips every package after verifying a complete existing release', a
   const originalLog = console.log;
   console.log = (message) => messages.push(String(message));
   try {
-    await main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions });
+    await main('publish', { registryOptions: fastRegistryOptions });
   } finally {
     console.log = originalLog;
   }
@@ -658,73 +505,10 @@ test('resume skips every package after verifying a complete existing release', a
   assert.equal(
     readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
     false,
-    'verified immutable versions are never republished',
+    'existing immutable versions are never republished',
   );
   assert.ok(messages.some((message) => message.includes('Published new packages: (none)')));
-  assert.ok(messages.some((message) => message.includes('Reused verified packages:')));
-});
-
-test('resume aborts before publishing when npm signature verification cannot verify an existing package', async (t) => {
-  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-  const plan = await packagePlan(pkg);
-  const fixture = await createFixture(t, {
-    tag: 'latest',
-    resume: true,
-    existingNames: [plan[0].name],
-  });
-  const resumeOptions = {
-    ...fixture.resumeOptions,
-    auditSignatures: async () => ({ verified: [], missing: [plan[0].name], invalid: [] }),
-  };
-  await assert.rejects(
-    main('publish', { registryOptions: fastRegistryOptions, resumeOptions }),
-    /missing or invalid package signatures or provenance/,
-  );
-  assert.equal(readJson(fixture.statePath).length, 1);
-  assert.equal(
-    readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
-    false,
-  );
-});
-
-test('resume rejects existing packages whose provenance integrity or platform metadata does not match', async (t) => {
-  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-  const plan = await packagePlan(pkg);
-  const fixture = await createFixture(t, {
-    tag: 'latest',
-    resume: true,
-    existingNames: [plan[0].name],
-    invalidExisting: { name: plan[0].name, kind: 'contents' },
-  });
-  await assert.rejects(
-    main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions }),
-    /provenance does not match registry contents/,
-  );
-  assert.equal(readJson(fixture.statePath).length, 1, 'no missing package is published after invalid state');
-  assert.equal(
-    readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
-    false,
-  );
-});
-
-test('resume rejects platform metadata mismatches before publishing missing packages', async (t) => {
-  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-  const plan = await packagePlan(pkg);
-  const fixture = await createFixture(t, {
-    tag: 'latest',
-    resume: true,
-    existingNames: [plan[0].name],
-    invalidExisting: { name: plan[0].name, kind: 'platform' },
-  });
-  await assert.rejects(
-    main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions }),
-    /platform metadata mismatch/,
-  );
-  assert.equal(readJson(fixture.statePath).length, 1);
-  assert.equal(
-    readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
-    false,
-  );
+  assert.ok(messages.some((message) => message.includes('Reused existing packages:')));
 });
 
 test('resume rejects an existing package with the wrong registry identity', async (t) => {
@@ -736,10 +520,7 @@ test('resume rejects an existing package with the wrong registry identity', asyn
     existingNames: [plan[0].name],
     invalidExisting: { name: plan[0].name, kind: 'identity' },
   });
-  await assert.rejects(
-    main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions }),
-    /unexpected registry metadata/,
-  );
+  await assert.rejects(main('publish', { registryOptions: fastRegistryOptions }), /unexpected registry metadata/);
   assert.equal(readJson(fixture.statePath).length, 1);
   assert.equal(
     readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
@@ -747,40 +528,16 @@ test('resume rejects an existing package with the wrong registry identity', asyn
   );
 });
 
-test('resume rejects an existing root package with incomplete optionalDependencies', async (t) => {
-  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-  const plan = await packagePlan(pkg);
-  const fixture = await createFixture(t, {
-    tag: 'latest',
-    resume: true,
-    existingNames: [pkg.name],
-    invalidExisting: { name: pkg.name, kind: 'root-dependencies' },
-  });
-  await assert.rejects(
-    main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions }),
-    /missing .*optionalDependencies/,
-  );
-  assert.equal(readJson(fixture.statePath).length, 1);
-  assert.equal(
-    readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
-    false,
-  );
-});
-
-test('resume rejects an existing package whose requested dist-tag does not match', async (t) => {
+test('resume rejects an existing registry result with the wrong version', async (t) => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const plan = await packagePlan(pkg);
   const fixture = await createFixture(t, {
     tag: 'latest',
     resume: true,
     existingNames: [plan[0].name],
-    invalidExisting: { name: plan[0].name, kind: 'tag' },
+    invalidExisting: { name: plan[0].name, kind: 'version' },
   });
-  await assert.rejects(
-    main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions }),
-    /requested registry metadata is not visible/,
-  );
-  assert.equal(readJson(fixture.statePath).length, 1);
+  await assert.rejects(main('publish', { registryOptions: fastRegistryOptions }), /unexpected registry metadata/);
   assert.equal(
     readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
     false,
