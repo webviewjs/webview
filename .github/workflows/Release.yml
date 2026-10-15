@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact package.json version to publish (1.x semver)'
+        required: true
+        type: string
+      npm_tag:
+        description: npm dist-tag for every package
+        required: true
+        default: next
+        type: choice
+        options:
+          - latest
+          - next
+          - rc
+          - beta
+          - v0
+
+permissions:
+  contents: read
+
+# Serialize the entire release, including retries and environment approval.
+# Keep this group identical on main and v0.
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate branch, semver, and dist-tag
+        run: node .github/scripts/release.mjs validate
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.npm_tag }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Reject already-published versions before building
+        run: node .github/scripts/release.mjs unpublished
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.npm_tag }}
+
+  build:
+    needs: validate
+    uses: ./.github/workflows/Build.yml
+    with:
+      version: ${{ inputs.version }}
+      npm_tag: ${{ inputs.npm_tag }}
+
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_TAG: ${{ inputs.npm_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Revalidate release inputs and registry state
+        run: |
+          node .github/scripts/release.mjs validate
+          node .github/scripts/release.mjs unpublished
+      - name: Set release versions
+        run: node .github/scripts/release.mjs version
+      - name: Download native artifacts from this run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bindings-*
+          path: packages/webview/artifacts
+      - name: Prepare and inspect all release packages (no publishing)
+        run: node .github/scripts/release.mjs prepare
+      - name: Publish and verify every package with provenance
+        run: node .github/scripts/release.mjs publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          npm_config_tag: ${{ inputs.npm_tag }}
+          npm_config_provenance: 'true'
+          npm_config_access: public
+          npm_config_ignore_scripts: 'true'
