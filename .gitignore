@@ -18,9 +18,9 @@ packages/webview/dist/
 packages/webview/target/
 packages/webview/npm/
 packages/webview/artifacts/
-packages/webview/Cargo.lock
 *.node
 target/
+/Cargo.lock
 
 # Local environment and logs
 .env
