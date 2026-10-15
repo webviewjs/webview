@@ -1,10 +1,17 @@
-import { readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const registry = 'https://registry.npmjs.org';
 const tags = ['latest', 'next', 'rc', 'beta', 'v0'];
+const registryRetryDefaults = {
+  maxDurationMs: 90_000,
+  maxAttempts: 12,
+  baseDelayMs: 500,
+  maxDelayMs: 10_000,
+};
 // SemVer 2.0: numeric identifiers cannot have leading zeroes.
 const numeric = '(?:0|[1-9][0-9]*)';
 const identifier = `(?:${numeric}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)`;
@@ -38,23 +45,140 @@ export async function packagePlan(pkg) {
   });
 }
 
-export async function registryVersion(name, version, fetcher = fetch) {
-  const response = await fetcher(`${registry}/${encodeURIComponent(name)}/${encodeURIComponent(version)}`, {
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`npm lookup failed for ${name}@${version}: HTTP ${response.status}`);
-  const manifest = await response.json();
-  if (manifest.name !== name || manifest.version !== version)
-    throw new Error(`Unexpected npm response for ${name}@${version}.`);
+function retryAfterMs(response) {
+  const value = response.headers?.get('retry-after');
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
+}
+
+function registryError(subject, status, attempts, elapsedMs, reason) {
+  return new Error(
+    `npm registry verification failed for ${subject}: ${reason} (HTTP ${status}; ${attempts} attempt(s); ${Math.round(elapsedMs)}ms elapsed).`,
+  );
+}
+
+async function registryJson(url, subject, options = {}) {
+  const {
+    fetcher = globalThis.fetch,
+    retryNotFound = false,
+    retryIf,
+    validate,
+    maxDurationMs = registryRetryDefaults.maxDurationMs,
+    maxAttempts = registryRetryDefaults.maxAttempts,
+    baseDelayMs = registryRetryDefaults.baseDelayMs,
+    maxDelayMs = registryRetryDefaults.maxDelayMs,
+    sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms)),
+    now = () => performance.now(),
+    log = console.warn,
+    notFoundAtExhaustion = 'error',
+  } = options;
+  const startedAt = now();
+  let attempts = 0;
+  let lastStatus = 'no response';
+  let lastReason = 'verification duration exceeded';
+  let lastRetryAfter = null;
+
+  while (attempts < maxAttempts) {
+    const elapsedMs = now() - startedAt;
+    const remainingMs = maxDurationMs - elapsedMs;
+    if (remainingMs <= 0) break;
+
+    attempts += 1;
+    let response;
+    let shouldRetry = false;
+    try {
+      response = await fetcher(url, {
+        headers: { 'cache-control': 'no-cache, no-store' },
+        signal: AbortSignal.timeout(Math.max(1, Math.ceil(Math.min(30_000, remainingMs)))),
+      });
+    } catch (error) {
+      lastStatus = 'network error';
+      lastReason =
+        error?.name === 'TimeoutError' || error?.name === 'AbortError' ? 'request timed out' : 'request failed';
+      lastRetryAfter = null;
+      shouldRetry = true;
+    }
+
+    if (response?.status === 404) {
+      lastStatus = '404';
+      lastReason = 'requested metadata is not visible yet';
+      shouldRetry = retryNotFound;
+      if (!retryNotFound) return null;
+    } else if (response && !response.ok) {
+      lastStatus = String(response.status);
+      lastReason = `registry returned HTTP ${response.status}`;
+      if (response.status === 429 || response.status >= 500) {
+        shouldRetry = true;
+        lastRetryAfter = retryAfterMs(response);
+      } else {
+        throw registryError(subject, lastStatus, attempts, now() - startedAt, lastReason);
+      }
+    } else if (response?.ok) {
+      let body;
+      try {
+        body = await response.json();
+      } catch {
+        throw registryError(subject, String(response.status), attempts, now() - startedAt, 'invalid JSON response');
+      }
+      if (validate && !validate(body)) {
+        throw registryError(
+          subject,
+          String(response.status),
+          attempts,
+          now() - startedAt,
+          'unexpected registry metadata',
+        );
+      }
+      if (!retryIf || retryIf(body)) return body;
+      lastStatus = String(response.status);
+      lastReason = 'requested registry metadata is not visible yet';
+      shouldRetry = true;
+      lastRetryAfter = null;
+    }
+
+    if (!shouldRetry) break;
+    const elapsed = now() - startedAt;
+    const remaining = maxDurationMs - elapsed;
+    if (attempts >= maxAttempts || remaining <= 0) break;
+    const backoffMs = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempts - 1));
+    const delayMs = Math.min(remaining, Math.max(backoffMs, lastRetryAfter ?? 0));
+    log(
+      `Retrying npm registry verification for ${subject}: HTTP ${lastStatus}, attempt ${attempts}/${maxAttempts}, ${Math.round(elapsed)}ms elapsed.`,
+    );
+    await sleep(delayMs);
+  }
+
+  const elapsedMs = now() - startedAt;
+  if (lastStatus === '404' && notFoundAtExhaustion === 'null') return null;
+  throw registryError(subject, lastStatus, attempts, elapsedMs, lastReason);
+}
+
+export async function registryVersion(name, version, options = {}) {
+  const manifest = await registryJson(
+    `${registry}/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
+    `${name}@${version}`,
+    { ...options, validate: (body) => body?.name === name && body?.version === version },
+  );
+  if (!manifest) return null;
   return manifest;
+}
+
+export async function verifyDistTag(name, version, tag, options = {}) {
+  await registryJson(`${registry}/-/package/${encodeURIComponent(name)}/dist-tags`, `${name}@${tag}=${version}`, {
+    ...options,
+    retryNotFound: true,
+    retryIf: (distTags) => distTags?.[tag] === version,
+  });
 }
 
 export async function requireUnpublished(packages, version, lookup = registryVersion) {
   for (const { name } of packages) {
-    if (await lookup(name, version)) {
+    if (await lookup(name, version, { retryNotFound: false })) {
       throw new Error(
-        `${name}@${version} already exists on npm. Refusing to republish; inspect any partial release before retrying.`,
+        `${name}@${version} already exists on npm. Refusing to republish; use resume=true after inspecting the partial release.`,
       );
     }
   }
@@ -74,16 +198,92 @@ export function requireArtifacts(plan, downloaded) {
   }
 }
 
-function run(command, args) {
-  const result = spawnSync(command, args, { stdio: 'inherit', env: process.env });
+function run(command, args, cwd = process.cwd()) {
+  const result = spawnSync(command, args, { cwd, stdio: 'inherit', env: process.env });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed (exit ${result.status}).`);
 }
 
-export async function main(command) {
+function npmPackIntegrity(path) {
+  const destination = mkdtempSync(resolve(tmpdir(), 'webview-release-pack-'));
+  try {
+    const result = spawnSync('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', destination], {
+      cwd: path,
+      encoding: 'utf8',
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(`npm pack failed for ${path} (exit ${result.status}).`);
+    const packed = JSON.parse(result.stdout);
+    const packageInfo = Array.isArray(packed) ? packed[0] : Object.values(packed)[0];
+    const integrity = packageInfo?.integrity;
+    if (typeof integrity !== 'string' || !integrity.startsWith('sha512-')) {
+      throw new Error(`npm pack did not provide a sha512 integrity for ${path}.`);
+    }
+    return integrity;
+  } finally {
+    rmSync(destination, { recursive: true, force: true });
+  }
+}
+
+function assertExistingPackage(manifest, item, version, integrity, platformPackages) {
+  if (manifest.name !== item.name || manifest.version !== version) {
+    throw new Error(`Existing npm package identity mismatch for ${item.name}@${version}.`);
+  }
+  if (manifest.dist?.integrity !== integrity) {
+    throw new Error(`Existing npm package contents do not match this release: ${item.name}@${version}.`);
+  }
+  if (item.path) {
+    const expected = readPackage(`${item.path}/package.json`);
+    for (const field of ['os', 'cpu', 'libc', 'main']) {
+      if (JSON.stringify(manifest[field] ?? null) !== JSON.stringify(expected[field] ?? null)) {
+        throw new Error(`Existing npm package platform metadata mismatch for ${item.name}@${version}: ${field}.`);
+      }
+    }
+  } else {
+    for (const platform of platformPackages) {
+      if (manifest.optionalDependencies?.[platform.name] !== version) {
+        throw new Error(`Existing root package is missing ${platform.name}@${version} in optionalDependencies.`);
+      }
+    }
+  }
+}
+
+async function verifyPackage(item, version, tag, integrity, platformPackages, registryOptions = {}) {
+  const manifest = await registryVersion(item.name, version, { ...registryOptions, retryNotFound: true });
+  if (!manifest) throw new Error(`Publication not visible after retries: ${item.name}@${version}.`);
+  assertExistingPackage(manifest, item, version, integrity, platformPackages);
+  await verifyDistTag(item.name, version, tag, registryOptions);
+  console.log(`Verified ${item.name}@${version} (${tag})`);
+}
+
+async function registryState(packages, version, retryNotFound = false, registryOptions = {}) {
+  const entries = await Promise.all(
+    packages.map(async (item) => {
+      const manifest = await registryVersion(item.name, version, {
+        ...registryOptions,
+        retryNotFound,
+        maxDurationMs: registryOptions.maxDurationMs ?? (retryNotFound ? 30_000 : registryRetryDefaults.maxDurationMs),
+        notFoundAtExhaustion: 'null',
+      });
+      return [item.name, manifest];
+    }),
+  );
+  return new Map(entries);
+}
+
+function publishArgs(tag) {
+  return ['publish', '--ignore-scripts', '--access', 'public', '--provenance', '--tag', tag];
+}
+
+export async function main(command, { registryOptions = {} } = {}) {
   const pkg = readPackage();
   const version = process.env.RELEASE_VERSION;
   const tag = process.env.RELEASE_TAG;
+  const resume = process.env.RELEASE_RESUME === 'true';
+  const lookup = (name, requestedVersion, options = {}) =>
+    registryVersion(name, requestedVersion, { ...registryOptions, ...options });
   validateRelease({
     event: process.env.GITHUB_EVENT_NAME,
     ref: process.env.GITHUB_REF,
@@ -93,42 +293,83 @@ export async function main(command) {
   });
   if (command === 'validate') return;
   const plan = await packagePlan(pkg);
-  const packages = [...plan, { name: pkg.name }];
-  if (command === 'unpublished') return requireUnpublished(packages, version);
+  const root = { name: pkg.name };
+  const packages = [...plan, root];
+  if (command === 'unpublished') {
+    if (!resume) return requireUnpublished(packages, version, lookup);
+    const state = await registryState(packages, version, true, registryOptions);
+    const present = packages.filter(({ name }) => state.get(name)).map(({ name }) => name);
+    const missing = packages.filter(({ name }) => !state.get(name)).map(({ name }) => name);
+    console.log(`Resume registry scan for ${version}: ${present.length} already published, ${missing.length} missing.`);
+    for (const name of present) console.log(`Found ${name}@${version}`);
+    for (const name of missing) console.log(`Missing ${name}@${version}`);
+    return;
+  }
   if (command === 'artifacts') return requireArtifacts(plan, true);
   if (command === 'assembled') return requireArtifacts(plan, false);
   if (command !== 'publish') throw new Error(`Unknown release command: ${command}`);
 
-  // if (!process.env.NODE_AUTH_TOKEN) throw new Error('NPM_TOKEN is required in the npm-release environment.');
+  // npm trusted publishing may provide OIDC instead of NODE_AUTH_TOKEN.
   if (process.env.npm_config_tag !== tag || process.env.npm_config_provenance !== 'true') {
     throw new Error('Publishing requires the requested npm_config_tag and npm_config_provenance=true.');
   }
   requireArtifacts(plan, false);
-  await requireUnpublished(packages, version);
+  let existing = new Map();
+  if (resume) {
+    existing = await registryState(packages, version, true, registryOptions);
+  } else {
+    await requireUnpublished(packages, version, lookup);
+  }
+
   // Keep NAPI's version synchronization and optionalDependencies generation,
-  // and its platform publishing, but disable GitHub release side effects.
+  // but publish packages individually so resume never republishes existing versions.
   const { NapiCli } = await import('@napi-rs/cli');
-  await new NapiCli().prePublish({ tagStyle: 'npm', ghRelease: false });
+  await new NapiCli().prePublish({ tagStyle: 'npm', ghRelease: false, skipOptionalPublish: true });
   for (const item of plan) {
-    if (readPackage(`${item.path}/package.json`).version !== version)
+    if (readPackage(`${item.path}/package.json`).version !== version) {
       throw new Error(`Version mismatch in ${item.path}.`);
-    if (readPackage().optionalDependencies?.[item.name] !== version)
+    }
+    if (readPackage().optionalDependencies?.[item.name] !== version) {
       throw new Error(`Missing exact optional dependency: ${item.name}@${version}`);
-    if (!(await registryVersion(item.name, version)))
-      throw new Error(`Platform publish did not complete: ${item.name}@${version}`);
+    }
   }
-  // prepublishOnly would publish all platform packages a second time.
-  run('npm', ['publish', '--ignore-scripts', '--access', 'public', '--provenance', '--tag', tag]);
-  for (const { name } of packages) {
-    if (!(await registryVersion(name, version))) throw new Error(`Publication not visible: ${name}@${version}`);
-    const response = await fetch(`${registry}/-/package/${encodeURIComponent(name)}/dist-tags`, {
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`Cannot verify npm dist-tags for ${name}: HTTP ${response.status}`);
-    if ((await response.json())[tag] !== version)
-      throw new Error(`npm tag verification failed: ${name}@${tag} must point to ${version}`);
-    console.log(`Verified ${name}@${version} (${tag})`);
+
+  const integrity = new Map(packages.map((item) => [item.name, npmPackIntegrity(item.path || '.')]));
+  const reused = [];
+  const newlyPublished = [];
+
+  // Validate every existing version before publishing any missing package.
+  if (resume) {
+    for (const item of packages) {
+      const manifest = existing.get(item.name);
+      if (!manifest) continue;
+      assertExistingPackage(manifest, item, version, integrity.get(item.name), plan);
+      await verifyDistTag(item.name, version, tag, registryOptions);
+      reused.push(item.name);
+      console.log(`Reused verified package: ${item.name}@${version}`);
+    }
   }
+
+  for (const item of plan) {
+    if (resume && existing.get(item.name)) continue;
+    run('npm', publishArgs(tag), item.path);
+    newlyPublished.push(item.name);
+    console.log(`Published new package: ${item.name}@${version}`);
+    await verifyPackage(item, version, tag, integrity.get(item.name), plan, registryOptions);
+  }
+
+  // The root package is published last, after every platform package is visible and verified.
+  if (!(resume && existing.get(root.name))) {
+    run('npm', publishArgs(tag), '.');
+    newlyPublished.push(root.name);
+    console.log(`Published new package: ${root.name}@${version}`);
+    await verifyPackage(root, version, tag, integrity.get(root.name), plan, registryOptions);
+  } else {
+    await verifyPackage(root, version, tag, integrity.get(root.name), plan, registryOptions);
+  }
+
+  console.log(`Reused verified packages: ${reused.length ? reused.join(', ') : '(none)'}`);
+  console.log(`Published new packages: ${newlyPublished.length ? newlyPublished.join(', ') : '(none)'}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

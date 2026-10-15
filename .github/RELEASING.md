@@ -1,81 +1,72 @@
 # Releasing v0
 
-CI runs on pushes and pull requests targeting `main` and `v[0-9]` (a GitHub
-Actions glob for single-digit major branches). Existing documentation-only path
-exclusions still apply. `CI.yml` calls `Build.yml`, which owns all twelve native
-targets, artifact uploads, and the checks previously in `lint.yml`. It has only
-`contents: read`, accepts no secrets, and does not publish.
+## Workflows and npm trusted publishing
 
-`Release.yml` accepts only `workflow_dispatch`. Its `version` and `npm_tag`
-inputs are the interface to retain when implementing releases on `main` later.
-This branch accepts only `v0` and exact `0.x` SemVer versions matching the root
-`package.json`. Prereleases cannot use `latest`. Change the version in the
-repository before dispatching; the workflow does not bump or commit versions.
+`Validation.yml` runs push and pull request checks. `Build.yml` is the reusable
+native build workflow. `CI.yml` is the manual release workflow; it was renamed
+from `Release.yml` to keep the workflow file name configured for npm trusted
+publishing. Keep the file at `.github/workflows/CI.yml` and do not rename it
+without updating the npm trusted publisher configuration.
 
-## GitHub configuration
+Configure npm trusted publishing for the root package and all twelve platform
+packages with GitHub Actions, repository `webviewjs/webview`, workflow
+`CI.yml`, and environment `npm-release`. The publish job requests
+`id-token: write` and uses npm provenance. A `NODE_AUTH_TOKEN` secret is not
+required; the release script intentionally does not require one.
 
-1. Create an environment named **npm-release** in repository Settings →
-   Environments. Select **Selected branches and tags**, allow only the **branch**
-   `v0`, and do not allow tags. Add required reviewers and prevent self-review
-   if your release policy requires approval. Disable protection bypass where
-   supported. Widen the branch policy only when `main` gains its own validated
-   release workflow.
-2. Store the existing npm publishing token as the environment secret
-   **NPM_TOKEN**, with publishing access to `@webviewjs/webview` and all twelve
-   platform packages. Remove any repository/organization-wide copy accessible
-   to build jobs. The token is exposed only to the publish step; keep its
-   current npm authentication/2FA policy suitable for CI publishing.
-3. Permit `id-token: write` for the publishing job. npm provenance uses this
-   permission; other jobs have only `contents: read`. The existing npm token
-   authentication remains in use, without switching to trusted publishing.
-4. Normal manual dispatch requires `Release.yml` to exist on the default
-   branch. This v0-only change does **not** add it to `main`; the normal Actions
-   UI trigger remains unavailable until the corresponding default-branch work
-   is done. Once available, choose **v0** in GitHub's built-in branch selector
-   (or use `gh workflow run Release.yml --ref v0 -f version=0.4.8 -f npm_tag=v0`).
-   The local reusable workflow is resolved from the selected workflow commit,
-   so v0 uses its own build and release scripts, not main's build system.
+Create the GitHub environment `npm-release` in repository Settings →
+Environments. Allow only the `v0` branch, do not allow tags, and apply any
+required-reviewer policy you want for publication. The build and validation jobs
+receive no publishing credentials.
 
-## Execution and failure handling
+## Dispatching a release
 
-The validation job checks branch/version/tag and checks all thirteen package
-versions against the public npm registry before any native builds. Registry
-errors fail closed. Both callers use the same native build jobs; no secrets
-are passed to `Build.yml`.
+`CI.yml` accepts only `workflow_dispatch` on branch `v0`. Set `version` to the
+exact 0.x SemVer version already present in the root `package.json`, select the
+npm dist-tag, and choose `resume`:
 
-After all builds and validation succeed, the protected publish job downloads
-only this run's `bindings-*` artifacts, requires a nonempty binary for every
-configured target, runs `napi artifacts`, and checks every assembled package.
-NAPI prepublish synchronizes the platform versions and exact root optional
-dependencies and publishes the platform packages with the requested tag and
-provenance. GitHub release creation is explicitly disabled. The root package
-is published last with `--ignore-scripts` to avoid rerunning `prepublishOnly`.
-Registry checks verify every published version and dist-tag.
+- `resume: false` is the normal release path. It rejects any package version
+  already present on npm, validates all twelve native artifacts, prepares the
+  NAPI platform packages, publishes each platform package, verifies it, and
+  publishes the root package last.
+- `resume: true` is for recovery after a partial publish. It scans all twelve
+  platform packages and the root package. Before publishing anything, it
+  verifies every existing package's identity, version, platform metadata,
+  packaged SHA-512 integrity, and requested dist-tag. The integrity comparison
+  includes the platform native binary. Any existing package that cannot be
+  verified aborts the run. Verified packages are reused, missing platform
+  packages are published individually, and a missing root package is published
+  only after all platform packages are verified.
 
-All release runs share the repository-wide `npm-release` concurrency group and
-never cancel a running release. Keep that same group in the future main
-workflow. GitHub concurrency retains at most one pending run, so a newer
-dispatch can replace a pending run; an active publish continues.
+Both paths assemble packages with `napi artifacts` and use napi-rs `prePublish`
+for package version synchronization and root `optionalDependencies` generation.
+`prePublish` is told to skip its bulk platform publish; the release script uses
+individual `npm publish` calls with the requested tag and provenance so resume
+never attempts to overwrite an existing immutable version. Registry version and
+dist-tag checks use bounded exponential retries for eventual consistency,
+rate limits, and temporary server errors.
 
-Failures before publishing can be rerun using the same workflow run and commit
-(artifacts are retained for seven days). No version is overwritten: any
-already-published root **or platform** version causes a clear failure. npm
-publishing is not atomic across thirteen packages. If publishing partially
-succeeds, inspect the logs and npm state, then prepare a new patch/prerelease
-version for a new dispatch. A retry will deliberately refuse to republish the
-partial version. A registry verification failure may also mean publishing
-succeeded but registry visibility lagged; inspect npm before choosing a new
-version. Do not unpublish/reuse versions or blindly rerun npm commands.
-
-## Local checks (no npm publication)
+A normal manual dispatch can be started from the Actions UI after selecting
+branch `v0`, or with:
 
 ```sh
-actionlint .github/workflows/CI.yml .github/workflows/Build.yml .github/workflows/Release.yml
+gh workflow run CI.yml --ref v0 -f version=0.4.8 -f npm_tag=latest -f resume=false
+```
+
+To recover the partial `0.4.8` release, set `resume=true`. Do not unpublish or
+reuse a version to recover a release.
+
+The workflow serializes releases with the shared `npm-release` concurrency
+group and never cancels an active run. It rebuilds the native artifacts for
+each dispatch and does not bump or commit package versions.
+
+## Local checks without publishing
+
+```sh
+actionlint .github/workflows/CI.yml .github/workflows/Build.yml .github/workflows/Validation.yml
 node --test .github/scripts/release.test.mjs
 ```
 
-The tests exercise validation and the installed NAPI prepublish implementation
-in a temporary directory with a fake npm executable and fake registry. They
-verify all thirteen versions, tags, provenance settings, missing-artifact
-failures, and refusal to republish. Never test this flow with `npm publish
---dry-run`: lifecycle scripts can still publish platform packages.
+The release tests mock registry responses and the npm publish executable. They
+never publish to npm. Do not use `npm publish --dry-run` to test this flow:
+NAPI lifecycle scripts can publish platform packages.
