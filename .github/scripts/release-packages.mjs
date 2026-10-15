@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import {
   webview,
+  webviewRequire,
   creator,
   readPackage,
   writePackage,
@@ -17,8 +18,8 @@ import {
 } from './release.mjs';
 
 // Use npm's own SemVer implementation, already installed as a NAPI CLI dependency.
-const require = createRequire(import.meta.url);
-const { validRange } = require(require.resolve('semver', { paths: [require.resolve('@napi-rs/cli')] }));
+const napiRequire = createRequire(webviewRequire.resolve('@napi-rs/cli'));
+const { validRange } = napiRequire('semver');
 const output = '.release';
 export function validateManifest(pkg, name, version) {
   if (pkg.name !== name || pkg.version !== version || pkg.private)
@@ -82,7 +83,7 @@ export async function prepare(version) {
   requireArtifacts(await packagePlan(), false);
   run('bun', ['run', 'build:lib'], webview);
   run('bun', ['--filter', 'create-webview', 'build']);
-  const { NapiCli } = await import('@napi-rs/cli');
+  const { NapiCli } = webviewRequire('@napi-rs/cli');
   // Prepare NAPI's versions/dependencies without publishing yet, so every tarball
   // and creator stage can be validated before the first irreversible npm write.
   await new NapiCli().prePublish({
@@ -169,7 +170,7 @@ export async function publish(version, tag) {
   try {
     // NAPI owns platform publication. It invokes npm publish and inherits the
     // provenance/tag/ignore-scripts environment; do not publish these again.
-    const { NapiCli } = await import('@napi-rs/cli');
+    const { NapiCli } = webviewRequire('@napi-rs/cli');
     await new NapiCli().prePublish({ cwd: resolve(webview), tagStyle: 'npm', ghRelease: false });
     await verifyPublished(platforms, version, tag);
     for (const item of plan.tarballs) {

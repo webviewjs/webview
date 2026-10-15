@@ -2,9 +2,12 @@ import { readFileSync, writeFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 
 export const webview = 'packages/webview';
 export const creator = 'packages/create-webview';
+// NAPI belongs to this workspace, not the private monorepo root.
+export const webviewRequire = createRequire(new URL('../../packages/webview/package.json', import.meta.url));
 export const registry = 'https://registry.npmjs.org';
 const numeric = '(?:0|[1-9][0-9]*)';
 const identifier = `(?:${numeric}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)`;
@@ -44,7 +47,7 @@ export function run(command, args, cwd = '.', capture = false) {
 }
 
 export async function packagePlan() {
-  const { parseTriple } = await import('@napi-rs/cli');
+  const { parseTriple } = webviewRequire('@napi-rs/cli');
   const pkg = readPackage(`${webview}/package.json`);
   if (
     pkg.name !== '@webviewjs/webview' ||

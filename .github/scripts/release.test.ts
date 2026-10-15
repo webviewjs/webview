@@ -1,9 +1,10 @@
 import { afterEach, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, cpSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import {
   run,
+  webviewRequire,
   validateRelease,
   requireUnpublished,
   registryVersion,
@@ -202,4 +203,36 @@ test('workflow structure keeps all automatic events read-only and publishing man
   expect([...matrix, 'x86_64-unknown-freebsd'].sort()).toEqual(
     plan.map((item: { target: string }) => item.target).sort(),
   );
+});
+
+test('release scripts resolve workspace dependencies without root hoisting in Bun and Node', () => {
+  const directory = temp();
+  mkdirSync(join(directory, '.github/scripts'), { recursive: true });
+  mkdirSync(join(directory, 'packages/webview/node_modules/@napi-rs'), { recursive: true });
+  json(join(directory, 'package.json'), { private: true });
+  json(join(directory, 'packages/webview/package.json'), { name: '@webviewjs/webview', napi: { targets: [] } });
+  for (const file of ['release.mjs', 'release-packages.mjs']) {
+    cpSync(new URL(file, import.meta.url), join(directory, '.github/scripts', file));
+  }
+  symlinkSync(
+    dirname(webviewRequire.resolve('@napi-rs/cli/package.json')),
+    join(directory, 'packages/webview/node_modules/@napi-rs/cli'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  const script = `
+    import { packagePlan } from './.github/scripts/release.mjs';
+    import { validateManifest } from './.github/scripts/release-packages.mjs';
+    if ((await packagePlan()).length !== 0) throw new Error('Unexpected fixture plan');
+    validateManifest({ name: 'pkg', version: '1.0.0', dependencies: { dep: '^1.0.0' } }, 'pkg', '1.0.0');
+    let rejected = false;
+    try { validateManifest({ name: 'pkg', version: '1.0.0', dependencies: { dep: 'workspace:*' } }, 'pkg', '1.0.0'); }
+    catch { rejected = true; }
+    if (!rejected) throw new Error('Unresolved dependency accepted');
+    console.log('workspace dependencies resolved');
+  `;
+  for (const runtime of ['bun', 'node']) {
+    expect(run(runtime, ['--input-type=module', '--eval', script], directory, true)).toBe(
+      'workspace dependencies resolved',
+    );
+  }
 });
