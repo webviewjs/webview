@@ -27,27 +27,31 @@ npm dist-tag, and choose `resume`:
 
 - `resume: false` is the normal release path. It rejects any package version
   already present on npm, validates all twelve native artifacts, prepares the
-  NAPI platform packages, publishes each platform package, verifies it, and
-  publishes the root package last.
+  NAPI platform packages, publishes each platform package, and publishes the
+  root package last.
 - `resume: true` is for recovery after a partial publish. It scans all twelve
   platform packages and the root package by exact `name@version`. Existing
   versions are reused, and only missing packages are published. The release
   job still builds and assembles the platform packages so it can publish any
   missing platform package. It publishes a missing root package only after
-  every platform version is present and newly published platform versions have
-  passed registry verification.
+  every platform package is already present or its npm publish command
+  succeeds.
 
 Both paths assemble packages with `napi artifacts` and use napi-rs `prePublish`
 for package version synchronization and root `optionalDependencies` generation.
 `prePublish` is told to skip its bulk platform publish; the release script uses
 individual `npm publish` calls with the requested tag and provenance so resume
-never attempts to overwrite an existing immutable version. Resume state scans
-treat a 404 as a missing version. For packages published by this run, version
-and requested dist-tag checks use bounded exponential retries for registry
-propagation, rate limits, and temporary server errors. Resume does not install,
-download, unpack, or signature-check already-published npm packages. An exact
-version lookup must return the expected package name and version; unexpected
-registry metadata and permanent HTTP errors abort the release.
+never attempts to overwrite an existing immutable version. A successful
+`npm publish` command is the completion signal; the script does not wait for
+npm's package metadata or dist-tag to become visible. This avoids treating
+npm's post-publication security review delay as a failed release. Before
+publishing, registry lookups use bounded exponential retries for rate limits,
+temporary server errors, and network failures. In resume mode, an exact
+version lookup identifies existing packages; if that endpoint returns 404 but
+a registry dist-tag points at the requested version, the package is also
+treated as already published. Resume does not install, download, unpack, or
+signature-check existing npm packages. Unexpected registry metadata and
+permanent HTTP errors abort the release.
 
 A normal manual dispatch can be started from the Actions UI after selecting
 branch `v0`, or with:

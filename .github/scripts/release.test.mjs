@@ -10,7 +10,6 @@ import {
   requireArtifacts,
   requireUnpublished,
   validateRelease,
-  verifyDistTag,
 } from './release.mjs';
 
 const valid = {
@@ -51,9 +50,8 @@ function npmShimSource() {
     "const entries = JSON.parse(fs.readFileSync(statePath, 'utf8'));",
     "if (entries.some((entry) => entry.name === manifest.name && entry.version === manifest.version)) { console.error('attempted immutable republish'); process.exit(1); }",
     "if (manifest.name === '@webviewjs/webview') {",
-    "  const events = JSON.parse(fs.readFileSync(process.env.FAKE_NPM_EVENTS, 'utf8'));",
-    "  const verified = new Set(events.filter((event) => event.type === 'verified-platform').map((event) => event.name));",
-    "  if (verified.size !== Number(process.env.FAKE_PLATFORM_COUNT)) { console.error('root published before all platform versions were verified'); process.exit(3); }",
+    "  const platforms = new Set(entries.filter((entry) => entry.name !== '@webviewjs/webview').map((entry) => entry.name));",
+    "  if (platforms.size !== Number(process.env.FAKE_PLATFORM_COUNT)) { console.error('root published before all platform publish commands succeeded'); process.exit(3); }",
     '}',
     'const entry = { name: manifest.name, version: manifest.version, tag: process.env.npm_config_tag, provenance: process.env.npm_config_provenance, manifest, args };',
     'entries.push(entry);',
@@ -67,7 +65,7 @@ function npmShimSource() {
 
 async function createFixture(
   t,
-  { tag = 'latest', resume = false, existingNames = [], invalidExisting, failName } = {},
+  { tag = 'latest', resume = false, existingNames = [], hiddenVersionNames = [], invalidExisting, failName } = {},
 ) {
   const originalCwd = process.cwd();
   const originalEnv = { ...process.env };
@@ -152,15 +150,15 @@ async function createFixture(
   globalThis.fetch = async (input) => {
     const pathname = new URL(input).pathname;
     const entries = readJson(statePath);
+    const events = readJson(eventsPath);
+    if (events.some((event) => event.type === 'publish')) {
+      events.push({ type: 'registry-after-publish' });
+      writeJson(eventsPath, events);
+    }
     if (pathname.startsWith('/-/package/')) {
       const name = decodeURIComponent(pathname.slice('/-/package/'.length, -'/dist-tags'.length));
       const entry = entries.find((candidate) => candidate.name === name);
       const distTags = entry ? { [entry.tag]: entry.version } : {};
-      if (entry && distTags[tag] === version) {
-        const events = readJson(eventsPath);
-        events.push({ type: name === root.name ? 'verified-root' : 'verified-platform', name });
-        writeJson(eventsPath, events);
-      }
       return Response.json(distTags);
     }
     const lastSlash = pathname.lastIndexOf('/');
@@ -168,9 +166,7 @@ async function createFixture(
     const requestedVersion = decodeURIComponent(pathname.slice(lastSlash + 1));
     const entry = entries.find((candidate) => candidate.name === name && candidate.version === requestedVersion);
     if (entry) {
-      const events = readJson(eventsPath);
-      events.push({ type: name === root.name ? 'verified-root' : 'verified-platform', name });
-      writeJson(eventsPath, events);
+      if (hiddenVersionNames.includes(name)) return new Response('', { status: 404 });
       return Response.json(entry.manifest);
     }
     return new Response('', { status: 404 });
@@ -230,30 +226,7 @@ test('release rejects automatic events, other refs, invalid semver, mismatches, 
   );
 });
 
-test('registry metadata appearing after several HTTP 404 responses is eventually visible', async () => {
-  let calls = 0;
-  const logs = [];
-  const manifest = { name: 'pkg', version: '0.4.8' };
-  const result = await registryVersion(
-    'pkg',
-    '0.4.8',
-    shortRetryOptions(
-      async () => {
-        calls += 1;
-        return calls < 4 ? new Response('', { status: 404 }) : Response.json(manifest);
-      },
-      { retryNotFound: true, log: (message) => logs.push(message) },
-    ),
-  );
-  assert.deepEqual(result, manifest);
-  assert.equal(calls, 4);
-  assert.equal(logs.length, 3);
-  assert.match(logs[0], /pkg@0\.4\.8: HTTP 404, attempt 1\/6, 0ms elapsed/);
-  assert.match(logs[1], /attempt 2\/6, 1ms elapsed/);
-  assert.match(logs[2], /attempt 3\/6, 3ms elapsed/);
-});
-
-test('registry verification retries are bounded and report exhaustion diagnostics', async () => {
+test('registry lookup retries are bounded and report exhaustion diagnostics', async () => {
   let calls = 0;
   await assert.rejects(
     registryVersion(
@@ -262,17 +235,17 @@ test('registry verification retries are bounded and report exhaustion diagnostic
       shortRetryOptions(
         async () => {
           calls += 1;
-          return new Response('', { status: 404 });
+          return new Response('', { status: 503 });
         },
-        { retryNotFound: true, maxAttempts: 3 },
+        { maxAttempts: 3 },
       ),
     ),
-    /pkg@0\.4\.8: requested metadata is not visible yet \(HTTP 404; 3 attempt\(s\); 3ms elapsed\)/,
+    /pkg@0\.4\.8: registry returned HTTP 503 \(HTTP 503; 3 attempt\(s\); 3ms elapsed\)/,
   );
   assert.equal(calls, 3);
 });
 
-test('registry verification retries HTTP 429 and 5xx but fails permanent errors immediately', async () => {
+test('registry requests retry HTTP 429 and 5xx but fail permanent errors immediately', async () => {
   const statuses = [429, 503];
   let calls = 0;
   const manifest = { name: 'pkg', version: '0.4.8' };
@@ -315,20 +288,6 @@ test('registry verification retries HTTP 429 and 5xx but fails permanent errors 
   assert.equal(calls, 1);
 });
 
-test('dist-tag verification retries a visible package until the requested tag propagates', async () => {
-  let calls = 0;
-  await verifyDistTag(
-    '@scope/pkg',
-    '0.4.8',
-    'latest',
-    shortRetryOptions(async () => {
-      calls += 1;
-      return Response.json(calls < 3 ? { latest: '0.4.7' } : { latest: '0.4.8' });
-    }),
-  );
-  assert.equal(calls, 3);
-});
-
 test('npm lookups preserve the normal already-published safeguard', async () => {
   assert.equal(await registryVersion('pkg', '0.4.8', { fetcher: async () => new Response('', { status: 404 }) }), null);
   await assert.rejects(
@@ -337,7 +296,7 @@ test('npm lookups preserve the normal already-published safeguard', async () => 
   );
 });
 
-test('resume state scan treats an expected 404 as missing without verification retries', async (t) => {
+test('resume state scan treats 404 as missing without retrying it', async (t) => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const plan = await packagePlan(pkg);
   const fixture = await createFixture(t, {
@@ -420,11 +379,16 @@ for (const tag of ['latest', 'next', 'rc', 'beta', 'v0']) {
       new Set(
         events
           .slice(0, rootPublishIndex)
-          .filter((event) => event.type === 'verified-platform')
+          .filter((event) => event.type === 'publish')
           .map((event) => event.name),
       ).size,
       fixture.plan.length,
-      'root publish follows verification of every platform package',
+      'root publish follows successful npm publish commands for every platform package',
+    );
+    assert.equal(
+      events.some((event) => event.type === 'registry-after-publish'),
+      false,
+      'successful npm publish commands are not followed by registry visibility checks',
     );
     await assert.rejects(main('publish', { registryOptions: fastRegistryOptions }), /already exists/);
     assert.equal(readJson(fixture.statePath).length, 13, 'retry must not invoke npm again');
@@ -461,14 +425,19 @@ test('resume publishes only missing packages without downloading existing packag
     new Set(
       finalEvents
         .slice(0, rootPublishIndex)
-        .filter((event) => event.type === 'verified-platform')
+        .filter((event) => event.type === 'publish')
         .map((event) => event.name),
     ).size,
-    plan.length,
+    plan.length - existingNames.length,
+    'all missing platform packages publish before the root package',
+  );
+  assert.equal(
+    finalEvents.some((event) => event.type === 'registry-after-publish'),
+    false,
   );
 });
 
-test('resume of the actual 0.4.8 state skips twelve platform versions and publishes only root', async (t) => {
+test('resume publishes only the missing root when all twelve platform versions exist', async (t) => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const plan = await packagePlan(pkg);
   const fixture = await createFixture(t, {
@@ -509,6 +478,24 @@ test('resume skips every package when all exact versions already exist', async (
   );
   assert.ok(messages.some((message) => message.includes('Published new packages: (none)')));
   assert.ok(messages.some((message) => message.includes('Reused existing packages:')));
+});
+
+test('resume treats a visible dist-tag as published when the exact version endpoint is still 404', async (t) => {
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+  const plan = await packagePlan(pkg);
+  const fixture = await createFixture(t, {
+    tag: 'latest',
+    resume: true,
+    existingNames: [...plan.map((item) => item.name), pkg.name],
+    hiddenVersionNames: [pkg.name],
+  });
+  await main('publish', { registryOptions: fastRegistryOptions });
+
+  assert.equal(
+    readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
+    false,
+    'the root package is reused while its dist-tag exposes the immutable version',
+  );
 });
 
 test('resume rejects an existing package with the wrong registry identity', async (t) => {

@@ -55,15 +55,13 @@ function retryAfterMs(response) {
 
 function registryError(subject, status, attempts, elapsedMs, reason) {
   return new Error(
-    `npm registry verification failed for ${subject}: ${reason} (HTTP ${status}; ${attempts} attempt(s); ${Math.round(elapsedMs)}ms elapsed).`,
+    `npm registry request failed for ${subject}: ${reason} (HTTP ${status}; ${attempts} attempt(s); ${Math.round(elapsedMs)}ms elapsed).`,
   );
 }
 
 async function registryJson(url, subject, options = {}) {
   const {
     fetcher = globalThis.fetch,
-    retryNotFound = false,
-    retryIf,
     validate,
     maxDurationMs = registryRetryDefaults.maxDurationMs,
     maxAttempts = registryRetryDefaults.maxAttempts,
@@ -72,12 +70,11 @@ async function registryJson(url, subject, options = {}) {
     sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms)),
     now = () => performance.now(),
     log = console.warn,
-    notFoundAtExhaustion = 'error',
   } = options;
   const startedAt = now();
   let attempts = 0;
   let lastStatus = 'no response';
-  let lastReason = 'verification duration exceeded';
+  let lastReason = 'request duration exceeded';
   let lastRetryAfter = null;
 
   while (attempts < maxAttempts) {
@@ -101,12 +98,8 @@ async function registryJson(url, subject, options = {}) {
       shouldRetry = true;
     }
 
-    if (response?.status === 404) {
-      lastStatus = '404';
-      lastReason = 'requested metadata is not visible yet';
-      shouldRetry = retryNotFound;
-      if (!retryNotFound) return null;
-    } else if (response && !response.ok) {
+    if (response?.status === 404) return null;
+    if (response && !response.ok) {
       lastStatus = String(response.status);
       lastReason = `registry returned HTTP ${response.status}`;
       if (response.status === 429 || response.status >= 500) {
@@ -131,11 +124,7 @@ async function registryJson(url, subject, options = {}) {
           'unexpected registry metadata',
         );
       }
-      if (!retryIf || retryIf(body)) return body;
-      lastStatus = String(response.status);
-      lastReason = 'requested registry metadata is not visible yet';
-      shouldRetry = true;
-      lastRetryAfter = null;
+      return body;
     }
 
     if (!shouldRetry) break;
@@ -145,13 +134,12 @@ async function registryJson(url, subject, options = {}) {
     const backoffMs = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempts - 1));
     const delayMs = Math.min(remaining, Math.max(backoffMs, lastRetryAfter ?? 0));
     log(
-      `Retrying npm registry verification for ${subject}: HTTP ${lastStatus}, attempt ${attempts}/${maxAttempts}, ${Math.round(elapsed)}ms elapsed.`,
+      `Retrying npm registry request for ${subject}: HTTP ${lastStatus}, attempt ${attempts}/${maxAttempts}, ${Math.round(elapsed)}ms elapsed.`,
     );
     await sleep(delayMs);
   }
 
   const elapsedMs = now() - startedAt;
-  if (lastStatus === '404' && notFoundAtExhaustion === 'null') return null;
   throw registryError(subject, lastStatus, attempts, elapsedMs, lastReason);
 }
 
@@ -165,17 +153,24 @@ export async function registryVersion(name, version, options = {}) {
   return manifest;
 }
 
-export async function verifyDistTag(name, version, tag, options = {}) {
-  await registryJson(`${registry}/-/package/${encodeURIComponent(name)}/dist-tags`, `${name}@${tag}=${version}`, {
-    ...options,
-    retryNotFound: true,
-    retryIf: (distTags) => distTags?.[tag] === version,
-  });
+async function registryPackage(name, version, options = {}) {
+  const manifest = await registryVersion(name, version, options);
+  if (manifest) return manifest;
+
+  // npm may expose a dist-tag before the exact version document.
+  // Treat any tag pointing at this immutable version as already published.
+  const distTags = await registryJson(
+    `${registry}/-/package/${encodeURIComponent(name)}/dist-tags`,
+    `${name}@${version} dist-tags`,
+    options,
+  );
+  if (Object.values(distTags ?? {}).includes(version)) return { name, version };
+  return null;
 }
 
-export async function requireUnpublished(packages, version, lookup = registryVersion) {
+export async function requireUnpublished(packages, version, lookup = registryPackage) {
   for (const { name } of packages) {
-    if (await lookup(name, version, { retryNotFound: false })) {
+    if (await lookup(name, version)) {
       throw new Error(
         `${name}@${version} already exists on npm. Refusing to republish; use resume=true after inspecting the partial release.`,
       );
@@ -203,23 +198,10 @@ function run(command, args, cwd = process.cwd()) {
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed (exit ${result.status}).`);
 }
 
-async function verifyPackage(item, version, tag, registryOptions = {}) {
-  const manifest = await registryVersion(item.name, version, { ...registryOptions, retryNotFound: true });
-  if (!manifest) throw new Error(`Publication not visible after retries: ${item.name}@${version}.`);
-  await verifyDistTag(item.name, version, tag, registryOptions);
-  console.log(`Verified ${item.name}@${version} (${tag})`);
-}
-
 async function registryState(packages, version, registryOptions = {}) {
   const entries = await Promise.all(
     packages.map(async (item) => {
-      const manifest = await registryVersion(item.name, version, {
-        ...registryOptions,
-        // In a state scan, a 404 means this immutable version is missing. Retry 404s
-        // only after our own publish operation, where the registry may still be
-        // propagating newly published metadata.
-        retryNotFound: false,
-      });
+      const manifest = await registryPackage(item.name, version, registryOptions);
       return [item.name, manifest];
     }),
   );
@@ -236,7 +218,7 @@ export async function main(command, { registryOptions = {} } = {}) {
   const tag = process.env.RELEASE_TAG;
   const resume = process.env.RELEASE_RESUME === 'true';
   const lookup = (name, requestedVersion, options = {}) =>
-    registryVersion(name, requestedVersion, { ...registryOptions, ...options });
+    registryPackage(name, requestedVersion, { ...registryOptions, ...options });
   validateRelease({
     event: process.env.GITHUB_EVENT_NAME,
     ref: process.env.GITHUB_REF,
@@ -305,15 +287,13 @@ export async function main(command, { registryOptions = {} } = {}) {
     run('npm', publishArgs(tag), item.path);
     newlyPublished.push(item.name);
     console.log(`Published new package: ${item.name}@${version}`);
-    await verifyPackage(item, version, tag, registryOptions);
   }
 
-  // The root package is published last, after every platform package is visible and verified.
+  // The root package is published last, after every platform npm publish succeeds.
   if (!(resume && existing.get(root.name))) {
     run('npm', publishArgs(tag), '.');
     newlyPublished.push(root.name);
     console.log(`Published new package: ${root.name}@${version}`);
-    await verifyPackage(root, version, tag, registryOptions);
   }
 
   console.log(`Reused existing packages: ${reused.length ? reused.join(', ') : '(none)'}`);
