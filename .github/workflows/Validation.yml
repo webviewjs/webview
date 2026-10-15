@@ -1,0 +1,48 @@
+name: Build Validation
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main, 'v[0-9]']
+    paths:
+      - 'packages/webview/**'
+      - 'packages/create-webview/**'
+      - 'apps/examples/**'
+      - 'bun.lock'
+      - 'bunfig.toml'
+      - 'package.json'
+      - 'turbo.json'
+      - '.cargo/**'
+      - 'rustfmt.toml'
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+      - '!**/*.md'
+      - '!**/*.mdx'
+      - '!**/LICENSE*'
+  pull_request:
+    branches: [main, 'v[0-9]']
+    paths:
+      - 'packages/webview/**'
+      - 'packages/create-webview/**'
+      - 'apps/examples/**'
+      - 'bun.lock'
+      - 'bunfig.toml'
+      - 'package.json'
+      - 'turbo.json'
+      - '.cargo/**'
+      - 'rustfmt.toml'
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+      - '!**/*.md'
+      - '!**/*.mdx'
+      - '!**/LICENSE*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/Build.yml
