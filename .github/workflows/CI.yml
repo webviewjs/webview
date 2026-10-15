@@ -107,7 +107,6 @@ jobs:
       - name: Publish platform packages and root package with provenance
         run: node .github/scripts/release.mjs publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           npm_config_tag: ${{ inputs.npm_tag }}
           npm_config_provenance: 'true'
           npm_config_access: public

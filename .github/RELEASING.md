@@ -31,10 +31,11 @@ npm dist-tag, and choose `resume`:
   publishes the root package last.
 - `resume: true` is for recovery after a partial publish. It scans all twelve
   platform packages and the root package. Before publishing anything, it
-  verifies every existing package's identity, version, platform metadata,
-  packaged SHA-512 integrity, and requested dist-tag. The integrity comparison
-  includes the platform native binary. Any existing package that cannot be
-  verified aborts the run. Verified packages are reused, missing platform
+  verifies npm's registry signatures and provenance for each existing version.
+  The provenance must match the registry's package integrity and identify the
+  trusted `v0` workflow at `.github/workflows/CI.yml`. It also checks package
+  identity, version, platform metadata, root optional dependencies, and the
+  requested dist-tag. Existing immutable packages are reused; missing platform
   packages are published individually, and a missing root package is published
   only after all platform packages are verified.
 
@@ -45,7 +46,11 @@ individual `npm publish` calls with the requested tag and provenance so resume
 never attempts to overwrite an existing immutable version. Resume state scans
 treat a 404 as a missing version; post-publish version and dist-tag checks use
 bounded exponential retries for eventual consistency, rate limits, and
-temporary server errors.
+temporary server errors. Existing packages are checked with `npm audit
+signatures`; resume does not compare rebuilt native binaries or download prior
+workflow artifacts. If an existing package's signature, provenance, registry
+integrity, metadata, or requested tag cannot be verified, resume aborts before
+publishing anything.
 
 A normal manual dispatch can be started from the Actions UI after selecting
 branch `v0`, or with:

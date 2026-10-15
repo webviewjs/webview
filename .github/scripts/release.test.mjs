@@ -22,6 +22,7 @@ import {
   requireArtifacts,
   requireUnpublished,
   validateRelease,
+  verifyExistingProvenance,
   verifyDistTag,
 } from './release.mjs';
 
@@ -116,6 +117,57 @@ function npmShimSource() {
   ].join('\n');
 }
 
+function fakeAuditBundle(name, version, integrity, overrides = {}) {
+  const workflow = {
+    repository: 'https://github.com/webviewjs/webview',
+    ref: 'refs/heads/v0',
+    path: '.github/workflows/CI.yml',
+    ...overrides.workflow,
+  };
+  const statement = {
+    subject: [
+      {
+        name: `pkg:npm/%40${name.slice(1)}@${version}`,
+        digest: { sha512: Buffer.from(integrity.slice('sha512-'.length), 'base64').toString('hex') },
+      },
+    ],
+    predicate: {
+      buildDefinition: {
+        externalParameters: { workflow },
+        resolvedDependencies: [
+          {
+            uri: 'git+https://github.com/webviewjs/webview@refs/heads/v0',
+            digest: { gitCommit: '00085aa2ac95115eabc6fbbb74ccf460f87210fe' },
+          },
+        ],
+      },
+      runDetails: {
+        metadata: {
+          invocationId: `https://github.com/webviewjs/webview/actions/runs/${overrides.runId ?? '38695298540'}/attempts/1`,
+        },
+      },
+    },
+  };
+  return {
+    name,
+    version,
+    attestationBundles: [
+      {
+        predicateType: 'https://slsa.dev/provenance/v1',
+        bundle: { dsseEnvelope: { payload: Buffer.from(JSON.stringify(statement)).toString('base64') } },
+      },
+    ],
+  };
+}
+
+function fakeAuditReport(entries, overrides = {}) {
+  return {
+    verified: entries.map((entry) => fakeAuditBundle(entry.name, entry.version, entry.integrity, overrides)),
+    missing: [],
+    invalid: [],
+  };
+}
+
 async function createFixture(
   t,
   { tag = 'latest', resume = false, existingNames = [], invalidExisting, failName } = {},
@@ -193,7 +245,9 @@ async function createFixture(
       manifest,
     };
     if (invalidExisting?.name === name) {
-      if (invalidExisting.kind === 'contents') entry.integrity = 'sha512-invalid-content';
+      if (invalidExisting.kind === 'contents') {
+        entry.integrity = `sha512-${createHash('sha512').update('invalid existing content').digest('base64')}`;
+      }
       if (invalidExisting.kind === 'platform') entry.manifest.cpu = ['wrong-architecture'];
       if (invalidExisting.kind === 'identity') entry.manifest.name = '@webviewjs/other-package';
       if (invalidExisting.kind === 'root-dependencies') delete entry.manifest.optionalDependencies[plan[0].name];
@@ -227,9 +281,22 @@ async function createFixture(
       : new Response('', { status: 404 });
   };
 
+  const resumeOptions = {
+    auditSignatures: async (items) => {
+      const entries = readJson(statePath).filter((entry) => items.some((item) => item.name === entry.name));
+      return fakeAuditReport(
+        entries.map((entry) => {
+          const item = items.find((candidate) => candidate.name === entry.name);
+          const path = join(directory, item.path || '.');
+          return { name: item.name, version, integrity: packageIntegrity(path) };
+        }),
+      );
+    },
+  };
+
   requireArtifacts(plan, true);
   requireArtifacts(plan, false);
-  return { directory, plan, packages, root, version, tag, statePath, eventsPath };
+  return { directory, plan, packages, root, version, tag, statePath, eventsPath, resumeOptions };
 }
 
 function shortRetryOptions(fetcher, overrides = {}) {
@@ -388,6 +455,41 @@ test('npm lookups preserve the normal already-published safeguard', async () => 
   );
 });
 
+test('verified npm provenance matches the registry integrity and trusted v0 workflow', () => {
+  const item = { name: '@webviewjs/webview-win32-x64-msvc' };
+  const version = '0.4.8';
+  const integrity = `sha512-${Buffer.alloc(64, 9).toString('base64')}`;
+  const existing = new Map([[item.name, { name: item.name, version, dist: { integrity } }]]);
+  const audit = fakeAuditReport([{ name: item.name, version, integrity }]);
+  const sources = verifyExistingProvenance([item], version, existing, audit);
+  assert.deepEqual(sources.get(item.name), {
+    runId: '38695298540',
+    commit: '00085aa2ac95115eabc6fbbb74ccf460f87210fe',
+  });
+});
+
+test('resume rejects missing signatures and provenance outside the trusted workflow', () => {
+  const item = { name: '@webviewjs/webview-win32-x64-msvc' };
+  const version = '0.4.8';
+  const integrity = `sha512-${Buffer.alloc(64, 3).toString('base64')}`;
+  const existing = new Map([[item.name, { name: item.name, version, dist: { integrity } }]]);
+
+  const missing = fakeAuditReport([{ name: item.name, version, integrity }]);
+  missing.missing.push(`${item.name}@${version}`);
+  assert.throws(
+    () => verifyExistingProvenance([item], version, existing, missing),
+    /missing or invalid package signatures or provenance/,
+  );
+
+  const untrusted = fakeAuditReport([{ name: item.name, version, integrity }], {
+    workflow: { path: '.github/workflows/Validation.yml' },
+  });
+  assert.throws(
+    () => verifyExistingProvenance([item], version, existing, untrusted),
+    /not from the trusted v0 CI workflow/,
+  );
+});
+
 test('resume state scan treats an expected 404 as missing without verification retries', async (t) => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const plan = await packagePlan(pkg);
@@ -499,7 +601,7 @@ test('resume publishes only missing platforms and the root after verifying reuse
   const plan = await packagePlan(pkg);
   const existingNames = plan.slice(0, 3).map((item) => item.name);
   const fixture = await createFixture(t, { tag: 'latest', resume: true, existingNames });
-  await main('publish', { registryOptions: fastRegistryOptions });
+  await main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions });
   const published = readJson(fixture.statePath);
   assert.equal(published.length, 13);
   assert.equal(published.filter((item) => existingNames.includes(item.name)).length, 3);
@@ -527,7 +629,7 @@ test('resume of the actual 0.4.8 state reuses all twelve platform packages and p
     resume: true,
     existingNames: plan.map((item) => item.name),
   });
-  await main('publish', { registryOptions: fastRegistryOptions });
+  await main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions });
   assert.equal(readJson(fixture.statePath).length, 13);
   const published = readJson(fixture.eventsPath).filter((event) => event.type === 'publish');
   assert.deepEqual(
@@ -536,7 +638,56 @@ test('resume of the actual 0.4.8 state reuses all twelve platform packages and p
   );
 });
 
-test('resume rejects existing packages whose contents or platform metadata do not match', async (t) => {
+test('resume skips every package after verifying a complete existing release', async (t) => {
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+  const plan = await packagePlan(pkg);
+  const fixture = await createFixture(t, {
+    tag: 'latest',
+    resume: true,
+    existingNames: [...plan.map((item) => item.name), pkg.name],
+  });
+  const messages = [];
+  const originalLog = console.log;
+  console.log = (message) => messages.push(String(message));
+  try {
+    await main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions });
+  } finally {
+    console.log = originalLog;
+  }
+  assert.equal(readJson(fixture.statePath).length, 13);
+  assert.equal(
+    readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
+    false,
+    'verified immutable versions are never republished',
+  );
+  assert.ok(messages.some((message) => message.includes('Published new packages: (none)')));
+  assert.ok(messages.some((message) => message.includes('Reused verified packages:')));
+});
+
+test('resume aborts before publishing when npm signature verification cannot verify an existing package', async (t) => {
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+  const plan = await packagePlan(pkg);
+  const fixture = await createFixture(t, {
+    tag: 'latest',
+    resume: true,
+    existingNames: [plan[0].name],
+  });
+  const resumeOptions = {
+    ...fixture.resumeOptions,
+    auditSignatures: async () => ({ verified: [], missing: [plan[0].name], invalid: [] }),
+  };
+  await assert.rejects(
+    main('publish', { registryOptions: fastRegistryOptions, resumeOptions }),
+    /missing or invalid package signatures or provenance/,
+  );
+  assert.equal(readJson(fixture.statePath).length, 1);
+  assert.equal(
+    readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
+    false,
+  );
+});
+
+test('resume rejects existing packages whose provenance integrity or platform metadata does not match', async (t) => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const plan = await packagePlan(pkg);
   const fixture = await createFixture(t, {
@@ -545,7 +696,10 @@ test('resume rejects existing packages whose contents or platform metadata do no
     existingNames: [plan[0].name],
     invalidExisting: { name: plan[0].name, kind: 'contents' },
   });
-  await assert.rejects(main('publish', { registryOptions: fastRegistryOptions }), /contents do not match/);
+  await assert.rejects(
+    main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions }),
+    /provenance does not match registry contents/,
+  );
   assert.equal(readJson(fixture.statePath).length, 1, 'no missing package is published after invalid state');
   assert.equal(
     readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
@@ -562,7 +716,10 @@ test('resume rejects platform metadata mismatches before publishing missing pack
     existingNames: [plan[0].name],
     invalidExisting: { name: plan[0].name, kind: 'platform' },
   });
-  await assert.rejects(main('publish', { registryOptions: fastRegistryOptions }), /platform metadata mismatch/);
+  await assert.rejects(
+    main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions }),
+    /platform metadata mismatch/,
+  );
   assert.equal(readJson(fixture.statePath).length, 1);
   assert.equal(
     readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
@@ -579,7 +736,10 @@ test('resume rejects an existing package with the wrong registry identity', asyn
     existingNames: [plan[0].name],
     invalidExisting: { name: plan[0].name, kind: 'identity' },
   });
-  await assert.rejects(main('publish', { registryOptions: fastRegistryOptions }), /unexpected registry metadata/);
+  await assert.rejects(
+    main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions }),
+    /unexpected registry metadata/,
+  );
   assert.equal(readJson(fixture.statePath).length, 1);
   assert.equal(
     readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
@@ -596,7 +756,10 @@ test('resume rejects an existing root package with incomplete optionalDependenci
     existingNames: [pkg.name],
     invalidExisting: { name: pkg.name, kind: 'root-dependencies' },
   });
-  await assert.rejects(main('publish', { registryOptions: fastRegistryOptions }), /missing .*optionalDependencies/);
+  await assert.rejects(
+    main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions }),
+    /missing .*optionalDependencies/,
+  );
   assert.equal(readJson(fixture.statePath).length, 1);
   assert.equal(
     readJson(fixture.eventsPath).some((event) => event.type === 'publish'),
@@ -614,7 +777,7 @@ test('resume rejects an existing package whose requested dist-tag does not match
     invalidExisting: { name: plan[0].name, kind: 'tag' },
   });
   await assert.rejects(
-    main('publish', { registryOptions: fastRegistryOptions }),
+    main('publish', { registryOptions: fastRegistryOptions, resumeOptions: fixture.resumeOptions }),
     /requested registry metadata is not visible/,
   );
   assert.equal(readJson(fixture.statePath).length, 1);
