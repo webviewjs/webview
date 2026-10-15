@@ -410,15 +410,21 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -e
           sudo pkg install -y -f \
-            curl node24 npm-node24 \
+            curl unzip node24 npm-node24 \
             gtk3 webkit2-gtk_41 libsoup3 pkgconf \
             xdotool libappindicator \
             dbus xorg-vfbserver
           # The downloaded .pkg archives are no longer needed after installation.
           sudo pkg clean -ay
           df -h /
-          sudo npm install -g bun@1.4.2
+          bun_dir="$(mktemp -d)"
+          curl -fL --retry 3 https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-freebsd-x64.zip -o "$bun_dir/bun.zip"
+          unzip -q "$bun_dir/bun.zip" -d "$bun_dir"
+          sudo install -m 755 "$bun_dir/bun-freebsd-x64/bun" /usr/local/bin/bun
+          rm -rf "$bun_dir"
+          test "$(bun --version)" = '1.4.2'
           curl https://sh.rustup.rs -sSf --output rustup.sh
           sh rustup.sh -y --profile minimal --default-toolchain stable
 
