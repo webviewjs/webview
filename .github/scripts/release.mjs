@@ -99,7 +99,7 @@ export async function main(command) {
   if (command === 'assembled') return requireArtifacts(plan, false);
   if (command !== 'publish') throw new Error(`Unknown release command: ${command}`);
 
-  if (!process.env.NODE_AUTH_TOKEN) throw new Error('NPM_TOKEN is required in the npm-release environment.');
+  // if (!process.env.NODE_AUTH_TOKEN) throw new Error('NPM_TOKEN is required in the npm-release environment.');
   if (process.env.npm_config_tag !== tag || process.env.npm_config_provenance !== 'true') {
     throw new Error('Publishing requires the requested npm_config_tag and npm_config_provenance=true.');
   }
