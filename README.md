@@ -72,6 +72,7 @@ The complete documentation is available at [webview.js.org](https://webview.js.o
 | [Multiple Windows](https://webview.js.org/guides/multiple-windows.md)         | Managing several windows                        |
 | [Cookies & Storage](https://webview.js.org/guides/cookies-and-storage.md)     | Reading, writing, and clearing cookies          |
 | [Custom Protocols](https://webview.js.org/guides/custom-protocols.md)         | Serving local content to the webview            |
+| [Frameless Windows](https://webview.js.org/guides/frameless-windows.md)       | Custom title bars and window dragging           |
 
 ### Platform notes
 

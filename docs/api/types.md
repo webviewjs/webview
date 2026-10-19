@@ -143,6 +143,10 @@ interface WebviewNewWindowFeatures {
 
 `ipcName?: string` adds a page-global alias for wry's built-in `window.ipc`. For example, `{ ipcName: 'bindings' }` makes `window.bindings.postMessage(...)` available before page scripts run. `window.ipc` remains available.
 
+## `WebviewOptions.enableDragRegionHelpers`
+
+`enableDragRegionHelpers?: boolean` controls the injected drag support: the `data-webview-drag-region` helper and `window.webviewjs.startDragging()`. It defaults to `true`. Set it to `false` to skip both; `BrowserWindow.startDragging()` stays available. See the [frameless windows guide](../guides/frameless-windows).
+
 ## `SerializationError`
 
 `webview.expose()` uses JSON serialization for static values, arguments, and returned values. Unsupported values reject with an error whose `name` is `SerializationError`.

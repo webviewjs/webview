@@ -317,6 +317,9 @@ for (const Type of [
   }
 }
 
+// Getters that never touch native window or webview state, so they stay usable after disposal.
+const DISPOSAL_SAFE_GETTERS = new Set(['isChild']);
+
 for (const Type of [
   nativeBinding.BrowserWindow,
   nativeBinding.Webview,
@@ -328,14 +331,27 @@ for (const Type of [
   for (const name of Object.getOwnPropertyNames(Type.prototype)) {
     if (name === 'constructor' || name === 'dispose' || name === 'isDisposed') continue;
     const descriptor = Object.getOwnPropertyDescriptor(Type.prototype, name);
-    if (typeof descriptor?.value !== 'function') continue;
-    const nativeMethod = descriptor.value;
-    Type.prototype[name] = function (...args) {
-      if (this.isDisposed()) {
-        throw new Error(`${Type.name} has been disposed`);
-      }
-      return nativeMethod.apply(this, args);
-    };
+    if (typeof descriptor?.value === 'function') {
+      const nativeMethod = descriptor.value;
+      Type.prototype[name] = function (...args) {
+        if (this.isDisposed()) {
+          throw new Error(`${Type.name} has been disposed`);
+        }
+        return nativeMethod.apply(this, args);
+      };
+    } else if (typeof descriptor?.get === 'function' && !DISPOSAL_SAFE_GETTERS.has(name)) {
+      // Native getters read window or webview state too, so they need the same guard as methods.
+      const nativeGetter = descriptor.get;
+      Object.defineProperty(Type.prototype, name, {
+        ...descriptor,
+        get() {
+          if (this.isDisposed()) {
+            throw new Error(`${Type.name} has been disposed`);
+          }
+          return nativeGetter.call(this);
+        },
+      });
+    }
   }
 }
 

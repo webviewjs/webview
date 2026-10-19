@@ -62,6 +62,14 @@ win.focus(): void
 win.requestRedraw(): void
 ```
 
+### Window dragging
+
+```ts
+win.startDragging(): void
+```
+
+Moves the window while the primary mouse button is held, like a native title bar. Call it synchronously from an `onIpcMessage` handler that runs during the press. It throws if the window has been disposed, or on platforms that can't drag windows (Android and iOS). See the [frameless windows guide](../guides/frameless-windows) for the other dragging mechanisms and the gesture rules.
+
 ### Size & position
 
 ```ts

@@ -80,10 +80,15 @@ fn call_new_window_handler(
 /// page content can only ask its own window to start a native drag.
 const DRAG_REGION_MESSAGE: &str = "__webviewjs_start_dragging__";
 
-/// Page-side half of `data-webview-drag-region`. A primary-button press inside a drag region
-/// arms the helper. The native drag starts on the first pointer movement past a small threshold
-/// while the button is still held: a drag started on mousedown can arrive after a fast click has
-/// been released, and the OS drag then waits for a release it has already missed.
+/// Page-side drag support, injected before page scripts when the helpers are enabled.
+///
+/// - `data-webview-drag-region`: a primary-button press inside a drag region arms the helper, and
+///   the native drag starts on the first pointer movement past a small threshold while the button
+///   is still held. A drag started on mousedown can arrive after a fast click has been released.
+/// - `window.webviewjs.startDragging()`: the same native drag, for page code. It does nothing unless
+///   the primary button is currently down.
+///
+/// Both post `DRAG_REGION_MESSAGE`, which the IPC handler consumes before any `onIpcMessage` handler.
 fn drag_region_script() -> String {
   format!(
     r#"(() => {{
@@ -113,13 +118,23 @@ fn drag_region_script() -> String {
   window.addEventListener('mouseup', () => {{
     press = null;
   }});
-  // Page-side entry point for the same native drag. Call it from a mousemove handler while the
-  // button is held, and it takes the direct IPC path rather than an expose() call.
-  window.webviewjs = Object.freeze({{
-    startDragging() {{
-      window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
-    }},
-  }});
+  // Track the primary button in the capture phase, so the API sees the state before page handlers run.
+  let primaryDown = false;
+  for (const type of ['mousedown', 'mousemove', 'mouseup']) {{
+    window.addEventListener(type, (event) => {{
+      primaryDown = (event.buttons & 1) === 1;
+    }}, true);
+  }}
+  // Leave an existing global alone, for example one defined by a preload script.
+  if (!('webviewjs' in window)) {{
+    Object.defineProperty(window, 'webviewjs', {{
+      value: Object.freeze({{
+        startDragging() {{
+          if (primaryDown) window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
+        }},
+      }}),
+    }});
+  }}
 }})();"#
   )
 }

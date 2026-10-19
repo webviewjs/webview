@@ -3,12 +3,14 @@ import { Application } from '../index.js';
 const app = new Application();
 
 const win = app.createBrowserWindow({
-  title: 'Start Dragging',
+  title: 'Drag Region',
   width: 480,
   height: 320,
   decorations: false,
 });
 
+// Elements marked with data-webview-drag-region move the window when dragged. Buttons inside
+// them still work.
 const webview = win.createWebview({
   html: `<!DOCTYPE html>
     <html>
@@ -29,7 +31,7 @@ const webview = win.createWebview({
         </style>
       </head>
       <body>
-        <header id="titlebar" data-webview-drag-region>
+        <header data-webview-drag-region>
           <span>Custom titlebar</span>
           <button id="close">Close</button>
         </header>
@@ -37,22 +39,14 @@ const webview = win.createWebview({
           <p>Drag the title bar to move the window. The Close button is still clickable.</p>
         </main>
         <script>
-          document.getElementById('close').addEventListener('click', () => window.windowControls.close());
+          document.getElementById('close').addEventListener('click', () => window.ipc.postMessage('close'));
         </script>
       </body>
     </html>`,
 });
 
-// Page results must be JSON, so each exposed function returns null rather than undefined.
-webview.expose('windowControls', {
-  startDragging() {
-    win.startDragging();
-    return null;
-  },
-  close() {
-    app.exit();
-    return null;
-  },
+webview.onIpcMessage((message) => {
+  if (message.body.toString('utf8') === 'close') app.exit();
 });
 
 app.run();

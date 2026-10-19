@@ -9,6 +9,8 @@ const win = app.createBrowserWindow({
   decorations: false,
 });
 
+// window.webviewjs.startDragging() starts the native drag. Call it from mousemove while the button is
+// held, as below, so the drag begins during the same press.
 const webview = win.createWebview({
   html: `<!DOCTYPE html>
     <html>
@@ -53,10 +55,7 @@ const webview = win.createWebview({
 });
 
 webview.onIpcMessage((message) => {
-  if (message.body.toString('utf8') === 'close') {
-    console.log('Closing window');
-    app.exit();
-  }
+  if (message.body.toString('utf8') === 'close') app.exit();
 });
 
 app.run();

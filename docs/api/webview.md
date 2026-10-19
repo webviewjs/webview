@@ -26,6 +26,7 @@ interface WebviewOptions {
   webContext?: WebContext; // Shared browser data context
   navigationHandler?: (url: string) => boolean; // allow or cancel navigation
   newWindowHandler?: (event: WebviewNewWindowEvent) => boolean; // allow or cancel new windows
+  enableDragRegionHelpers?: boolean; // default: true; drag regions and window.webviewjs
 }
 ```
 
@@ -170,6 +171,10 @@ Node registers its handler with `webview.onIpcMessage(handler)`.
 Set `ipcName: 'bindings'` to add `window.bindings` as an alias. `window.ipc` always remains available.
 
 See [IPC guide](../guides/ipc-messaging) for a complete walkthrough.
+
+## Drag regions
+
+Elements marked with `data-webview-drag-region` drag the window when pressed with the primary mouse button, and `window.webviewjs.startDragging()` starts the same drag from page code. Both are injected by default. Set `enableDragRegionHelpers: false` to turn both off. `win.startDragging()` stays available either way. See the [frameless windows guide](../guides/frameless-windows).
 
 ## `expose(name, target)`
 

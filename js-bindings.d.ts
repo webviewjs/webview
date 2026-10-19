@@ -698,7 +698,7 @@ export interface WebviewOptions {
    * of the `<scheme>://path/to/page` protocols used on macOS and Linux.
    */
   useHttpsScheme?: boolean;
-  /** Whether to inject the helper that starts a native window drag from elements marked with `data-webview-drag-region` (default: true). */
+  /** Whether to inject the drag support: the helper that starts a native window drag from elements marked with `data-webview-drag-region`, and `window.webviewjs.startDragging()` (default: true). */
   enableDragRegionHelpers?: boolean;
 }
 
