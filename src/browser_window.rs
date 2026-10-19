@@ -15,6 +15,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use tao::{
   dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
+  error::ExternalError,
   event_loop::EventLoop,
   window::{CursorIcon, Fullscreen, Icon, Window, WindowBuilder, WindowId},
 };
@@ -1160,6 +1161,27 @@ impl BrowserWindow {
   #[napi]
   pub fn focus(&self) {
     self.window().set_focus();
+  }
+
+  /// Moves the window with the primary mouse button, like dragging a native title bar.
+  ///
+  /// Call it while the button is held, such as from a `mousedown` handler. Throws if the
+  /// window has been disposed or the platform cannot drag windows (Android and iOS).
+  #[napi]
+  pub fn start_dragging(&self) -> Result<()> {
+    if self.disposed.get() {
+      return Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "BrowserWindow has been disposed",
+      ));
+    }
+    self.window().drag_window().map_err(|error| match error {
+      ExternalError::NotSupported(_) => napi::Error::new(
+        napi::Status::GenericFailure,
+        "startDragging() is not supported on this platform",
+      ),
+      other => napi::Error::new(napi::Status::GenericFailure, other.to_string()),
+    })
   }
 
   #[napi]

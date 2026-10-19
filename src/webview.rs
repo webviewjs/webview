@@ -72,6 +72,34 @@ fn call_new_window_handler(
     .unwrap_or(true)
 }
 
+/// Fixed IPC body sent by the drag-region helper. It carries no arguments, so
+/// page content can only ask its own window to start a native drag.
+const DRAG_REGION_MESSAGE: &str = "__webviewjs_start_dragging__";
+
+/// Page-side half of `data-webview-drag-region`. A primary-button press starts a
+/// native drag unless the page already handled it or it lands on an interactive
+/// control inside the region.
+fn drag_region_script() -> String {
+  format!(
+    r#"(() => {{
+  const DRAG_REGION_SELECTOR = '[data-webview-drag-region]';
+  const INTERACTIVE_SELECTOR = 'a[href], area[href], button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"])';
+  window.addEventListener('mousedown', (event) => {{
+    if (!event.isTrusted || event.button !== 0 || event.defaultPrevented) return;
+    // composedPath() also reaches regions inside open shadow roots. It runs from the target outwards,
+    // so a control at or before the region's index sits inside that region.
+    const path = event.composedPath();
+    const region = path.findIndex((node) => node instanceof Element && node.matches(DRAG_REGION_SELECTOR));
+    if (region === -1) return;
+    const control = path.findIndex((node) => node instanceof Element && node.matches(INTERACTIVE_SELECTOR));
+    if (control !== -1 && control <= region) return;
+    event.preventDefault();
+    window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
+  }});
+}})();"#
+  )
+}
+
 pub(crate) fn protocol_error_response(
   message: &str,
 ) -> wry::http::Response<std::borrow::Cow<'static, [u8]>> {
@@ -149,6 +177,7 @@ impl Default for WebviewOptions {
       ipc_name: None,
       auto_normalize_load_url: Some(true),
       use_https_scheme: Some(false),
+      enable_drag_region_helpers: Some(true),
     }
   }
 }
@@ -310,6 +339,13 @@ impl JsWebview {
         );
         webview = webview.with_initialization_script(&alias);
       }
+    }
+
+    // ── Drag-region helper ────────────────────────────────────────────────────
+    // The IPC handler below consumes the helper's message, so it is gated on the same flag.
+    let drag_region_helpers = options.enable_drag_region_helpers.unwrap_or(true);
+    if drag_region_helpers {
+      webview = webview.with_initialization_script(drag_region_script());
     }
 
     // ── Navigation handler ────────────────────────────────────────────────────
@@ -511,8 +547,17 @@ impl JsWebview {
     let ipc_state = Rc::new(RefCell::new(None::<FunctionRef<IpcMessage, ()>>));
     let ipc_state_clone = ipc_state.clone();
     let env_copy = *env;
+    // Weak, so an in-flight IPC message cannot keep a disposed window's native handle alive.
+    let ipc_window = Arc::downgrade(window);
 
     let ipc_handler = move |req: Request<String>| {
+      if drag_region_helpers && req.body() == DRAG_REGION_MESSAGE {
+        if let Some(window) = ipc_window.upgrade() {
+          let _ = window.drag_window();
+        }
+        return;
+      }
+
       let borrowed = RefCell::borrow(&ipc_state_clone);
       if let Some(func) = borrowed.as_ref() {
         let Ok(on_ipc_msg) = func.borrow_back(&env_copy) else {
