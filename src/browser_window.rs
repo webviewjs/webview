@@ -1,3 +1,4 @@
+use crate::deferred_release::defer_release;
 use crate::types::*;
 use dpi::Size;
 use image::GenericImageView;
@@ -752,10 +753,11 @@ impl BrowserWindow {
     if self.disposed.replace(true) {
       return;
     }
-    self.window.borrow_mut().take();
+    defer_release(self.window.borrow_mut().take());
     for resource in self.webviews.borrow().iter() {
       if let Some(webview) = resource.borrow_mut().take() {
         let _ = webview.set_visible(false);
+        defer_release(webview);
       }
     }
     self.webviews.borrow_mut().clear();

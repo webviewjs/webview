@@ -19,6 +19,7 @@ use wry::{
 };
 
 use crate::browser_window::next_protocol_id;
+use crate::deferred_release::defer_release;
 use crate::types::*;
 use crate::web_context::JsWebContext;
 
@@ -38,6 +39,9 @@ pub(crate) type WebviewResource = Rc<RefCell<Option<Rc<wry::WebView>>>>;
 pub(crate) type WebviewBoolHandlerRef = Rc<RefCell<Option<FunctionRef<String, bool>>>>;
 pub(crate) type WebviewNewWindowHandlerRef =
   Rc<RefCell<Option<FunctionRef<WebviewEventPayload, bool>>>>;
+/// JS `onIpcMessage` handler. The IPC callback clones it out before calling, so user code
+/// may replace or dispose it while it runs.
+type IpcHandlerRef = Rc<FunctionRef<IpcMessage, ()>>;
 
 /// Fire a `WebviewEventPayload` via the TSF event dispatch.  Non-blocking: the
 /// call is queued to libuv and executed on the JS thread.
@@ -200,7 +204,7 @@ pub struct JsWebview {
   // Rc is shared with the owning BrowserWindow so the WebView stays alive
   // even if JS garbage-collects this handle.
   pub(crate) webview_inner: WebviewResource,
-  ipc_state: Rc<RefCell<Option<FunctionRef<IpcMessage, ()>>>>,
+  ipc_state: Rc<RefCell<Option<IpcHandlerRef>>>,
   disposed: Rc<Cell<bool>>,
   #[cfg(target_os = "windows")]
   auto_normalize_load_url: bool,
@@ -557,7 +561,7 @@ impl JsWebview {
     }
 
     // ── IPC transport ─────────────────────────────────────────────────────────
-    let ipc_state = Rc::new(RefCell::new(None::<FunctionRef<IpcMessage, ()>>));
+    let ipc_state = Rc::new(RefCell::new(None::<IpcHandlerRef>));
     let ipc_state_clone = ipc_state.clone();
     let env_copy = *env;
     // Weak, so an in-flight IPC message cannot keep a disposed window's native handle alive.
@@ -571,8 +575,10 @@ impl JsWebview {
         return;
       }
 
-      let borrowed = RefCell::borrow(&ipc_state_clone);
-      if let Some(func) = borrowed.as_ref() {
+      // Take a handle out of the cell rather than holding a borrow: the handler runs user
+      // code, which may set or dispose the handler from inside this call.
+      let handler = ipc_state_clone.borrow().clone();
+      if let Some(func) = handler {
         let Ok(on_ipc_msg) = func.borrow_back(&env_copy) else {
           return;
         };
@@ -658,7 +664,7 @@ impl JsWebview {
 
   #[napi]
   pub fn on_ipc_message(&mut self, handler: Option<FunctionRef<IpcMessage, ()>>) {
-    *self.ipc_state.borrow_mut() = handler;
+    *self.ipc_state.borrow_mut() = handler.map(Rc::new);
   }
 
   pub(crate) fn lifecycle_shared(&self) -> Rc<Cell<bool>> {
@@ -679,6 +685,7 @@ impl JsWebview {
     }
     if let Some(webview) = self.webview_inner.borrow_mut().take() {
       let _ = webview.set_visible(false);
+      defer_release(webview);
     }
     self.ipc_state.borrow_mut().take();
   }

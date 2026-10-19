@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use crate::browser_window::{BrowserWindow, WindowCloseState, WindowResource};
+use crate::deferred_release::{defer_release, release_deferred};
 #[cfg(target_os = "android")]
 use crate::tray::JsTrayIcon;
 #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
@@ -85,13 +86,23 @@ struct AppState {
 
 impl AppState {
   fn begin_close_window(&mut self, window_id: WindowId) {
+    // Set the lifecycle flags together with releasing the handles. A pending RPC
+    // resolves through isDisposed(), so the flags must never lag behind the handles.
+    if let Some(lifecycle) = self.window_lifecycles.get(&window_id) {
+      lifecycle.set(true);
+    }
+    if let Some(lifecycles) = self.webview_lifecycles.get(&window_id) {
+      for lifecycle in lifecycles.borrow().iter() {
+        lifecycle.set(true);
+      }
+    }
     if let Some(views) = self.webviews.get(&window_id) {
       for resource in views.borrow().iter() {
-        resource.borrow_mut().take();
+        defer_release(resource.borrow_mut().take());
       }
     }
     if let Some(resource) = self.windows.get(&window_id) {
-      resource.borrow_mut().take();
+      defer_release(resource.borrow_mut().take());
     }
   }
 
@@ -1043,6 +1054,7 @@ impl Application {
     #[cfg(not(target_os = "macos"))]
     use tao::platform::run_return::EventLoopExtRunReturn;
 
+    release_deferred();
     if self.state.should_exit {
       return false;
     }
@@ -1166,6 +1178,7 @@ impl Application {
       });
     }
 
+    release_deferred();
     !state.should_exit
   }
 
@@ -1211,11 +1224,14 @@ impl Application {
         handle_window_event(state, window_id, window_event);
       }
 
+      // Under ControlFlow::Wait nothing may wake the loop again, so release here.
+      release_deferred();
       if state.should_exit {
         *control_flow = ControlFlow::Exit;
       }
     });
 
+    release_deferred();
     Ok(())
   }
 

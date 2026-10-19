@@ -16,6 +16,8 @@ pub mod app;
 #[cfg(not(target_os = "freebsd"))]
 pub mod browser_window;
 #[cfg(not(target_os = "freebsd"))]
+pub mod deferred_release;
+#[cfg(not(target_os = "freebsd"))]
 pub mod menu;
 #[cfg(not(target_os = "freebsd"))]
 pub mod notifications;

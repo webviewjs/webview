@@ -59,6 +59,7 @@ webview.expose('windowControls', {
     return null;
   },
   close() {
+    console.log('Closing window');
     app.exit();
     return null;
   },

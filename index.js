@@ -609,8 +609,16 @@ function dispatchIpcMessage(webview, state, message) {
     return;
   }
 
-  Promise.resolve()
-    .then(() => fn.apply(namespace.target, args))
+  // Call synchronously. A microtask would run after pumpEvents() returns, outside the native
+  // event that delivered this message, so native calls such as startDragging() lose that event.
+  let pending;
+  try {
+    pending = Promise.resolve(fn.apply(namespace.target, args));
+  } catch (err) {
+    pending = Promise.reject(err);
+  }
+
+  pending
     .then((result) => {
       try {
         const resultJson = jsonValue(result, 'Return value');
