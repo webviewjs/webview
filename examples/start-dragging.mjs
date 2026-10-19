@@ -41,28 +41,22 @@ const webview = win.createWebview({
             if (press === null || (event.buttons & 1) === 0) return;
             if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD) return;
             press = null;
-            window.windowControls.startDragging();
+            window.webviewjs.startDragging();
           });
           window.addEventListener('mouseup', () => {
             press = null;
           });
-          document.getElementById('close').addEventListener('click', () => window.windowControls.close());
+          document.getElementById('close').addEventListener('click', () => window.ipc.postMessage('close'));
         </script>
       </body>
     </html>`,
 });
 
-// Page results must be JSON, so each exposed function returns null rather than undefined.
-webview.expose('windowControls', {
-  startDragging() {
-    win.startDragging();
-    return null;
-  },
-  close() {
+webview.onIpcMessage((message) => {
+  if (message.body.toString('utf8') === 'close') {
     console.log('Closing window');
     app.exit();
-    return null;
-  },
+  }
 });
 
 app.run();

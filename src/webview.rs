@@ -113,6 +113,13 @@ fn drag_region_script() -> String {
   window.addEventListener('mouseup', () => {{
     press = null;
   }});
+  // Page-side entry point for the same native drag. Call it from a mousemove handler while the
+  // button is held, and it takes the direct IPC path rather than an expose() call.
+  window.webviewjs = Object.freeze({{
+    startDragging() {{
+      window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
+    }},
+  }});
 }})();"#
   )
 }
