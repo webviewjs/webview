@@ -260,6 +260,11 @@ class Notification {
 // A WeakMap stores each instance's timer so no extra class wrapper is needed.
 const _timers = new WeakMap();
 
+// pumpEvents() holds the native Application borrow while it dispatches window and IPC callbacks.
+// Application.exit() needs that borrow, so a call made from inside those callbacks waits until the
+// pump returns (see the exit wrapper below).
+const _pumpingApplications = new WeakSet();
+
 nativeBinding.Application.prototype.run = function run(options = {}) {
   const interval = options.interval ?? 16;
   const shouldRef = options.ref ?? true;
@@ -267,7 +272,12 @@ nativeBinding.Application.prototype.run = function run(options = {}) {
   if (_timers.has(this)) return;
 
   const timer = setInterval(() => {
-    if (!this.pumpEvents()) this.stop();
+    _pumpingApplications.add(this);
+    try {
+      if (!this.pumpEvents()) this.stop();
+    } finally {
+      _pumpingApplications.delete(this);
+    }
   }, interval);
 
   if (!shouldRef) timer.unref();
@@ -283,6 +293,10 @@ nativeBinding.Application.prototype.stop = function stop() {
 
 const _nativeExit = nativeBinding.Application.prototype.exit;
 nativeBinding.Application.prototype.exit = function exit() {
+  if (_pumpingApplications.has(this)) {
+    setImmediate(() => _nativeExit.call(this));
+    return;
+  }
   return _nativeExit.call(this);
 };
 
