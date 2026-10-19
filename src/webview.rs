@@ -76,15 +76,19 @@ fn call_new_window_handler(
 /// page content can only ask its own window to start a native drag.
 const DRAG_REGION_MESSAGE: &str = "__webviewjs_start_dragging__";
 
-/// Page-side half of `data-webview-drag-region`. A primary-button press starts a
-/// native drag unless the page already handled it or it lands on an interactive
-/// control inside the region.
+/// Page-side half of `data-webview-drag-region`. A primary-button press inside a drag region
+/// arms the helper. The native drag starts on the first pointer movement past a small threshold
+/// while the button is still held: a drag started on mousedown can arrive after a fast click has
+/// been released, and the OS drag then waits for a release it has already missed.
 fn drag_region_script() -> String {
   format!(
     r#"(() => {{
   const DRAG_REGION_SELECTOR = '[data-webview-drag-region]';
   const INTERACTIVE_SELECTOR = 'a[href], area[href], button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"])';
+  const DRAG_THRESHOLD = 4;
+  let press = null;
   window.addEventListener('mousedown', (event) => {{
+    press = null;
     if (!event.isTrusted || event.button !== 0 || event.defaultPrevented) return;
     // composedPath() also reaches regions inside open shadow roots. It runs from the target outwards,
     // so a control at or before the region's index sits inside that region.
@@ -94,7 +98,16 @@ fn drag_region_script() -> String {
     const control = path.findIndex((node) => node instanceof Element && node.matches(INTERACTIVE_SELECTOR));
     if (control !== -1 && control <= region) return;
     event.preventDefault();
+    press = {{ x: event.clientX, y: event.clientY }};
+  }});
+  window.addEventListener('mousemove', (event) => {{
+    if (!event.isTrusted || press === null || (event.buttons & 1) === 0) return;
+    if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD) return;
+    press = null;
     window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
+  }});
+  window.addEventListener('mouseup', () => {{
+    press = null;
   }});
 }})();"#
   )

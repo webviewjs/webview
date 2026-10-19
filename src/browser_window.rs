@@ -1165,7 +1165,9 @@ impl BrowserWindow {
 
   /// Moves the window with the primary mouse button, like dragging a native title bar.
   ///
-  /// Call it while the button is held, such as from a `mousedown` handler. Throws if the
+  /// Call it from a `mousemove` handler while the button is still held, after the press has
+  /// become a drag. The call crosses IPC, so a call made on `mousedown` can arrive after a fast
+  /// click is released, and the OS drag may then wait for a release it never sees. Throws if the
   /// window has been disposed or the platform cannot drag windows (Android and iOS).
   #[napi]
   pub fn start_dragging(&self) -> Result<()> {
