@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test';
 
 const require = createRequire(import.meta.url);
 const api = require('../../dist/index.js');
+const { isDisposalGuardWrapper } = require('../../dist/internal/lifecycle/disposed-guard.js');
 const { binding } = require('../native/harness.ts');
 const symbolName = (key) => (typeof key === 'symbol' ? key.toString() : key);
 
@@ -13,6 +14,8 @@ function changedDescriptors(prototype, baseline) {
     .filter((key) => {
       const before = baseline[key];
       const after = current[key];
+      // Disposal guards wrap every native member on purpose; they are not replacements to audit.
+      if (after && (isDisposalGuardWrapper(after.value) || isDisposalGuardWrapper(after.get))) return false;
       if (!before || !after) return true;
       return (
         before.value !== after.value ||
@@ -58,7 +61,7 @@ test('only intended native prototype methods are augmented or replaced', () => {
     'removeListener',
   ];
   const expected = {
-    Application: [...commonEvents, 'bind', 'onEvent', 'run', 'stop', 'whenReady', 'Symbol(Symbol.dispose)'],
+    Application: [...commonEvents, 'bind', 'exit', 'onEvent', 'run', 'stop', 'whenReady', 'Symbol(Symbol.dispose)'],
     BrowserWindow: [...commonEvents, 'createWebview', 'registerProtocol', 'Symbol(Symbol.dispose)'],
     Webview: [...commonEvents, 'dispose', 'expose', 'onIpcMessage', 'Symbol(Symbol.dispose)'],
     WebContext: ['Symbol(Symbol.dispose)'],

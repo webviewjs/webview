@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 pub mod custom_protocol_workaround;
+pub mod deferred_release;
 pub mod types;
 pub mod version;
 

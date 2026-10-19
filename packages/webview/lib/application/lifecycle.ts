@@ -17,6 +17,8 @@ interface ApplicationState {
 const states = new WeakMap<Application, ApplicationState>();
 /** Original binding method, retained before the public compatibility method is installed. */
 const nativeOnEvent = NativeApplication.prototype.onEvent;
+/** Original binding method, retained before the public exit wrapper is installed. */
+const nativeExit = NativeApplication.prototype.exit;
 
 /** Returns or lazily creates the JavaScript lifecycle state for an application. */
 function stateFor(application: Application): ApplicationState {
@@ -113,6 +115,18 @@ export function whenReady(this: Application, options: ApplicationWhenReadyOption
   }
 
   return ready;
+}
+
+/**
+ * Exits the native application. A call made while the event pump is running, such as from an IPC
+ * callback, runs once the pump returns: the native method needs the borrow the pump holds.
+ */
+export function exit(this: Application): void {
+  if (stateFor(this).eventLoop.isPumping) {
+    setImmediate(() => nativeExit.call(this));
+    return;
+  }
+  nativeExit.call(this);
 }
 
 /** Exits the native application when disposed with `using` or `Symbol.dispose`. */

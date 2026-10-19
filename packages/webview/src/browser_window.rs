@@ -1,3 +1,4 @@
+use crate::deferred_release::defer_release;
 use crate::types::*;
 use dpi::Size;
 use image::GenericImageView;
@@ -15,6 +16,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use tao::{
   dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
+  error::ExternalError,
   event_loop::EventLoop,
   window::{CursorIcon, Fullscreen, Icon, Window, WindowBuilder, WindowId},
 };
@@ -752,10 +754,11 @@ impl BrowserWindow {
     if self.disposed.replace(true) {
       return;
     }
-    self.window.borrow_mut().take();
+    defer_release(self.window.borrow_mut().take());
     for resource in self.webviews.borrow().iter() {
       if let Some(webview) = resource.borrow_mut().take() {
         let _ = webview.set_visible(false);
+        defer_release(webview);
       }
     }
     self.webviews.borrow_mut().clear();
@@ -1161,6 +1164,29 @@ impl BrowserWindow {
   #[napi]
   pub fn focus(&self) {
     self.window().set_focus();
+  }
+
+  /// Moves the window with the primary mouse button, like dragging a native title bar.
+  ///
+  /// Call it from a `mousemove` handler while the button is still held, after the press has
+  /// become a drag. The call crosses IPC, so a call made on `mousedown` can arrive after a fast
+  /// click is released, and the OS drag may then wait for a release it never sees. Throws if the
+  /// window has been disposed or the platform cannot drag windows (Android and iOS).
+  #[napi]
+  pub fn start_dragging(&self) -> Result<()> {
+    if self.disposed.get() {
+      return Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "BrowserWindow has been disposed",
+      ));
+    }
+    self.window().drag_window().map_err(|error| match error {
+      ExternalError::NotSupported(_) => napi::Error::new(
+        napi::Status::GenericFailure,
+        "startDragging() is not supported on this platform",
+      ),
+      other => napi::Error::new(napi::Status::GenericFailure, other.to_string()),
+    })
   }
 
   #[napi]

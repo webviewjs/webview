@@ -11,6 +11,7 @@
     "multiple-windows",
     "cookies-and-storage",
     "window-appearance",
+    "frameless-windows",
     "webview-controls"
   ]
 }

@@ -19,6 +19,7 @@ use wry::{
 };
 
 use crate::browser_window::next_protocol_id;
+use crate::deferred_release::defer_release;
 use crate::types::*;
 use crate::web_context::JsWebContext;
 
@@ -38,6 +39,9 @@ pub(crate) type WebviewResource = Rc<RefCell<Option<Rc<wry::WebView>>>>;
 pub(crate) type WebviewBoolHandlerRef = Rc<RefCell<Option<FunctionRef<String, bool>>>>;
 pub(crate) type WebviewNewWindowHandlerRef =
   Rc<RefCell<Option<FunctionRef<WebviewEventPayload, bool>>>>;
+/// JS `onIpcMessage` handler. The IPC callback clones it out before calling, so user code
+/// may replace or dispose it while it runs.
+type IpcHandlerRef = Rc<FunctionRef<IpcMessage, ()>>;
 
 /// Fire a `WebviewEventPayload` via the TSF event dispatch.  Non-blocking: the
 /// call is queued to libuv and executed on the JS thread.
@@ -78,6 +82,69 @@ fn new_window_response(navigation_allowed: bool, request_allowed: bool) -> NewWi
   } else {
     NewWindowResponse::Deny
   }
+}
+
+/// Fixed IPC body sent by the drag-region helper. It carries no arguments, so
+/// page content can only ask its own window to start a native drag.
+const DRAG_REGION_MESSAGE: &str = "__webviewjs_start_dragging__";
+
+/// Page-side drag support, injected before page scripts when the helpers are enabled.
+///
+/// - `data-webview-drag-region`: a primary-button press inside a drag region arms the helper, and
+///   the native drag starts on the first pointer movement past a small threshold while the button
+///   is still held. A drag started on mousedown can arrive after a fast click has been released.
+/// - `window.webviewjs.startDragging()`: the same native drag, for page code. It does nothing unless
+///   the primary button is currently down.
+///
+/// Both post `DRAG_REGION_MESSAGE`, which the IPC handler consumes before any `onIpcMessage` handler.
+fn drag_region_script() -> String {
+  format!(
+    r#"(() => {{
+  const DRAG_REGION_SELECTOR = '[data-webview-drag-region]';
+  const INTERACTIVE_SELECTOR = 'a[href], area[href], button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"])';
+  const DRAG_THRESHOLD = 4;
+  let press = null;
+  window.addEventListener('mousedown', (event) => {{
+    press = null;
+    if (!event.isTrusted || event.button !== 0 || event.defaultPrevented) return;
+    // composedPath() also reaches regions inside open shadow roots. It runs from the target outwards,
+    // so a control at or before the region's index sits inside that region.
+    const path = event.composedPath();
+    const region = path.findIndex((node) => node instanceof Element && node.matches(DRAG_REGION_SELECTOR));
+    if (region === -1) return;
+    const control = path.findIndex((node) => node instanceof Element && node.matches(INTERACTIVE_SELECTOR));
+    if (control !== -1 && control <= region) return;
+    event.preventDefault();
+    press = {{ x: event.clientX, y: event.clientY }};
+  }});
+  window.addEventListener('mousemove', (event) => {{
+    if (!event.isTrusted || press === null || (event.buttons & 1) === 0) return;
+    if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD) return;
+    press = null;
+    window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
+  }});
+  window.addEventListener('mouseup', () => {{
+    press = null;
+  }});
+  // Track the primary button in the capture phase, so the API sees the state before page handlers run.
+  let primaryDown = false;
+  for (const type of ['mousedown', 'mousemove', 'mouseup']) {{
+    window.addEventListener(type, (event) => {{
+      primaryDown = (event.buttons & 1) === 1;
+    }}, true);
+  }}
+  // Leave an existing global alone, for example one defined by a preload script.
+  if (!('webviewjs' in window)) {{
+    Object.defineProperty(window, 'webviewjs', {{
+      value: Object.freeze({{
+        startDragging() {{
+          if (primaryDown) window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
+        }},
+      }}),
+    }});
+  }}
+}})();"#
+  )
 }
 
 pub(crate) fn protocol_error_response(
@@ -157,6 +224,7 @@ impl Default for WebviewOptions {
       ipc_name: None,
       auto_normalize_load_url: Some(true),
       use_https_scheme: Some(false),
+      enable_drag_region_helpers: Some(true),
     }
   }
 }
@@ -166,7 +234,7 @@ pub struct JsWebview {
   // Rc is shared with the owning BrowserWindow so the WebView stays alive
   // even if JS garbage-collects this handle.
   pub(crate) webview_inner: WebviewResource,
-  ipc_state: Rc<RefCell<Option<FunctionRef<IpcMessage, ()>>>>,
+  ipc_state: Rc<RefCell<Option<IpcHandlerRef>>>,
   disposed: Rc<Cell<bool>>,
   #[cfg(target_os = "windows")]
   auto_normalize_load_url: bool,
@@ -318,6 +386,13 @@ impl JsWebview {
         );
         webview = webview.with_initialization_script(&alias);
       }
+    }
+
+    // ── Drag-region helper ────────────────────────────────────────────────────
+    // The IPC handler below consumes the helper's message, so it is gated on the same flag.
+    let drag_region_helpers = options.enable_drag_region_helpers.unwrap_or(true);
+    if drag_region_helpers {
+      webview = webview.with_initialization_script(drag_region_script());
     }
 
     // ── Navigation handler ────────────────────────────────────────────────────
@@ -512,13 +587,24 @@ impl JsWebview {
     }
 
     // ── IPC transport ─────────────────────────────────────────────────────────
-    let ipc_state = Rc::new(RefCell::new(None::<FunctionRef<IpcMessage, ()>>));
+    let ipc_state = Rc::new(RefCell::new(None::<IpcHandlerRef>));
     let ipc_state_clone = ipc_state.clone();
     let env_copy = *env;
+    // Weak, so an in-flight IPC message cannot keep a disposed window's native handle alive.
+    let ipc_window = Arc::downgrade(window);
 
     let ipc_handler = move |req: Request<String>| {
-      let borrowed = RefCell::borrow(&ipc_state_clone);
-      if let Some(func) = borrowed.as_ref() {
+      if drag_region_helpers && req.body() == DRAG_REGION_MESSAGE {
+        if let Some(window) = ipc_window.upgrade() {
+          let _ = window.drag_window();
+        }
+        return;
+      }
+
+      // Take a handle out of the cell rather than holding a borrow: the handler runs user
+      // code, which may set or dispose the handler from inside this call.
+      let handler = ipc_state_clone.borrow().clone();
+      if let Some(func) = handler {
         let Ok(on_ipc_msg) = func.borrow_back(&env_copy) else {
           return;
         };
@@ -604,7 +690,7 @@ impl JsWebview {
 
   #[napi]
   pub fn on_ipc_message(&mut self, handler: Option<FunctionRef<IpcMessage, ()>>) {
-    *self.ipc_state.borrow_mut() = handler;
+    *self.ipc_state.borrow_mut() = handler.map(Rc::new);
   }
 
   pub(crate) fn lifecycle_shared(&self) -> Rc<Cell<bool>> {
@@ -625,6 +711,7 @@ impl JsWebview {
     }
     if let Some(webview) = self.webview_inner.borrow_mut().take() {
       let _ = webview.set_visible(false);
+      defer_release(webview);
     }
     self.ipc_state.borrow_mut().take();
   }

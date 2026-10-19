@@ -96,6 +96,15 @@ export declare class BrowserWindow {
   setMaximized(value: boolean): void
   setMinimized(value: boolean): void
   focus(): void
+  /**
+   * Moves the window with the primary mouse button, like dragging a native title bar.
+   *
+   * Call it from a `mousemove` handler while the button is still held, after the press has
+   * become a drag. The call crosses IPC, so a call made on `mousedown` can arrive after a fast
+   * click is released, and the OS drag may then wait for a release it never sees. Throws if the
+   * window has been disposed or the platform cannot drag windows (Android and iOS).
+   */
+  startDragging(): void
   getAvailableMonitors(): Array<Monitor>
   getCurrentMonitor(): Monitor | null
   getPrimaryMonitor(): Monitor | null
@@ -671,6 +680,8 @@ export interface WebviewOptions {
    * of the `<scheme>://path/to/page` protocols used on macOS and Linux.
    */
   useHttpsScheme?: boolean
+  /** Whether to inject the drag support: the helper that starts a native window drag from elements marked with `data-webview-drag-region`, and `window.webviewjs.startDragging()` (default: true). */
+  enableDragRegionHelpers?: boolean
 }
 
 export interface WebviewWindowPosition {

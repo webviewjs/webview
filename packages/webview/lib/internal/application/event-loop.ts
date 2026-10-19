@@ -5,6 +5,8 @@ export class ApplicationEventLoop {
   #timer?: NodeJS.Timeout;
   /** Callback that pumps native events and reports whether the application remains active. */
   readonly #pumpEvents: () => boolean;
+  /** Whether a native pump call is currently on the stack. */
+  #pumping = false;
 
   /**
    * Creates an event loop around the native application event pump.
@@ -12,6 +14,11 @@ export class ApplicationEventLoop {
    */
   constructor(pumpEvents: () => boolean) {
     this.#pumpEvents = pumpEvents;
+  }
+
+  /** Whether native events are being pumped right now, including callbacks dispatched by the pump. */
+  get isPumping(): boolean {
+    return this.#pumping;
   }
 
   /**
@@ -26,8 +33,13 @@ export class ApplicationEventLoop {
     const interval = options.interval ?? 16;
     const shouldRef = options.ref ?? true;
     const timer = setInterval(() => {
-      if (!this.#pumpEvents()) {
-        this.stop();
+      this.#pumping = true;
+      try {
+        if (!this.#pumpEvents()) {
+          this.stop();
+        }
+      } finally {
+        this.#pumping = false;
       }
     }, interval);
 

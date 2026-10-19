@@ -557,4 +557,6 @@ pub struct WebviewOptions {
   /// Using a http scheme will allow mixed content when trying to fetch http endpoints and is therefore less secure but will match the behavior
   /// of the `<scheme>://path/to/page` protocols used on macOS and Linux.
   pub use_https_scheme: Option<bool>,
+  /// Whether to inject the drag support: the helper that starts a native window drag from elements marked with `data-webview-drag-region`, and `window.webviewjs.startDragging()` (default: true).
+  pub enable_drag_region_helpers: Option<bool>,
 }

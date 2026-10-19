@@ -32,6 +32,7 @@ interface WebviewOptions {
   webContext?: WebContext | null;
   navigationHandler?: (url: string) => boolean;
   newWindowHandler?: (event: WebviewNewWindowEvent) => boolean;
+  enableDragRegionHelpers?: boolean; // default true; data-webview-drag-region and window.webviewjs
 }
 ```
 
@@ -78,6 +79,10 @@ webview.expose(name: string, target: ExposedTarget): void
 ```
 
 `onIpcMessage()` receives raw `window.ipc.postMessage()` calls. `expose()` creates a page namespace with asynchronous methods. Both share one native transport. See [IPC messaging](../guides/ipc-messaging) for the message shape, serialization contract, and examples.
+
+## Drag regions
+
+Elements marked with `data-webview-drag-region` drag the window on a primary-button press, and `window.webviewjs.startDragging()` starts the same drag from page code. Both are injected by default. Set `enableDragRegionHelpers: false` to disable both; `BrowserWindow.startDragging()` stays available. See the [frameless windows guide](../guides/frameless-windows).
 
 ## Events
 
