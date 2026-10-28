@@ -56,6 +56,15 @@ Stop the pump, hide all tracked windows, and mark the application as exited. Sub
 app.exit(): void
 ```
 
+### `setDockIcon(icon)` / `removeDockIcon()`
+
+On macOS, `setDockIcon()` uses the supplied encoded image bytes as the app's Dock icon. Pass an image buffer that macOS can decode; invalid or empty image data throws an error. `removeDockIcon()` restores the app's original icon. Both methods are no-ops on other platforms.
+
+```ts
+app.setDockIcon(icon: Buffer): void
+app.removeDockIcon(): void
+```
+
 ### `pumpEvents()`
 
 Process one batch of OS events without blocking. Returns `true` while alive, `false` when the app should exit. Normally called automatically by `run()`.

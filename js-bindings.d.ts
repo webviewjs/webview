@@ -6,6 +6,10 @@ export declare class Application {
   bind(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void;
   isReady(): boolean;
   exit(): void;
+  /** Set the macOS Dock icon from encoded image data. This is a no-op elsewhere. */
+  setDockIcon(icon: Buffer): void;
+  /** Restore the original macOS Dock icon. This is a no-op elsewhere. */
+  removeDockIcon(): void;
   /** Creates a new WebContext with the given options. */
   createWebContext(options?: WebContextOptions | undefined | null): JsWebContext;
   createTrayIcon(options: TrayIconOptions): JsTrayIcon;
@@ -143,6 +147,11 @@ export declare class BrowserWindow {
   setCursor(cursor: CursorType): void;
   setCursorVisible(visible: boolean): void;
   setCursorPosition(x: number, y: number): void;
+  /**
+   * Returns the current cursor position. For live mouse movements, use the `mouse-move` event on the `BrowserWindow` instead.
+   * Platform-specific: iOS / Android / Linux(Wayland): Unsupported, returns `0,0`.
+   */
+  getCursorPosition(logical?: boolean | undefined | null): Position;
   setIgnoreCursorEvents(ignore: boolean): void;
   setSkipTaskbar(skip: boolean): void;
   requestRedraw(): void;
@@ -213,6 +222,8 @@ export declare class Webview {
   _exposeInternal(name: string, staticsJson: string, funcNames: Array<string>): void;
   print(): void;
   zoom(scaleFactor: number): void;
+  /** Set the WebView2 color scheme. This is a no-op on platforms other than Windows. */
+  setTheme(theme: Theme): void;
   setWebviewVisibility(visible: boolean): void;
   isDevtoolsOpen(): boolean;
   openDevtools(): void;
@@ -518,6 +529,8 @@ export interface NotificationEventPayload {
   error?: string;
 }
 
+export type NotificationEventThreadsafeFunction = (err: Error | null, arg: NotificationEventPayload) => void;
+
 /** Returns `{protocol}://` */
 export declare function originalUriPrefix(protocol: string): string;
 
@@ -649,6 +662,8 @@ export interface WebviewEventPayload {
   success?: boolean;
 }
 
+export type WebviewEventThreadsafeFunction = (err: Error | null, arg: WebviewEventPayload) => void;
+
 /** Event types fired by a Webview and surfaced as EventEmitter events in JS. */
 export declare enum WebviewEventType {
   PageLoadStarted = 0,
@@ -701,6 +716,8 @@ export interface WebviewOptions {
   /** Whether to inject the drag support: the helper that starts a native window drag from elements marked with `data-webview-drag-region`, and `window.webviewjs.startDragging()` (default: true). */
   enableDragRegionHelpers?: boolean;
 }
+
+export type WebviewScriptThreadsafeFunction = (err: Error | null, arg: string) => void;
 
 export interface WebviewWindowPosition {
   x: number;

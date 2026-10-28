@@ -35,4 +35,14 @@ impl Application {
     // we dont need to define the other methods, since they will never be called if the constructor fails.
     unsupported()
   }
+
+  #[napi]
+  pub fn set_dock_icon(&self, _icon: Buffer) -> Result<()> {
+    Ok(())
+  }
+
+  #[napi]
+  pub fn remove_dock_icon(&self) -> Result<()> {
+    Ok(())
+  }
 }

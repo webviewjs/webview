@@ -227,6 +227,9 @@ interface JsProgressBar {
 win.setTheme(theme: Theme): void
 ```
 
+This sets the native window theme. To change the embedded WebView2 color scheme
+on Windows, call `webview.setTheme(theme)` on the `Webview` instance.
+
 ### Menu
 
 Set `menu` in `BrowserWindowOptions` for a per-window menu. Set `showMenu` to

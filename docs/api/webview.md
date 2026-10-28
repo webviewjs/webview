@@ -122,8 +122,15 @@ interface WebviewCookie {
 ## Appearance
 
 ```ts
+webview.setTheme(theme: Theme): void
 webview.setBackgroundColor(r: number, g: number, b: number, a: number): void  // 0-255 each
 ```
+
+`setTheme()` changes the embedded WebView2 color scheme on Windows. Use
+`Theme.Light` or `Theme.Dark` to choose a scheme, or `Theme.System` to follow
+the system setting. The installed WebView2 Runtime must be version
+101.0.1210.39 or newer; an older runtime returns an error. The method is a
+no-op on other platforms.
 
 ## Bounds (child webviews)
 
@@ -174,7 +181,7 @@ See [IPC guide](../guides/ipc-messaging) for a complete walkthrough.
 
 ## Drag regions
 
-Elements marked with `data-webview-drag-region` drag the window when pressed with the primary mouse button, and `window.webviewjs.startDragging()` starts the same drag from page code. Both are injected by default. Set `enableDragRegionHelpers: false` to turn both off. `win.startDragging()` stays available either way. See the [frameless windows guide](../guides/frameless-windows).
+`data-webview-drag-region` starts dragging on primary-button `mousedown`. A bare attribute or `"true"` applies only to the marked element; `"deep"` includes descendants, and `"false"` opts out. Interactive elements block dragging unless marked themselves. Double-clicking an eligible region toggles maximize when the window allows it; macOS completes that toggle on `mouseup` if the pointer has not moved. `window.webviewjs.startDragging()` remains available for page-controlled drags. Both helpers are injected by default. Set `enableDragRegionHelpers: false` to turn them off. `win.startDragging()` stays available either way. See the [frameless windows guide](../guides/frameless-windows).
 
 ## `expose(name, target)`
 

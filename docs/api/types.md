@@ -224,6 +224,7 @@ enum FullscreenType {
 enum Theme {
   Light = 'Light',
   Dark = 'Dark',
+  System = 'System',
 }
 ```
 
