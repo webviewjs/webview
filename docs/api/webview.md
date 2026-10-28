@@ -181,7 +181,7 @@ See [IPC guide](../guides/ipc-messaging) for a complete walkthrough.
 
 ## Drag regions
 
-Elements marked with `data-webview-drag-region` drag the window when pressed with the primary mouse button, and `window.webviewjs.startDragging()` starts the same drag from page code. Both are injected by default. Set `enableDragRegionHelpers: false` to turn both off. `win.startDragging()` stays available either way. See the [frameless windows guide](../guides/frameless-windows).
+`data-webview-drag-region` starts dragging on primary-button `mousedown`. A bare attribute or `"true"` applies only to the marked element; `"deep"` includes descendants, and `"false"` opts out. Interactive elements block dragging unless marked themselves. Double-clicking an eligible region toggles maximize when the window allows it; macOS completes that toggle on `mouseup` if the pointer has not moved. `window.webviewjs.startDragging()` remains available for page-controlled drags. Both helpers are injected by default. Set `enableDragRegionHelpers: false` to turn them off. `win.startDragging()` stays available either way. See the [frameless windows guide](../guides/frameless-windows).
 
 ## `expose(name, target)`
 

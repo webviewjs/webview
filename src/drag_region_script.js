@@ -1,34 +1,75 @@
+// Adapted from Tauri's window drag-region script:
+// https://github.com/tauri-apps/tauri/blob/dev/crates/tauri/src/window/scripts/drag.js
+// Copyright 2019-2024 Tauri Programme within The Commons Conservancy
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 (() => {
-  const DRAG_REGION_SELECTOR = '[data-webview-drag-region]';
   const DRAG_REGION_ATTRIBUTE = 'data-webview-drag-region';
-  const INTERACTIVE_SELECTOR =
-    'a[href], area[href], button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"])';
-  const DRAG_THRESHOLD = 4;
-  let press = null;
-  window.addEventListener('mousedown', (event) => {
-    press = null;
-    if (!event.isTrusted || event.button !== 0 || event.defaultPrevented) return;
-    // composedPath() also reaches regions inside open shadow roots. It runs from the target outwards.
-    const path = event.composedPath();
-    const regionIndex = path.findIndex((node) => node instanceof Element && node.matches(DRAG_REGION_SELECTOR));
-    if (regionIndex === -1) return;
-    const region = path[regionIndex];
-    if (region.getAttribute(DRAG_REGION_ATTRIBUTE) === 'false') return;
-    const controlIndex = path.findIndex((node) => node instanceof Element && node.matches(INTERACTIVE_SELECTOR));
-    if (controlIndex !== -1 && controlIndex <= regionIndex) return;
+  const DRAG_REGION_MESSAGE = '__WEBVIEWJS_DRAG_REGION_MESSAGE__';
+  const TOGGLE_MAXIMIZE_MESSAGE = '__WEBVIEWJS_TOGGLE_MAXIMIZE_MESSAGE__';
+  const osName = __WEBVIEWJS_OS_NAME__;
+  const CLICKABLE_TAGS = new Set(['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'LABEL', 'SUMMARY']);
+  const INTERACTIVE_ROLES = new Set(['button', 'link', 'menuitem', 'tab', 'checkbox', 'radio', 'switch', 'option']);
+
+  function isClickableElement(element) {
+    return (
+      CLICKABLE_TAGS.has(element.tagName) ||
+      (element.hasAttribute('contenteditable') && element.getAttribute('contenteditable') !== 'false') ||
+      (element.hasAttribute('tabindex') && element.getAttribute('tabindex') !== '-1') ||
+      INTERACTIVE_ROLES.has(element.getAttribute('role'))
+    );
+  }
+
+  function isDragRegion(composedPath) {
+    for (const element of composedPath) {
+      if (!(element instanceof HTMLElement)) continue;
+
+      const attribute = element.getAttribute(DRAG_REGION_ATTRIBUTE);
+      if (isClickableElement(element) && attribute === null) return false;
+      if (attribute === null) continue;
+      if (attribute === 'false') return false;
+      if (attribute === 'deep') return true;
+      if (attribute === '' || attribute === 'true') return element === composedPath[0];
+    }
+
+    return false;
+  }
+
+  let initialX = 0;
+  let initialY = 0;
+
+  document.addEventListener('mousedown', (event) => {
+    if (event.button !== 0 || (event.detail !== 1 && event.detail !== 2) || !isDragRegion(event.composedPath())) {
+      return;
+    }
+
+    if (osName === 'macos' && event.detail === 2) {
+      initialX = event.clientX;
+      initialY = event.clientY;
+      return;
+    }
+
     event.preventDefault();
-    press = { x: event.clientX, y: event.clientY };
+    event.stopImmediatePropagation();
+    const message = event.detail === 2 ? TOGGLE_MAXIMIZE_MESSAGE : DRAG_REGION_MESSAGE;
+    window.ipc.postMessage(message);
   });
-  window.addEventListener('mousemove', (event) => {
-    if (!event.isTrusted || press === null || (event.buttons & 1) === 0) return;
-    if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD) return;
-    press = null;
-    window.ipc.postMessage('__WEBVIEWJS_DRAG_REGION_MESSAGE__');
-  });
-  window.addEventListener('mouseup', () => {
-    press = null;
-  });
-  // Track the primary button in the capture phase, so the API sees the state before page handlers run.
+
+  if (osName === 'macos') {
+    document.addEventListener('mouseup', (event) => {
+      if (
+        event.button === 0 &&
+        event.detail === 2 &&
+        event.clientX === initialX &&
+        event.clientY === initialY &&
+        isDragRegion(event.composedPath())
+      ) {
+        window.ipc.postMessage(TOGGLE_MAXIMIZE_MESSAGE);
+      }
+    });
+  }
+
+  // Keep the page API's button-state check in capture phase, before page handlers run.
   let primaryDown = false;
   for (const type of ['mousedown', 'mousemove', 'mouseup']) {
     window.addEventListener(
@@ -40,12 +81,13 @@
       true,
     );
   }
+
   // Leave an existing global alone, for example one defined by a preload script.
   if (!('webviewjs' in window)) {
     Object.defineProperty(window, 'webviewjs', {
       value: Object.freeze({
         startDragging() {
-          if (primaryDown) window.ipc.postMessage('__WEBVIEWJS_DRAG_REGION_MESSAGE__');
+          if (primaryDown) window.ipc.postMessage(DRAG_REGION_MESSAGE);
         },
       }),
     });

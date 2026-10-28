@@ -79,24 +79,49 @@ fn call_new_window_handler(
 /// Fixed IPC body sent by the drag-region helper. It carries no arguments, so
 /// page content can only ask its own window to start a native drag.
 const DRAG_REGION_MESSAGE: &str = "__webviewjs_start_dragging__";
+/// Fixed IPC body sent when a drag region is double-clicked.
+const TOGGLE_MAXIMIZE_MESSAGE: &str = "__webviewjs_toggle_maximize__";
 
 /// Page-side drag support, injected before page scripts when the helpers are enabled.
 ///
-/// - `data-webview-drag-region`: the nearest marked element on the event path determines whether
-///   a primary-button press arms the helper; a value of `false` opts out of a draggable parent. The
-///   native drag starts on the first pointer movement past a small threshold while the button is
-///   still held. A drag started on mousedown can arrive after a fast click has been released.
+/// - `data-webview-drag-region`: empty or `true` values mark only the element itself; `deep` also
+///   marks descendants; and `false` opts out of matching ancestors. Unmarked interactive elements
+///   block dragging.
+/// - A primary-button press starts dragging on `mousedown`. A double-click toggles maximization;
+///   macOS waits for the matching `mouseup` so pointer movement can cancel the toggle.
 /// - `window.webviewjs.startDragging()`: the same native drag, for page code. It does nothing unless
 ///   the primary button is currently down.
 ///
-/// Both post `DRAG_REGION_MESSAGE`, which the IPC handler consumes before any `onIpcMessage` handler.
+/// Both internal messages are consumed before any `onIpcMessage` handler.
 const DRAG_REGION_MESSAGE_PLACEHOLDER: &str = "__WEBVIEWJS_DRAG_REGION_MESSAGE__";
+const TOGGLE_MAXIMIZE_MESSAGE_PLACEHOLDER: &str = "__WEBVIEWJS_TOGGLE_MAXIMIZE_MESSAGE__";
+const DRAG_REGION_OS_NAME_PLACEHOLDER: &str = "__WEBVIEWJS_OS_NAME__";
 const IPC_ALIAS_NAME_PLACEHOLDER: &str = "__WEBVIEWJS_IPC_ALIAS_NAME__";
 const EXPOSE_CONFIG_PLACEHOLDER: &str = "__WEBVIEWJS_EXPOSE_CONFIG__";
 
+fn toggle_maximize_state(
+  resizable: bool,
+  is_maximized: impl FnOnce() -> bool,
+  is_maximizable: impl FnOnce() -> bool,
+) -> Option<bool> {
+  if !resizable {
+    return None;
+  }
+  if is_maximized() {
+    return Some(false);
+  }
+  if is_maximizable() {
+    return Some(true);
+  }
+  None
+}
+
 fn drag_region_script() -> String {
+  let os_name = serde_json::to_string(std::env::consts::OS).expect("OS name is serializable");
   include_str!("drag_region_script.js")
     .replace(DRAG_REGION_MESSAGE_PLACEHOLDER, DRAG_REGION_MESSAGE)
+    .replace(TOGGLE_MAXIMIZE_MESSAGE_PLACEHOLDER, TOGGLE_MAXIMIZE_MESSAGE)
+    .replace(DRAG_REGION_OS_NAME_PLACEHOLDER, &os_name)
 }
 
 fn ipc_alias_script(ipc_name: &str) -> String {
@@ -557,6 +582,19 @@ impl JsWebview {
       if drag_region_helpers && req.body() == DRAG_REGION_MESSAGE {
         if let Some(window) = ipc_window.upgrade() {
           let _ = window.drag_window();
+        }
+        return;
+      }
+
+      if drag_region_helpers && req.body() == TOGGLE_MAXIMIZE_MESSAGE {
+        if let Some(window) = ipc_window.upgrade() {
+          if let Some(maximized) = toggle_maximize_state(
+            window.is_resizable(),
+            || window.is_maximized(),
+            || window.is_maximizable(),
+          ) {
+            window.set_maximized(maximized);
+          }
         }
         return;
       }
@@ -1107,4 +1145,27 @@ fn js_to_cookie(c: &WebviewCookie) -> wry::cookie::Cookie<'static> {
     builder = builder.same_site(same_site);
   }
   builder.build()
+}
+
+#[cfg(test)]
+mod maximize_toggle_tests {
+  use super::toggle_maximize_state;
+
+  #[test]
+  fn toggle_maximize_matches_tauri_resizability_checks() {
+    assert_eq!(
+      toggle_maximize_state(
+        false,
+        || panic!("must not query maximized state"),
+        || { panic!("must not query maximizable state") }
+      ),
+      None,
+    );
+    assert_eq!(
+      toggle_maximize_state(true, || true, || panic!("already maximized")),
+      Some(false),
+    );
+    assert_eq!(toggle_maximize_state(true, || false, || false), None);
+    assert_eq!(toggle_maximize_state(true, || false, || true), Some(true));
+  }
 }
