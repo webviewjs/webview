@@ -118,7 +118,7 @@ fn toggle_maximize_state(
 
 fn drag_region_script() -> String {
   let os_name = serde_json::to_string(std::env::consts::OS).expect("OS name is serializable");
-  include_str!("drag_region_script.js")
+  include_str!("scripts/drag_region_script.js")
     .replace(DRAG_REGION_MESSAGE_PLACEHOLDER, DRAG_REGION_MESSAGE)
     .replace(TOGGLE_MAXIMIZE_MESSAGE_PLACEHOLDER, TOGGLE_MAXIMIZE_MESSAGE)
     .replace(DRAG_REGION_OS_NAME_PLACEHOLDER, &os_name)
@@ -126,7 +126,7 @@ fn drag_region_script() -> String {
 
 fn ipc_alias_script(ipc_name: &str) -> String {
   let name_json = serde_json::to_string(ipc_name).unwrap_or_else(|_| format!("\"{}\"", ipc_name));
-  include_str!("ipc_alias_script.js").replace(IPC_ALIAS_NAME_PLACEHOLDER, &name_json)
+  include_str!("scripts/ipc_alias_script.js").replace(IPC_ALIAS_NAME_PLACEHOLDER, &name_json)
 }
 
 pub(crate) fn protocol_error_response(
@@ -750,7 +750,8 @@ impl JsWebview {
       statics = statics_json,
       funcs = funcs_json,
     );
-    let script = include_str!("expose_script.js").replace(EXPOSE_CONFIG_PLACEHOLDER, &config_json);
+    let script =
+      include_str!("scripts/expose_script.js").replace(EXPOSE_CONFIG_PLACEHOLDER, &config_json);
 
     self
       .webview()

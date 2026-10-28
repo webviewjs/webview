@@ -6,7 +6,7 @@ import { test } from 'node:test';
 const DRAG_REGION_ATTRIBUTE = 'data-webview-drag-region';
 const DRAG_REGION_MESSAGE = '__webviewjs_start_dragging__';
 const TOGGLE_MAXIMIZE_MESSAGE = '__webviewjs_toggle_maximize__';
-const SCRIPT_TEMPLATE = readFileSync(new URL('../src/drag_region_script.js', import.meta.url), 'utf8');
+const SCRIPT_TEMPLATE = readFileSync(new URL('../src/scripts/drag_region_script.js', import.meta.url), 'utf8');
 
 class FakeEventTarget {
   constructor() {
