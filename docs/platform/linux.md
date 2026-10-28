@@ -26,6 +26,10 @@ sudo dnf install webkit2gtk4.1-devel libxdo-devel
 sudo pacman -S webkit2gtk-4.1 xdotool
 ```
 
+Custom protocol request bodies require **WebKitGTK 2.40 or newer**. Check the
+installed WebKitGTK version when building or running on Linux distributions
+that provide older 4.1 packages.
+
 ## Display server support
 
 WebviewJS supports both **X11** and **Wayland** through Tao. The active backend
