@@ -6,6 +6,10 @@ export declare class Application {
   bind(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void;
   isReady(): boolean;
   exit(): void;
+  /** Set the macOS Dock icon from encoded image data. This is a no-op elsewhere. */
+  setDockIcon(icon: Buffer): void;
+  /** Restore the original macOS Dock icon. This is a no-op elsewhere. */
+  removeDockIcon(): void;
   /** Creates a new WebContext with the given options. */
   createWebContext(options?: WebContextOptions | undefined | null): JsWebContext;
   createTrayIcon(options: TrayIconOptions): JsTrayIcon;

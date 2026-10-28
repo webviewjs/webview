@@ -17,6 +17,12 @@ use muda::Menu;
 use napi::bindgen_prelude::*;
 use napi::Result;
 use napi_derive::napi;
+#[cfg(target_os = "macos")]
+use objc2::MainThreadMarker;
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSApplication, NSImage};
+#[cfg(target_os = "macos")]
+use objc2_foundation::NSData;
 use tao::{
   event::{ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
   event_loop::{DeviceEventFilter, EventLoop},
@@ -209,6 +215,28 @@ fn logical_key_name(key: &Key<'_>) -> Option<String> {
 
 fn physical_key_code(key: &KeyCode) -> Option<String> {
   Some(format!("{:?}", key))
+}
+
+#[cfg(target_os = "macos")]
+fn require_macos_main_thread() -> Result<MainThreadMarker> {
+  MainThreadMarker::new().ok_or_else(|| {
+    napi::Error::new(
+      napi::Status::GenericFailure,
+      "Dock icon changes must be made on the macOS main thread",
+    )
+  })
+}
+
+#[cfg(target_os = "macos")]
+fn validate_dock_icon_data(icon: &[u8]) -> Result<()> {
+  if icon.is_empty() {
+    return Err(napi::Error::new(
+      napi::Status::InvalidArg,
+      "Dock icon image data must not be empty",
+    ));
+  }
+
+  Ok(())
 }
 
 // ── Window event dispatch (moved out of ApplicationHandler) ───────────────────
@@ -855,6 +883,46 @@ impl Application {
     }
   }
 
+  /// Set the macOS Dock icon from encoded image data. This is a no-op elsewhere.
+  #[napi]
+  pub fn set_dock_icon(&self, icon: Buffer) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+      validate_dock_icon_data(&icon)?;
+      let mtm = require_macos_main_thread()?;
+      let data = NSData::with_bytes(&icon);
+      let image = NSImage::initWithData(mtm.alloc(), &data).ok_or_else(|| {
+        napi::Error::new(
+          napi::Status::InvalidArg,
+          "Invalid dock icon image data; provide an image format supported by macOS",
+        )
+      })?;
+
+      let application = NSApplication::sharedApplication(mtm);
+      // SAFETY: A non-null image is valid for this setter.
+      unsafe { application.setApplicationIconImage(Some(&image)) };
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = icon;
+
+    Ok(())
+  }
+
+  /// Restore the original macOS Dock icon. This is a no-op elsewhere.
+  #[napi]
+  pub fn remove_dock_icon(&self) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+      let mtm = require_macos_main_thread()?;
+      let application = NSApplication::sharedApplication(mtm);
+      // SAFETY: Apple's NSApplication API specifies nil as restoring the original icon.
+      unsafe { application.setApplicationIconImage(None) };
+    }
+
+    Ok(())
+  }
+
   #[napi]
   /// Creates a new WebContext with the given options.
   pub fn create_web_context(&mut self, options: Option<WebContextOptions>) -> Result<JsWebContext> {
@@ -1321,5 +1389,24 @@ mod tests {
     assert!(state.prevent());
     assert!(state.finish());
     assert!(!state.prevent());
+  }
+
+  #[cfg(target_os = "macos")]
+  #[test]
+  fn dock_icon_rejects_empty_image_data() {
+    let error = super::validate_dock_icon_data(&[]).unwrap_err();
+
+    assert_eq!(error.status, napi::Status::InvalidArg);
+    assert_eq!(error.reason, "Dock icon image data must not be empty");
+  }
+
+  #[cfg(target_os = "macos")]
+  #[test]
+  fn dock_icon_operations_reject_non_main_threads() {
+    let rejected = std::thread::spawn(|| super::require_macos_main_thread().is_err())
+      .join()
+      .unwrap();
+
+    assert!(rejected);
   }
 }

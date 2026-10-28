@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,4 +16,11 @@ test('generated NAPI declarations compile without skipping library checks', () =
   );
 
   assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+});
+
+test('Application exposes the dock icon APIs with Buffer input', () => {
+  const declarations = readFileSync(resolve(repoRoot, 'js-bindings.d.ts'), 'utf8');
+
+  assert.match(declarations, /setDockIcon\(icon: Buffer\): void;/);
+  assert.match(declarations, /removeDockIcon\(\): void;/);
 });
