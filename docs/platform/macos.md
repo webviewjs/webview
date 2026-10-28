@@ -6,7 +6,9 @@ WebviewJS on macOS uses the built-in **WebKit** (WKWebView). No runtime installa
 
 ## Main thread requirement
 
-macOS enforces that all GUI operations happen on the main thread. WebviewJS handles this automatically — do **not** create `Application` or `BrowserWindow` from a `worker_threads` Worker or any async context that moves the call off the main thread.
+macOS enforces that GUI operations happen on the main thread. Create `Application` and `BrowserWindow` on the main JavaScript thread; do **not** create them from a `worker_threads` Worker or an async context that moves the call off the main thread.
+
+`app.setDockIcon(buffer)` and `app.removeDockIcon()` check that they are called on the macOS main thread and return an error otherwise. `setDockIcon()` accepts encoded image bytes supported by AppKit and throws for empty or invalid image data. `removeDockIcon()` restores the original app icon.
 
 ## App-level menu bar
 
@@ -61,4 +63,4 @@ See [BrowserWindow platform APIs](../api/browser-window#macos-creation-options).
 
 - **`setSkipTaskbar`** is a no-op on macOS (use `NSApplication.setActivationPolicy` for dock hiding, which requires an entitlement).
 - **Click-through** (`setIgnoreCursorEvents`) is supported via `NSWindow.setIgnoresMouseEvents`.
-- **Window icons** are not shown on the macOS dock — the app icon is set via the bundle's `Info.plist`.
+- The bundle's `Info.plist` icon is used by default. `app.setDockIcon(buffer)` can temporarily change the Dock icon at runtime, and `app.removeDockIcon()` restores the bundle icon.
