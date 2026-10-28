@@ -147,6 +147,11 @@ export declare class BrowserWindow {
   setCursor(cursor: CursorType): void;
   setCursorVisible(visible: boolean): void;
   setCursorPosition(x: number, y: number): void;
+  /**
+   * Returns the current cursor position. For live mouse movements, use the `mouse-move` event on the `BrowserWindow` instead.
+   * Platform-specific: iOS / Android / Linux(Wayland): Unsupported, returns `0,0`.
+   */
+  getCursorPosition(logical?: boolean | undefined | null): Position;
   setIgnoreCursorEvents(ignore: boolean): void;
   setSkipTaskbar(skip: boolean): void;
   requestRedraw(): void;
