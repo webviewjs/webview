@@ -213,6 +213,8 @@ export declare class Webview {
   _exposeInternal(name: string, staticsJson: string, funcNames: Array<string>): void;
   print(): void;
   zoom(scaleFactor: number): void;
+  /** Set the WebView2 color scheme. This is a no-op on platforms other than Windows. */
+  setTheme(theme: Theme): void;
   setWebviewVisibility(visible: boolean): void;
   isDevtoolsOpen(): boolean;
   openDevtools(): void;
