@@ -31,7 +31,7 @@ win.createWebview({
 app.run();
 ```
 
-A primary-button press inside an element marked `data-webview-drag-region` starts a native drag, once the pointer has moved a few pixels with the button still held. Clicks never move the window. The helper listens on `window`, so elements added later are covered without setup.
+A primary-button press inside an element marked `data-webview-drag-region` starts a native drag, once the pointer has moved a few pixels with the button still held. Clicks never move the window. The nearest marked element determines whether the press can drag: set `data-webview-drag-region="false"` on a nested element to opt that area out of a draggable parent. The helper listens on `window`, so elements added later are covered without setup.
 
 - **Interactive children keep their behavior.** Presses on links, buttons, form controls, labels, summaries, and `contenteditable` content inside a region don't drag.
 - **Page code can opt out.** If a handler calls `event.preventDefault()` on the `mousedown`, the helper ignores that press.

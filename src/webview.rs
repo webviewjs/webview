@@ -82,61 +82,26 @@ const DRAG_REGION_MESSAGE: &str = "__webviewjs_start_dragging__";
 
 /// Page-side drag support, injected before page scripts when the helpers are enabled.
 ///
-/// - `data-webview-drag-region`: a primary-button press inside a drag region arms the helper, and
-///   the native drag starts on the first pointer movement past a small threshold while the button
-///   is still held. A drag started on mousedown can arrive after a fast click has been released.
+/// - `data-webview-drag-region`: the nearest marked element on the event path determines whether
+///   a primary-button press arms the helper; a value of `false` opts out of a draggable parent. The
+///   native drag starts on the first pointer movement past a small threshold while the button is
+///   still held. A drag started on mousedown can arrive after a fast click has been released.
 /// - `window.webviewjs.startDragging()`: the same native drag, for page code. It does nothing unless
 ///   the primary button is currently down.
 ///
 /// Both post `DRAG_REGION_MESSAGE`, which the IPC handler consumes before any `onIpcMessage` handler.
+const DRAG_REGION_MESSAGE_PLACEHOLDER: &str = "__WEBVIEWJS_DRAG_REGION_MESSAGE__";
+const IPC_ALIAS_NAME_PLACEHOLDER: &str = "__WEBVIEWJS_IPC_ALIAS_NAME__";
+const EXPOSE_CONFIG_PLACEHOLDER: &str = "__WEBVIEWJS_EXPOSE_CONFIG__";
+
 fn drag_region_script() -> String {
-  format!(
-    r#"(() => {{
-  const DRAG_REGION_SELECTOR = '[data-webview-drag-region]';
-  const INTERACTIVE_SELECTOR = 'a[href], area[href], button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"])';
-  const DRAG_THRESHOLD = 4;
-  let press = null;
-  window.addEventListener('mousedown', (event) => {{
-    press = null;
-    if (!event.isTrusted || event.button !== 0 || event.defaultPrevented) return;
-    // composedPath() also reaches regions inside open shadow roots. It runs from the target outwards,
-    // so a control at or before the region's index sits inside that region.
-    const path = event.composedPath();
-    const region = path.findIndex((node) => node instanceof Element && node.matches(DRAG_REGION_SELECTOR));
-    if (region === -1) return;
-    const control = path.findIndex((node) => node instanceof Element && node.matches(INTERACTIVE_SELECTOR));
-    if (control !== -1 && control <= region) return;
-    event.preventDefault();
-    press = {{ x: event.clientX, y: event.clientY }};
-  }});
-  window.addEventListener('mousemove', (event) => {{
-    if (!event.isTrusted || press === null || (event.buttons & 1) === 0) return;
-    if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD) return;
-    press = null;
-    window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
-  }});
-  window.addEventListener('mouseup', () => {{
-    press = null;
-  }});
-  // Track the primary button in the capture phase, so the API sees the state before page handlers run.
-  let primaryDown = false;
-  for (const type of ['mousedown', 'mousemove', 'mouseup']) {{
-    window.addEventListener(type, (event) => {{
-      primaryDown = (event.buttons & 1) === 1;
-    }}, true);
-  }}
-  // Leave an existing global alone, for example one defined by a preload script.
-  if (!('webviewjs' in window)) {{
-    Object.defineProperty(window, 'webviewjs', {{
-      value: Object.freeze({{
-        startDragging() {{
-          if (primaryDown) window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
-        }},
-      }}),
-    }});
-  }}
-}})();"#
-  )
+  include_str!("drag_region_script.js")
+    .replace(DRAG_REGION_MESSAGE_PLACEHOLDER, DRAG_REGION_MESSAGE)
+}
+
+fn ipc_alias_script(ipc_name: &str) -> String {
+  let name_json = serde_json::to_string(ipc_name).unwrap_or_else(|_| format!("\"{}\"", ipc_name));
+  include_str!("ipc_alias_script.js").replace(IPC_ALIAS_NAME_PLACEHOLDER, &name_json)
 }
 
 pub(crate) fn protocol_error_response(
@@ -374,10 +339,7 @@ impl JsWebview {
     // wry always exposes `window.ipc`; create an alias under a custom name.
     if let Some(ref ipc_name) = options.ipc_name {
       if ipc_name != "ipc" {
-        let alias = format!(
-          "Object.defineProperty(window,{n},{{get:()=>window.ipc,configurable:true,enumerable:true}});",
-          n = serde_json::to_string(ipc_name).unwrap_or_else(|_| format!("\"{}\"", ipc_name))
-        );
+        let alias = ipc_alias_script(ipc_name);
         webview = webview.with_initialization_script(&alias);
       }
     }
@@ -744,38 +706,13 @@ impl JsWebview {
     let funcs_json = serde_json::to_string(&func_names)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
 
-    let script = format!(
-      r#"(function(){{
-  if(!window.__webviewjs__){{
-    let __id=0;
-    const __p=new Map();
-    window.__webviewjs__={{
-      resolve:function(id,val){{const e=__p.get(id);if(e){{__p.delete(id);e[0](val);}}}},
-      reject:function(id,message,name){{const e=__p.get(id);if(e){{__p.delete(id);const err=new Error(message);err.name=name||'Error';e[1](err);}}}},
-      call:function(ns,method,args){{
-        let argsJson;
-        try{{argsJson=JSON.stringify(args);if(argsJson===undefined)throw new Error('not serialisable');}}
-        catch{{const err=new Error('Arguments are not JSON-serialisable');err.name='SerializationError';return Promise.reject(err);}}
-        return new Promise(function(res,rej){{
-          const id=++__id;
-          __p.set(id,[res,rej]);
-          window.ipc.postMessage(JSON.stringify({{__e:true,ns:ns,method:method,id:id,args:JSON.parse(argsJson)}}));
-        }});
-      }}
-    }};
-  }}
-  const __statics={statics};
-  const __funcs={funcs};
-  const __ns=Object.assign({{}},__statics);
-  for(const fn of __funcs){{
-    (function(m){{__ns[m]=function(){{return window.__webviewjs__.call({name},m,Array.from(arguments));}};}})(fn);
-  }}
-  window[{name}]=__ns;
-}})();"#,
+    let config_json = format!(
+      r#"{{"name":{name},"statics":{statics},"funcs":{funcs}}}"#,
+      name = name_json,
       statics = statics_json,
       funcs = funcs_json,
-      name = name_json,
     );
+    let script = include_str!("expose_script.js").replace(EXPOSE_CONFIG_PLACEHOLDER, &config_json);
 
     self
       .webview()
