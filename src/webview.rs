@@ -167,7 +167,8 @@ pub(crate) struct ProtocolRegistration {
   pub(crate) handler: ProtocolHandlerRef,
 }
 
-pub(crate) type WebviewEventThreadsafeFunction = ThreadsafeFunction<
+#[napi]
+pub type WebviewEventThreadsafeFunction = ThreadsafeFunction<
   WebviewEventPayload,
   (),
   WebviewEventPayload,
@@ -175,7 +176,8 @@ pub(crate) type WebviewEventThreadsafeFunction = ThreadsafeFunction<
   true, // CalleeHandled
   true, // Weak
 >;
-pub(crate) type WebviewScriptThreadsafeFunction = ThreadsafeFunction<
+#[napi]
+pub type WebviewScriptThreadsafeFunction = ThreadsafeFunction<
   String,
   (),
   String,

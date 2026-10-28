@@ -520,6 +520,8 @@ export interface NotificationEventPayload {
   error?: string;
 }
 
+export type NotificationEventThreadsafeFunction = (err: Error | null, arg: NotificationEventPayload) => void;
+
 /** Returns `{protocol}://` */
 export declare function originalUriPrefix(protocol: string): string;
 
@@ -651,6 +653,8 @@ export interface WebviewEventPayload {
   success?: boolean;
 }
 
+export type WebviewEventThreadsafeFunction = (err: Error | null, arg: WebviewEventPayload) => void;
+
 /** Event types fired by a Webview and surfaced as EventEmitter events in JS. */
 export declare enum WebviewEventType {
   PageLoadStarted = 0,
@@ -703,6 +707,8 @@ export interface WebviewOptions {
   /** Whether to inject the drag support: the helper that starts a native window drag from elements marked with `data-webview-drag-region`, and `window.webviewjs.startDragging()` (default: true). */
   enableDragRegionHelpers?: boolean;
 }
+
+export type WebviewScriptThreadsafeFunction = (err: Error | null, arg: string) => void;
 
 export interface WebviewWindowPosition {
   x: number;
