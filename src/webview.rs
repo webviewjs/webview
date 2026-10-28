@@ -801,6 +801,33 @@ impl JsWebview {
     })
   }
 
+  /// Set the WebView2 color scheme. This is a no-op on platforms other than Windows.
+  #[napi]
+  pub fn set_theme(&self, theme: Theme) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+      use wry::WebViewExtWindows;
+
+      let theme = match theme {
+        Theme::Light => wry::Theme::Light,
+        Theme::Dark => wry::Theme::Dark,
+        Theme::System => wry::Theme::Auto,
+      };
+
+      self.webview().set_theme(theme).map_err(|e| {
+        napi::Error::new(
+          napi::Status::GenericFailure,
+          format!("Failed to set webview theme: {e}"),
+        )
+      })?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = theme;
+
+    Ok(())
+  }
+
   #[napi]
   pub fn set_webview_visibility(&self, visible: bool) -> Result<()> {
     self.webview().set_visible(visible).map_err(|e| {

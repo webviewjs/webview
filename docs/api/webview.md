@@ -122,8 +122,15 @@ interface WebviewCookie {
 ## Appearance
 
 ```ts
+webview.setTheme(theme: Theme): void
 webview.setBackgroundColor(r: number, g: number, b: number, a: number): void  // 0-255 each
 ```
+
+`setTheme()` changes the embedded WebView2 color scheme on Windows. Use
+`Theme.Light` or `Theme.Dark` to choose a scheme, or `Theme.System` to follow
+the system setting. The installed WebView2 Runtime must be version
+101.0.1210.39 or newer; an older runtime returns an error. The method is a
+no-op on other platforms.
 
 ## Bounds (child webviews)
 
