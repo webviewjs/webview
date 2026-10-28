@@ -1367,6 +1367,29 @@ impl BrowserWindow {
   }
 
   #[napi]
+  /// Returns the current cursor position. For live mouse movements, use the `mouse-move` event on the `BrowserWindow` instead.
+  /// Platform-specific: iOS / Android / Linux(Wayland): Unsupported, returns `0,0`.
+  pub fn get_cursor_position(&self, logical: Option<bool>) -> Result<Position> {
+    self
+      .window()
+      .cursor_position()
+      .map(|pos| match logical {
+        Some(true) => {
+          let logical_pos = pos.to_logical::<f64>(self.window().scale_factor());
+          Position {
+            x: logical_pos.x as i32,
+            y: logical_pos.y as i32,
+          }
+        }
+        _ => Position {
+          x: pos.x as i32,
+          y: pos.y as i32,
+        },
+      })
+      .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
+  }
+
+  #[napi]
   pub fn set_ignore_cursor_events(&self, ignore: bool) -> Result<()> {
     self
       .window()
