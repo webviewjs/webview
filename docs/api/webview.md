@@ -27,8 +27,14 @@ interface WebviewOptions {
   navigationHandler?: (url: string) => boolean; // allow or cancel navigation
   newWindowHandler?: (event: WebviewNewWindowEvent) => boolean; // allow or cancel new windows
   enableDragRegionHelpers?: boolean; // default: true; drag regions and window.webviewjs
+  nativeFileDrop?: boolean; // default: false; receive native file/folder drops
 }
 ```
+
+`nativeFileDrop` is opt-in. When enabled, Wry installs a native drag-and-drop
+handler for this webview and emits `drag-enter`, `drag-over`, `drag-drop`, and
+`drag-leave`. When omitted or `false`, no native webview handler is registered,
+so the webview keeps its normal HTML5 drag-and-drop behavior.
 
 > **Note on bounds:** For top-level webviews (not child), omit `x`/`y`/`width`/`height` so the webview fills the window and resizes with it automatically. Setting explicit bounds fixes the size, which causes the black-border artifact when the window is maximised.
 
@@ -79,6 +85,55 @@ asynchronously, so use `newWindowHandler` or `navigationHandler` to cancel a
 request. Download events are observational and do not cancel downloads.
 
 See the runnable [webview events example](../../examples/webview-events.mjs).
+
+### Native file drag-and-drop
+
+```js
+const webview = win.createWebview({ url: 'https://example.com', nativeFileDrop: true });
+
+webview.on('drag-enter', ({ paths, position }) => console.log(paths, position));
+webview.on('drag-over', ({ position }) => console.log(position));
+webview.on('drag-drop', ({ paths, position }) => console.log(paths, position));
+webview.on('drag-leave', () => console.log('Drag left webview'));
+```
+
+`drag-enter` and `drag-drop` include every file or directory path supplied by
+Wry. `drag-over` includes only the current position. `drag-leave` has no paths
+or position. Positions use the coordinate system reported by Wry and are
+relative to the webview's top-left corner; WebviewJS does not convert them to
+window or CSS coordinates. These are observational events sent
+through the webview's EventEmitter; they do not run JavaScript synchronously
+inside the native drag callback.
+
+These webview events are separate from the `BrowserWindow`'s `file-hover` and
+`file-drop` events. The window events continue to report drops handled by the
+window-level target, such as drops over the title bar. A native webview drop is
+reported on that `Webview` instance and is not re-emitted on its parent window.
+See [BrowserWindow events](./browser-window.md#events) for the existing
+window-level API.
+
+With Wry 0.55.1, the handler is available on Windows, macOS, and Linux. On
+Windows, Wry replaces WebView2's external file drop target while this option is
+enabled; WebView2's normal HTML5 file-drop handling, including drops onto
+`<input type="file">`, is not preserved. Windows ignores Wry's handler return
+value. On macOS and Linux, this implementation returns `true` to Wry to consume
+the native drop; Wry documents that consuming the drop prevents drops onto
+`<input type="file">`. Disable `nativeFileDrop` when the page needs its normal
+HTML5 file-drop behavior. This API does not resolve paths from DOM `File`
+objects.
+
+#### Manual platform verification
+
+Run `node examples/native-file-drop.mjs` on Windows, macOS, or Linux. Drag a
+file and a directory, including a multi-item selection, over the page and
+confirm that `drag-enter` and `drag-drop` report all paths and webview-relative
+positions, `drag-over` updates the position, and dragging outside the view emits
+`drag-leave`. Then try the example with `nativeFileDrop: false` and confirm no
+native webview events arrive and the page retains normal HTML5 handling. To
+check compatibility, drop an item over the window title bar and confirm the
+existing `BrowserWindow` `file-hover` / `file-drop` events still report it.
+On Windows, also verify that file drops onto an HTML `<input>` are unavailable
+while native handling is enabled.
 
 `HeaderData`:
 

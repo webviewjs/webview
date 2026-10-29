@@ -18,6 +18,28 @@ test('generated NAPI declarations compile without skipping library checks', () =
   assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
 });
 
+test('webview drag-drop events have typed payloads and keep window file events', () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      tsc,
+      '--noEmit',
+      '--skipLibCheck',
+      'false',
+      '--target',
+      'ESNext',
+      '--module',
+      'commonjs',
+      '--moduleResolution',
+      'node',
+      resolve(repoRoot, '__test__/types/native-file-drop.ts'),
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+});
+
 test('Application exposes the dock icon APIs with Buffer input', () => {
   const declarations = readFileSync(resolve(repoRoot, 'js-bindings.d.ts'), 'utf8');
 
