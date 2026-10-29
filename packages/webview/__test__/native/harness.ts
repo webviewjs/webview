@@ -97,6 +97,9 @@ const native = {
         if (typeof result !== 'boolean') throw new TypeError('setPreventCloseResult requires a boolean');
         binding.__stateFor(window, 'window').preventCloseResult = result;
       },
+      setCursorPosition(position: { x: number; y: number }): void {
+        binding.__stateFor(window, 'window').values.cursorPosition = position;
+      },
       webview(index = 0): Webview {
         const webview = binding.__stateFor(window, 'window').webviews[index];
         if (!webview) throw new RangeError(`No webview at index ${index}`);

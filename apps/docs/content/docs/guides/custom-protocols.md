@@ -77,6 +77,14 @@ interface CustomProtocolResponse {
 }
 ```
 
+## Request bodies on Linux
+
+Custom protocol `Request` objects include request bodies on Linux when the
+system WebKitGTK version is 2.40 or newer. The Linux native build enables Wry's
+`linux-body` support. Older WebKitGTK versions may deliver an empty body.
+The [request body example](https://github.com/webviewjs/webview/blob/main/apps/examples/custom-protocol-body.ts)
+checks text, binary, and empty POST requests.
+
 ## Security
 
 Never resolve a request path without checking it remains inside the intended asset directory. Normalize and validate the path before passing it to the file system. The runnable [custom protocol example](https://github.com/webviewjs/webview/blob/main/apps/examples/custom-protocol.ts) includes this check.

@@ -33,6 +33,20 @@ test('BrowserWindow forwards native events through a per-instance EventEmitter',
   expect(native.window(first).calls.filter((call) => call.method === '_onWindowEvent').length).toBe(1);
 });
 
+test('getCursorPosition forwards logical coordinate selection', () => {
+  const win = window();
+  native.window(win).setCursorPosition({ x: 12, y: 34 });
+
+  expect(win.getCursorPosition()).toEqual({ x: 12, y: 34 });
+  expect(win.getCursorPosition(true)).toEqual({ x: 12, y: 34 });
+  expect(
+    native
+      .window(win)
+      .calls.filter((call) => call.method === 'getCursorPosition')
+      .map((call) => call.args),
+  ).toEqual([[null], [true]]);
+});
+
 test('close cancellation is dispatch-scoped and repeated preventDefault calls are idempotent', () => {
   const win = window();
   const observed = [];

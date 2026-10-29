@@ -63,6 +63,10 @@ window.
 `FileFilter` has `name: string` and `extensions: string[]`. Its extensions
 contain suffixes such as `['txt', 'md']`.
 
+`WebviewOptions.nativeFileDrop` defaults to `false`. When enabled, the
+Webview's event map includes `drag-enter`, `drag-over`, `drag-drop`, and
+`drag-leave`; see [Webview](./webview#native-file-drag-and-drop).
+
 `TrayIconImage` has `data: Buffer`, with optional `width` and `height`. Pass
 encoded image bytes without dimensions or raw RGBA bytes with dimensions. If
 only `width` is supplied, the native decoder treats the image as square;
@@ -130,8 +134,8 @@ The classes expose typed event maps:
   payload provides synchronous `preventDefault()`; see [Application
   lifecycle](../guides/application-lifecycle).
 - `WebviewEventMap` maps load, title, download, `navigation`, and `new-window`
-  events to their payload interfaces. Observation events cannot cancel a
-  request; see [Webview](./webview#events).
+  events plus native file drag events to their payload interfaces. Observation
+  events cannot cancel a request; see [Webview](./webview#events).
 - `TrayEventMap` maps `click`, `double-click`, `enter`, `move`, and `leave` to
   `TrayEventPayload`. Their availability depends on the platform.
 - `NotificationEventMap` maps `show`, `click`, `close`, and `error` to
@@ -139,10 +143,17 @@ The classes expose typed event maps:
 
 The exported payload types include `ApplicationEvent`, `CustomMenuEvent`,
 `WindowEventPayload`, `WebviewEventPayload`, `WebviewNewWindowFeatures`,
-`WebviewWindowSize`, `WebviewWindowPosition`, `TrayEventPayload`, `TrayRect`,
+`WebviewWindowSize`, `WebviewWindowPosition`, `WebviewDragEvent`,
+`TrayEventPayload`, `TrayRect`,
 `AndroidContentRect`, and the event-specific types exported from the package
 root. `CustomMenuEvent` contains `id` and `windowId`; the current native adapter
 sets `windowId` to `0` for menu events.
+
+`WebviewEventPayload` includes optional `paths: string[]` and
+`position: WebviewWindowPosition` properties for native file-drag events.
+`NotificationEventThreadsafeFunction`, `WebviewEventThreadsafeFunction`, and
+`WebviewScriptThreadsafeFunction` are exported callback aliases for consumers
+working directly with generated bindings.
 
 ```ts
 interface ApplicationEvent {
@@ -209,7 +220,9 @@ Import enum members instead of hard-coding their numeric runtime values.
 `ApplicationCloseRequested`, `CustomMenuClick`, and `Ready` identifiers.
 `WebviewEventType` contains `PageLoadStarted`, `PageLoadFinished`,
 `TitleChanged`, `DownloadStarted`, `DownloadCompleted`, `NavigationStarted`,
-and `NewWindowRequested`. `WindowEventType` contains `Moved`, `Resized`,
+`NewWindowRequested`, `DragEnter`, `DragOver`, `DragDrop`, and `DragLeave`.
+`WebviewEventPayload` adds optional `paths` and `position` fields for native file
+drag events. `WindowEventType` contains `Moved`, `Resized`,
 `CloseRequested`, `Focused`, `Blurred`, `MouseEnter`, `MouseLeave`,
 `MouseMove`, `MouseDown`, `MouseUp`, `Scroll`, `KeyDown`, `KeyUp`, `FileDrop`,
 `FileHover`, `FileHoverCancelled`, `ScaleFactorChanged`, `ThemeChanged`,

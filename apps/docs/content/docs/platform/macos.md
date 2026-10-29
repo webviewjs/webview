@@ -26,7 +26,16 @@ macOS-specific creation options include:
 
 Runtime methods expose simple fullscreen, shadow, tabbing identifier, and document-edited state. These options and methods are described in [BrowserWindow](../api/browser-window#platform-extensions).
 
-`setSkipTaskbar()` is a no-op on macOS. `setIgnoreCursorEvents()` maps to the native click-through behavior. Window icons do not set the application Dock icon; configure the app bundle's icon separately.
+`setSkipTaskbar()` is a no-op on macOS. `setIgnoreCursorEvents()` maps to the native
+click-through behavior. A window icon does not change the application Dock icon.
+Use `app.setDockIcon()` to change it at runtime, and
+`app.removeDockIcon()` to restore the original icon. See the
+[Dock icon example](https://github.com/webviewjs/webview/blob/main/apps/examples/macos-dock-icon.ts).
+
+Drag helpers use the current mouse event to move the window. Keep the drag request
+inside the active press. A double-click in an eligible drag region toggles
+maximize only if the pointer has not moved before mouse-up. See
+[frameless windows](../guides/frameless-windows).
 
 ## Transparency
 

@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { expect, test } from 'bun:test';
 
 const require = createRequire(import.meta.url);
-const { Application } = require('../../dist/index.js');
+const { Application, Theme } = require('../../dist/index.js');
 const { native } = require('../native/harness.ts');
 
 test('createWebview forwards native options, webContext, and callbacks in native argument order', () => {
@@ -61,6 +61,40 @@ test('native webview events reach listeners on the returned webview instance', (
     { event: 'navigation', url: 'app://localhost/' },
     { event: 'page-load', status: 'finished' },
   ]);
+});
+
+test('native file drag events preserve paths and webview-relative position', () => {
+  const win = new Application().createBrowserWindow();
+  const view = win.createWebview({ nativeFileDrop: true });
+  const received = [];
+  view.on('drag-drop', (event) => received.push(event));
+
+  native.webview(view).emit('drag-drop', {
+    paths: ['/tmp/report.txt', '/tmp/folder'],
+    position: { x: 12, y: 34 },
+  });
+
+  expect(native.webview(view).createArgs[0]).toEqual({ nativeFileDrop: true });
+  expect(received).toEqual([
+    {
+      event: 'drag-drop',
+      paths: ['/tmp/report.txt', '/tmp/folder'],
+      position: { x: 12, y: 34 },
+    },
+  ]);
+});
+
+test('Webview runtime theme setter calls the native method', () => {
+  const view = new Application().createBrowserWindow().createWebview();
+
+  view.setTheme(Theme.Dark);
+
+  expect(
+    native
+      .webview(view)
+      .calls.filter((call) => call.method === 'setTheme')
+      .map((call) => call.args),
+  ).toEqual([[Theme.Dark]]);
 });
 
 test('native event callback forwards error-first failures', () => {

@@ -2,6 +2,7 @@ import type {
   WebviewEventPayload,
   WebviewNewWindowFeatures,
   WebviewOptions as NativeWebviewOptions,
+  WebviewWindowPosition,
 } from '../../js-bindings';
 import type { WebContext } from '../../js-bindings';
 
@@ -67,6 +68,16 @@ export interface WebviewNewWindowEvent extends WebviewEventPayload {
   windowFeatures?: WebviewNewWindowFeatures;
 }
 
+/** Payload emitted during native file drag-and-drop over a webview. */
+export interface WebviewDragEvent extends WebviewEventPayload {
+  /** Native drag event name. */
+  event: 'drag-enter' | 'drag-over' | 'drag-drop' | 'drag-leave';
+  /** Dropped file or directory paths, present on enter and drop. */
+  paths?: string[];
+  /** Position relative to the webview's top-left corner. */
+  position?: WebviewWindowPosition;
+}
+
 /** Maps webview event names to their payload types. */
 export interface WebviewEventMap {
   /** Emitted when page loading begins. */
@@ -83,4 +94,12 @@ export interface WebviewEventMap {
   navigation: WebviewNavigationEvent;
   /** Emitted when the page requests a new window. */
   'new-window': WebviewNewWindowEvent;
+  /** Emitted when files or directories enter the webview. */
+  'drag-enter': WebviewDragEvent;
+  /** Emitted while files or directories move over the webview. */
+  'drag-over': WebviewDragEvent;
+  /** Emitted when files or directories are dropped on the webview. */
+  'drag-drop': WebviewDragEvent;
+  /** Emitted when files or directories leave the webview without a drop. */
+  'drag-leave': WebviewDragEvent;
 }

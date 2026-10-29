@@ -32,7 +32,8 @@ interface WebviewOptions {
   webContext?: WebContext | null;
   navigationHandler?: (url: string) => boolean;
   newWindowHandler?: (event: WebviewNewWindowEvent) => boolean;
-  enableDragRegionHelpers?: boolean; // default true; data-webview-drag-region and window.webviewjs
+  enableDragRegionHelpers?: boolean; // default true; drag regions and window.webviewjs
+  nativeFileDrop?: boolean; // default false; receive native file and directory drops
 }
 ```
 
@@ -41,6 +42,11 @@ Choose one initial `url` or `html` source. For a top-level webview, omit its bou
 `preload` is an initialization script run before page scripts. `webContext` shares browser data with other webviews. `incognito` requests a private webview context. See [WebContext](./web-context) and [Cookies and storage](../guides/cookies-and-storage).
 
 On Windows, `theme` selects the WebView2 appearance. `autoNormalizeLoadUrl` controls custom-scheme normalization for later `loadUrl()` and `loadUrlWithHeaders()` calls; it defaults to `true`. `useHttpsScheme` defaults to `false` and selects whether the WebView2 custom-protocol workaround uses an HTTP or HTTPS origin. These two options do not apply to other platforms.
+
+`nativeFileDrop` is opt-in. When enabled, the native backend reports file drag
+events on this Webview. This changes how the system webview handles HTML file
+drops; see [native file drag-and-drop](#native-file-drag-and-drop) for platform
+behavior.
 
 ## Loading and navigation
 
@@ -82,7 +88,17 @@ webview.expose(name: string, target: ExposedTarget): void
 
 ## Drag regions
 
-Elements marked with `data-webview-drag-region` drag the window on a primary-button press, and `window.webviewjs.startDragging()` starts the same drag from page code. Both are injected by default. Set `enableDragRegionHelpers: false` to disable both; `BrowserWindow.startDragging()` stays available. See the [frameless windows guide](../guides/frameless-windows).
+Drag-region helpers are injected by default. A bare `data-webview-drag-region`
+attribute or the value `\"true\"` marks only that element. The value `\"deep\"`
+also marks its descendants; `\"false\"` opts out of matching ancestors.
+Unmarked interactive elements block dragging. Double-clicking an eligible
+region toggles maximize when the window allows it. See the
+[frameless windows guide](../guides/frameless-windows) for gesture details and
+examples.
+
+`window.webviewjs.startDragging()` starts a drag from page code while the
+primary button is held. Set `enableDragRegionHelpers: false` to disable both
+injected helpers; `BrowserWindow.startDragging()` remains available.
 
 ## Events
 
@@ -97,6 +113,10 @@ Elements marked with `data-webview-drag-region` drag the window on a primary-but
 | `download-completed` | `event`, `url?`, `success?`                                              |
 | `navigation`         | `event: 'navigation'`, `url?`, `target: 'current'`                       |
 | `new-window`         | `event: 'new-window'`, `url?`, `target: 'new-window'`, `windowFeatures?` |
+| `drag-enter`         | `event`, `paths?: string[]`, `position?: WebviewWindowPosition`          |
+| `drag-over`          | `event`, `position?: WebviewWindowPosition`                              |
+| `drag-drop`          | `event`, `paths?: string[]`, `position?: WebviewWindowPosition`          |
+| `drag-leave`         | `event`                                                                  |
 
 Download events are observational; they do not cancel or redirect downloads. `windowFeatures` may contain a requested size and position. The native engine may omit these hints.
 
@@ -106,6 +126,31 @@ webview.on('download-completed', ({ url, success }) => console.log(url, success)
 ```
 
 See the runnable [webview events example](https://github.com/webviewjs/webview/blob/main/apps/examples/webview-events.ts).
+
+### Native file drag-and-drop
+
+```ts
+const view = win.createWebview({ url: 'https://example.com', nativeFileDrop: true });
+
+view.on('drag-enter', ({ paths, position }) => console.log(paths, position));
+view.on('drag-over', ({ position }) => console.log(position));
+view.on('drag-drop', ({ paths, position }) => console.log(paths, position));
+view.on('drag-leave', () => console.log('Drag left webview'));
+```
+
+`drag-enter` and `drag-drop` include the file or directory paths supplied by
+Wry. `drag-over` includes the current position, and `drag-leave` has neither
+field. Positions are relative to the Webview's top-left corner and are not
+converted to CSS or window coordinates. These events are separate from the
+parent BrowserWindow's `file-hover` and `file-drop` events.
+
+With Wry 0.55.1, native handling is available on Windows, macOS, and Linux.
+Windows replaces WebView2's external file-drop target while enabled, so HTML
+file drops, including drops onto `<input type=\"file\">`, are not preserved.
+On macOS and Linux, the handler consumes the native drop, which also prevents
+HTML file-input drops. Leave `nativeFileDrop` disabled when the page needs its
+normal HTML file-drop behavior. See the runnable
+[native file-drop example](https://github.com/webviewjs/webview/blob/main/apps/examples/native-file-drop.ts).
 
 ## DevTools
 
@@ -151,10 +196,17 @@ webview.width: number | null
 webview.height: number | null
 webview.x: number | null
 webview.y: number | null
+webview.setTheme(theme: Theme): void
 webview.setBackgroundColor(r: number, g: number, b: number, a: number): void
 ```
 
 Bounds and offsets are logical pixels relative to the parent window. The geometry properties return `null` when the native webview does not report a value. `setBackgroundColor()` takes red, green, blue, and alpha channels from `0` to `255`.
+
+`setTheme()` changes the embedded WebView2 color scheme on Windows. Pass
+`Theme.Light`, `Theme.Dark`, or `Theme.System`; calls on other platforms are
+no-ops. WebView2 Runtime 101.0.1210.39 or newer is required; older versions
+return an error. The creation-time `theme` option sets the initial Windows
+appearance.
 
 ## Disposal
 

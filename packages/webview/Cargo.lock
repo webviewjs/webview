@@ -3331,8 +3331,8 @@ dependencies = [
 
 [[package]]
 name = "tao"
-version = "0.37.1"
-source = "git+https://github.com/webviewjs/tao?rev=895c1cf9678c365d333520c254559b0e50eca1cc#895c1cf9678c365d333520c254559b0e50eca1cc"
+version = "0.37.2"
+source = "git+https://github.com/webviewjs/tao?rev=9bb2bdc097e430f924a69add056ae55335492ab7#9bb2bdc097e430f924a69add056ae55335492ab7"
 dependencies = [
  "bitflags 2.13.2",
  "block2",
@@ -3359,7 +3359,7 @@ dependencies = [
  "parking_lot",
  "percent-encoding",
  "raw-window-handle",
- "tao-macros 0.1.4 (git+https://github.com/webviewjs/tao?rev=895c1cf9678c365d333520c254559b0e50eca1cc)",
+ "tao-macros 0.1.4 (git+https://github.com/webviewjs/tao?rev=9bb2bdc097e430f924a69add056ae55335492ab7)",
  "unicode-segmentation",
  "url",
  "windows 0.62.2",
@@ -3382,7 +3382,7 @@ dependencies = [
 [[package]]
 name = "tao-macros"
 version = "0.1.4"
-source = "git+https://github.com/webviewjs/tao?rev=895c1cf9678c365d333520c254559b0e50eca1cc#895c1cf9678c365d333520c254559b0e50eca1cc"
+source = "git+https://github.com/webviewjs/tao?rev=9bb2bdc097e430f924a69add056ae55335492ab7#9bb2bdc097e430f924a69add056ae55335492ab7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3960,6 +3960,9 @@ dependencies = [
  "napi-build",
  "napi-derive",
  "notify-rust",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "rfd",
  "serde_json",
  "tao",

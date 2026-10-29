@@ -25,7 +25,7 @@ window.createWebview({
   html: `<!DOCTYPE html>
     <html>
       <body>
-        <header data-webview-drag-region>Custom titlebar <button>Close</button></header>
+        <header data-webview-drag-region="deep">Custom titlebar <button>Close</button></header>
         <main>Page content</main>
       </body>
     </html>`,
@@ -34,15 +34,24 @@ window.createWebview({
 app.run();
 ```
 
-A primary-button press inside an element marked `data-webview-drag-region` starts a native drag, once the pointer has moved a few pixels with the button still held. Clicks never move the window. The helper listens on `window`, so elements added later are covered without setup.
+A primary-button press in an eligible region starts a native drag immediately. A bare
+`data-webview-drag-region` attribute or `"true"` applies only to the marked element.
+Use `"deep"` to include descendants. A nested `"false"` region opts out of any
+matching ancestor. The helper uses the event's composed path, including elements
+inside open shadow roots, and covers elements added after page load.
 
-- **Interactive children keep their behavior.** Presses on links, buttons, form controls, labels, summaries, and `contenteditable` content inside a region don't drag.
-- **Page code can opt out.** If a handler calls `event.preventDefault()` on the `mousedown`, the helper ignores that press.
-- **Shadow DOM works.** Regions and controls inside open shadow roots are recognized.
+- **Interactive elements keep their behavior.** Unmarked links, buttons, form
+  controls, labels, summaries, editable elements, focusable elements, and
+  elements with common interactive ARIA roles block dragging.
+- **Marked controls can drag.** Add the drag attribute to an interactive element
+  when it should start a drag.
+- **Double-click toggles maximize.** It only changes state when the window is
+  resizable and can be maximized. macOS completes the toggle on mouse-up if the
+  pointer has not moved.
 
 ## Page-side `window.webviewjs.startDragging()`
 
-When your page code decides when a drag starts, call `window.webviewjs.startDragging()` from a `mousemove` handler, after a small movement, while the primary button is held:
+When your page code decides when a drag starts, call `window.webviewjs.startDragging()` from a `mousemove` handler while the primary button is held:
 
 ```ts
 let press: { x: number; y: number } | null = null;
@@ -61,7 +70,9 @@ window.addEventListener('mouseup', () => {
 });
 ```
 
-Start the drag from a `mousemove` in an active gesture, not from `mousedown`. The request crosses IPC, so a fast click can release the button before it arrives. The operating system then starts a drag that waits for a release it has already missed, and the window follows the pointer. The threshold keeps a click with slight jitter from starting a drag.
+Call the page API from a `mousemove` in an active gesture while the primary
+button is held. The helper sends the native request through IPC and ignores the
+call unless it has observed a trusted primary-button press.
 
 The call does nothing unless the page sees the primary button down. `window.webviewjs` is defined once, before page scripts run, and it is frozen. If a preload script already defines `window.webviewjs`, the helper leaves that global alone and the page API is not installed.
 
@@ -75,7 +86,11 @@ webview.onIpcMessage((message) => {
 });
 ```
 
-Calls from timers, promises, or other deferred code can run after the button has been released. The method throws if the window has been disposed, or if the platform can't drag windows.
+Calls from timers, promises, or other deferred code can run after the button has
+been released. Exposed IPC methods are invoked synchronously inside the native
+IPC callback, so an exposed method can call `win.startDragging()` during the
+originating gesture. The method throws if the window has been disposed, or if
+the platform can't drag windows.
 
 ## Disabling the helpers
 
@@ -85,17 +100,23 @@ The automatic drag regions and `window.webviewjs` are both injected when `enable
 const webview = win.createWebview({ html, enableDragRegionHelpers: false });
 ```
 
-With the helpers disabled, `data-webview-drag-region` attributes do nothing and `window.webviewjs` is not defined. `win.startDragging()` stays available.
+With the helpers disabled, `data-webview-drag-region` attributes have no effect
+and WebviewJS does not inject `window.webviewjs`. A global defined by your own
+preload script is left in place. `win.startDragging()` stays available.
 
 ## Message isolation
 
-The helper communicates with Node through a fixed internal IPC message, `__webviewjs_start_dragging__`. When the helpers are enabled, the native IPC handler consumes that message before any `onIpcMessage` handler runs, so drag requests never appear in application IPC. Avoid sending that exact string from your own page code.
+The helper communicates with Node through fixed internal IPC messages for
+dragging and maximize toggles. When the helpers are enabled, the native IPC
+handler consumes those messages before any `onIpcMessage` handler runs, so
+helper requests never appear in application IPC.
 
 ## Platform notes
 
 - **Windows:** the drag uses the system move loop, which runs until the button is released.
-- **macOS:** the drag uses the current mouse event. A drag started outside a press, or after the button is released, can leave the window following the pointer. The gesture rule above avoids this.
+- **macOS:** the drag uses the current mouse event. Start it during the press;
+  double-click maximize completes only if the pointer stays at its original
+  position until mouse-up.
 - **Linux:** the drag is a GTK move request. Its behavior depends on the window manager, and some Wayland compositors may ignore it.
 - **Android and iOS:** `win.startDragging()` throws. The helper and `window.webviewjs.startDragging()` do nothing.
-- Double-click to maximize is not provided.
 - `macosMovableByWindowBackground` is unchanged. The helper doesn't change window-level options.

@@ -194,8 +194,16 @@ export class WebviewIpcBridge {
     }
 
     const args: unknown[] = call.args;
-    void Promise.resolve()
-      .then(() => Reflect.apply(fn, namespace.target, args) as unknown)
+    // Invoke the exposed function inside the native IPC callback. Deferring the invocation to a
+    // microtask loses the native event context required by operations such as window dragging.
+    let pending: Promise<unknown>;
+    try {
+      pending = Promise.resolve(Reflect.apply(fn, namespace.target, args) as unknown);
+    } catch (error) {
+      pending = Promise.reject(error);
+    }
+
+    void pending
       .then((result) => {
         try {
           const resultJson = serializeJson(result, 'Return value');
