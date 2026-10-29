@@ -1,5 +1,5 @@
 // Adapted from Tauri's window drag-region script:
-// https://github.com/tauri-apps/tauri/blob/dev/crates/tauri/src/window/scripts/drag.js
+// https://github.com/tauri-apps/tauri/blob/548a3692f59405aeb239c5b63fa589824eee51e8/crates/tauri/src/window/scripts/drag.js
 // Copyright 2019-2024 Tauri Programme within The Commons Conservancy
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
