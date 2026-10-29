@@ -15,7 +15,8 @@ use napi_derive::*;
 use std::sync::Arc;
 use tao::window::Window;
 use wry::{
-  http::Request, NewWindowFeatures, NewWindowResponse, PageLoadEvent, Rect, WebViewBuilder,
+  http::Request, DragDropEvent, NewWindowFeatures, NewWindowResponse, PageLoadEvent, Rect,
+  WebViewBuilder,
 };
 
 use crate::browser_window::next_protocol_id;
@@ -209,8 +210,52 @@ impl Default for WebviewOptions {
       auto_normalize_load_url: Some(true),
       use_https_scheme: Some(false),
       enable_drag_region_helpers: Some(true),
+      native_file_drop: Some(false),
     }
   }
+}
+
+fn should_register_native_file_drop(native_file_drop: Option<bool>) -> bool {
+  native_file_drop == Some(true)
+}
+
+fn drag_drop_event_payload(event: DragDropEvent) -> Option<WebviewEventPayload> {
+  let (event_type, paths, position) = match event {
+    DragDropEvent::Enter { paths, position } => (
+      WebviewEventType::DragEnter,
+      Some(
+        paths
+          .into_iter()
+          .map(|path| path.to_string_lossy().into_owned())
+          .collect(),
+      ),
+      Some(position),
+    ),
+    DragDropEvent::Over { position } => (WebviewEventType::DragOver, None, Some(position)),
+    DragDropEvent::Drop { paths, position } => (
+      WebviewEventType::DragDrop,
+      Some(
+        paths
+          .into_iter()
+          .map(|path| path.to_string_lossy().into_owned())
+          .collect(),
+      ),
+      Some(position),
+    ),
+    DragDropEvent::Leave => (WebviewEventType::DragLeave, None, None),
+    // Wry marks this enum non-exhaustive. Unknown future variants are ignored.
+    _ => return None,
+  };
+
+  Some(WebviewEventPayload {
+    event: event_type.name().to_owned(),
+    paths,
+    position: position.map(|(x, y)| WebviewWindowPosition {
+      x: f64::from(x),
+      y: f64::from(y),
+    }),
+    ..Default::default()
+  })
 }
 
 #[napi(js_name = "Webview")]
@@ -374,6 +419,19 @@ impl JsWebview {
     let drag_region_helpers = options.enable_drag_region_helpers.unwrap_or(true);
     if drag_region_helpers {
       webview = webview.with_initialization_script(drag_region_script());
+    }
+
+    // Install Wry's handler only when explicitly enabled. Returning true consumes the native
+    // drop where supported; Windows uses its replacement WebView2 drop target and ignores this
+    // return value.
+    if should_register_native_file_drop(options.native_file_drop) {
+      let ev_rc = Rc::clone(&event_handler);
+      webview = webview.with_drag_drop_handler(move |event| {
+        if let Some(payload) = drag_drop_event_payload(event) {
+          dispatch_event(&ev_rc, payload);
+        }
+        true
+      });
     }
 
     // ── Navigation handler ────────────────────────────────────────────────────
@@ -1168,5 +1226,81 @@ mod maximize_toggle_tests {
     );
     assert_eq!(toggle_maximize_state(true, || false, || false), None);
     assert_eq!(toggle_maximize_state(true, || false, || true), Some(true));
+  }
+}
+
+#[cfg(test)]
+mod drag_drop_tests {
+  use super::{drag_drop_event_payload, should_register_native_file_drop};
+  use crate::types::WebviewOptions;
+  use std::path::PathBuf;
+  use wry::DragDropEvent;
+
+  #[test]
+  fn native_file_drop_registration_is_opt_in() {
+    assert!(!should_register_native_file_drop(None));
+    assert!(!should_register_native_file_drop(Some(false)));
+    assert!(should_register_native_file_drop(Some(true)));
+    assert_eq!(WebviewOptions::default().native_file_drop, Some(false));
+  }
+
+  #[test]
+  fn drag_enter_preserves_multiple_file_and_directory_paths_and_position() {
+    let payload = drag_drop_event_payload(DragDropEvent::Enter {
+      paths: vec![PathBuf::from("/tmp/one.txt"), PathBuf::from("/tmp/folder")],
+      position: (23, 41),
+    })
+    .expect("known Wry event");
+
+    assert_eq!(payload.event, "drag-enter");
+    assert_eq!(
+      payload.paths,
+      Some(vec!["/tmp/one.txt".to_owned(), "/tmp/folder".to_owned()])
+    );
+    let position = payload.position.expect("drag position");
+    assert_eq!((position.x, position.y), (23.0, 41.0));
+  }
+
+  #[test]
+  fn drag_over_has_only_webview_relative_position() {
+    let payload =
+      drag_drop_event_payload(DragDropEvent::Over { position: (7, 11) }).expect("known Wry event");
+
+    assert_eq!(payload.event, "drag-over");
+    assert_eq!(payload.paths, None);
+    let position = payload.position.expect("drag position");
+    assert_eq!((position.x, position.y), (7.0, 11.0));
+  }
+
+  #[test]
+  fn drag_drop_preserves_all_paths_and_position() {
+    let payload = drag_drop_event_payload(DragDropEvent::Drop {
+      paths: vec![
+        PathBuf::from("/tmp/folder"),
+        PathBuf::from("/tmp/another.txt"),
+      ],
+      position: (101, 202),
+    })
+    .expect("known Wry event");
+
+    assert_eq!(payload.event, "drag-drop");
+    assert_eq!(
+      payload.paths,
+      Some(vec![
+        "/tmp/folder".to_owned(),
+        "/tmp/another.txt".to_owned()
+      ])
+    );
+    let position = payload.position.expect("drop position");
+    assert_eq!((position.x, position.y), (101.0, 202.0));
+  }
+
+  #[test]
+  fn drag_leave_has_no_paths_or_position() {
+    let payload = drag_drop_event_payload(DragDropEvent::Leave).expect("known Wry event");
+
+    assert_eq!(payload.event, "drag-leave");
+    assert_eq!(payload.paths, None);
+    assert!(payload.position.is_none());
   }
 }

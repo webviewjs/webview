@@ -343,6 +343,11 @@ win.on('ime',         ({ text, phase }) => { … })
 win.on('touch',       ({ x, y, touchId, phase }) => { … })
 ```
 
+`file-hover` and `file-drop` are window-level events. A webview can opt in to
+its own native file drop events with `nativeFileDrop: true`; those events are
+emitted by the `Webview` instance and are not forwarded to the window. See the
+[Webview native file drag-and-drop API](./webview.md#native-file-drag-and-drop).
+
 The `close` event is cancelable. Call `event.preventDefault()` synchronously
 to keep the native window, its webviews, and their browser context alive. A
 close event without prevention follows the normal disposal path. The event

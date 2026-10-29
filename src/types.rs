@@ -475,6 +475,10 @@ pub enum WebviewEventType {
   /// Fired when a page attempts to open a new browser window
   /// (`window.open`, `target="_blank"`, etc.).
   NewWindowRequested,
+  DragEnter,
+  DragOver,
+  DragDrop,
+  DragLeave,
 }
 
 impl WebviewEventType {
@@ -487,6 +491,10 @@ impl WebviewEventType {
       Self::DownloadCompleted => "download-completed",
       Self::NavigationStarted => "navigation",
       Self::NewWindowRequested => "new-window",
+      Self::DragEnter => "drag-enter",
+      Self::DragOver => "drag-over",
+      Self::DragDrop => "drag-drop",
+      Self::DragLeave => "drag-leave",
     }
   }
 }
@@ -506,6 +514,10 @@ pub struct WebviewEventPayload {
   pub title: Option<String>,
   /// Download success flag for `DownloadCompleted` events.
   pub success: Option<bool>,
+  /// Paths for native webview drag-enter and drag-drop events.
+  pub paths: Option<Vec<String>>,
+  /// Drag position relative to the webview's top-left corner.
+  pub position: Option<WebviewWindowPosition>,
 }
 
 /// Optional size and position hints supplied for a new-window request.
@@ -559,4 +571,6 @@ pub struct WebviewOptions {
   pub use_https_scheme: Option<bool>,
   /// Whether to inject the drag support: the helper that starts a native window drag from elements marked with `data-webview-drag-region`, and `window.webviewjs.startDragging()` (default: true).
   pub enable_drag_region_helpers: Option<bool>,
+  /// Whether to receive native file drag-and-drop events on this webview (default: false).
+  pub native_file_drop: Option<bool>,
 }

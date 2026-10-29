@@ -168,6 +168,32 @@ export interface WebviewNewWindowEvent {
   windowFeatures?: import('./js-bindings').WebviewNewWindowFeatures;
 }
 
+export interface WebviewDragPosition {
+  x: number;
+  y: number;
+}
+
+export interface WebviewDragEnterEvent {
+  event: 'drag-enter';
+  paths: string[];
+  position: WebviewDragPosition;
+}
+
+export interface WebviewDragOverEvent {
+  event: 'drag-over';
+  position: WebviewDragPosition;
+}
+
+export interface WebviewDragDropEvent {
+  event: 'drag-drop';
+  paths: string[];
+  position: WebviewDragPosition;
+}
+
+export interface WebviewDragLeaveEvent {
+  event: 'drag-leave';
+}
+
 /** Maps Webview event names to their typed payloads. */
 export interface WebviewEventMap {
   'page-load-started': WebviewPageLoadEvent;
@@ -183,6 +209,10 @@ export interface WebviewEventMap {
    * separate WebView2 thread.
    */
   'new-window': WebviewNewWindowEvent;
+  'drag-enter': WebviewDragEnterEvent;
+  'drag-over': WebviewDragOverEvent;
+  'drag-drop': WebviewDragDropEvent;
+  'drag-leave': WebviewDragLeaveEvent;
 }
 
 export interface WindowMoveEvent {
@@ -293,6 +323,12 @@ declare module './js-bindings' {
   }
 
   interface WebviewOptions {
+    /**
+     * Enable native file drag-and-drop events on the webview. Defaults to false.
+     * When enabled, native handling consumes drops where supported and can replace the
+     * platform webview's normal HTML5 file-drop behavior.
+     */
+    nativeFileDrop?: boolean;
     /**
      * Shared `WebContext` for cookie/data isolation across webviews.
      * Create one with `app.createWebContext({ dataDirectory })` and pass it here.
