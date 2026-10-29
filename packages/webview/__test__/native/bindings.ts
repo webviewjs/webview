@@ -3,10 +3,8 @@
 import type {
   ApplicationEvent,
   BrowserWindowOptions,
-  CursorType as CursorTypeEnum,
   CustomProtocolResponse,
   FullscreenType as FullscreenTypeEnum,
-  IosValidOrientations as IosValidOrientationsEnum,
   IpcMessage,
   NativeNotificationOptions,
   NotificationEventPayload,
@@ -190,6 +188,14 @@ class Application {
     const state = recordCall(this, 'exit');
     state.exited = true;
     state.pumpResult = false;
+  }
+
+  setDockIcon(icon: Buffer): void {
+    recordCall(this, 'setDockIcon', [icon]);
+  }
+
+  removeDockIcon(): void {
+    recordCall(this, 'removeDockIcon');
   }
 
   createWebContext(options: WebContextOptions | null = null): WebContext {
@@ -383,6 +389,10 @@ class Webview {
     state.scripts.push(script);
   }
 
+  setTheme(theme: ThemeEnum): void {
+    recordCall(this, 'setTheme', [theme]);
+  }
+
   url(): string | null {
     return readWindowValue(this, 'url');
   }
@@ -553,6 +563,7 @@ const browserWindowMethods = [
   'setCursor',
   'setCursorVisible',
   'setCursorPosition',
+  'getCursorPosition',
   'setIgnoreCursorEvents',
   'setSkipTaskbar',
   'requestRedraw',
@@ -596,6 +607,14 @@ const trayMethods = [
 ];
 
 for (const name of browserWindowMethods) defineNativeMethod(BrowserWindow.prototype, name);
+defineNativeMethod(
+  BrowserWindow.prototype,
+  'getCursorPosition',
+  function (this: object, logical: boolean | null = null) {
+    const state = recordCall(this, 'getCursorPosition', [logical]);
+    return state.values.cursorPosition ?? { x: 0, y: 0 };
+  },
+);
 for (const name of webviewMethods) defineNativeMethod(Webview.prototype, name);
 for (const name of trayMethods) defineNativeMethod(TrayIcon.prototype, name);
 
@@ -664,6 +683,10 @@ const enumValues = {
     DownloadCompleted: 4,
     NavigationStarted: 5,
     NewWindowRequested: 6,
+    DragEnter: 7,
+    DragOver: 8,
+    DragDrop: 9,
+    DragLeave: 10,
   },
   WindowCommand: { Close: 0, Show: 1, Hide: 2 },
   WindowEventType: {

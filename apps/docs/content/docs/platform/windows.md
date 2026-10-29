@@ -33,6 +33,12 @@ Windows menus appear in the native window. Set an application menu before creati
 
 Transparency must be requested when creating the window with `transparent: true`; the option cannot be toggled later. `setContentProtection()` asks Windows to exclude the window from supported capture paths; verify its behavior for your capture APIs and deployment environment.
 
+When a webview is created with `nativeFileDrop: true`, Wry replaces WebView2's
+external file-drop target. Native `drag-enter`, `drag-over`, `drag-drop`, and
+`drag-leave` events are available, but HTML file-drop handling, including
+`<input type=\"file\">`, is not preserved for that webview. Leave the option off
+when the page needs its normal WebView2 file drop behavior.
+
 ## Click-through and focus
 
 `setIgnoreCursorEvents()` is supported on Windows. Tao does not expose a window blur/unfocus method; `webview.focus()` focuses page content. See [window controls](../guides/window-appearance) and [Webview controls](../guides/webview-controls).

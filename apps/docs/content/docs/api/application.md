@@ -126,3 +126,15 @@ The application tracks native resources independently of whether JavaScript stil
 ```
 
 See the runnable [application events example](https://github.com/webviewjs/webview/blob/main/apps/examples/application-events.ts).
+
+## macOS Dock icon
+
+```ts
+app.setDockIcon(icon: Buffer): void
+app.removeDockIcon(): void
+```
+
+On macOS, `setDockIcon()` changes the running app's Dock icon from encoded
+image bytes. Empty or unsupported image data throws. `removeDockIcon()`
+restores the original icon. Both methods are no-ops on other platforms. See the
+[Dock icon example](https://github.com/webviewjs/webview/blob/main/apps/examples/macos-dock-icon.ts).

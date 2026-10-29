@@ -6,6 +6,10 @@ export declare class Application {
   bind(handler?: ((arg: ApplicationEvent) => void) | undefined | null): void
   isReady(): boolean
   exit(): void
+  /** Set the macOS Dock icon from encoded image data. This is a no-op elsewhere. */
+  setDockIcon(icon: Buffer): void
+  /** Restore the original macOS Dock icon. This is a no-op elsewhere. */
+  removeDockIcon(): void
   /** Creates a new WebContext with the given options. */
   createWebContext(options?: WebContextOptions | undefined | null): JsWebContext
   createTrayIcon(options: TrayIconOptions): JsTrayIcon
@@ -129,6 +133,8 @@ export declare class BrowserWindow {
   setCursor(cursor: CursorType): void
   setCursorVisible(visible: boolean): void
   setCursorPosition(x: number, y: number): void
+  /** Returns the current cursor position. Use the window mouse-move event for live movement. */
+  getCursorPosition(logical?: boolean | undefined | null): Position
   setIgnoreCursorEvents(ignore: boolean): void
   setSkipTaskbar(skip: boolean): void
   requestRedraw(): void
@@ -195,6 +201,8 @@ export declare class Webview {
   _exposeInternal(name: string, staticsJson: string, funcNames: Array<string>): void
   print(): void
   zoom(scaleFactor: number): void
+  /** Set the WebView2 color scheme. This is a no-op on platforms other than Windows. */
+  setTheme(theme: Theme): void
   setWebviewVisibility(visible: boolean): void
   isDevtoolsOpen(): boolean
   openDevtools(): void
@@ -500,6 +508,9 @@ export interface NotificationEventPayload {
   error?: string
 }
 
+export type NotificationEventThreadsafeFunction =
+  ((err: Error | null, arg: NotificationEventPayload) => void)
+
 /** Returns `{protocol}://` */
 export declare function originalUriPrefix(protocol: string): string
 
@@ -629,7 +640,14 @@ export interface WebviewEventPayload {
   title?: string
   /** Download success flag for `DownloadCompleted` events. */
   success?: boolean
+  /** Paths for native webview drag-enter and drag-drop events. */
+  paths?: Array<string>
+  /** Drag position relative to the webview's top-left corner. */
+  position?: WebviewWindowPosition
 }
+
+export type WebviewEventThreadsafeFunction =
+  ((err: Error | null, arg: WebviewEventPayload) => void)
 
 /** Event types fired by a Webview and surfaced as EventEmitter events in JS. */
 export declare enum WebviewEventType {
@@ -643,7 +661,11 @@ export declare enum WebviewEventType {
    * Fired when a page attempts to open a new browser window
    * (`window.open`, `target="_blank"`, etc.).
    */
-  NewWindowRequested = 6
+  NewWindowRequested = 6,
+  DragEnter = 7,
+  DragOver = 8,
+  DragDrop = 9,
+  DragLeave = 10
 }
 
 /** Optional size and position hints supplied for a new-window request. */
@@ -682,7 +704,12 @@ export interface WebviewOptions {
   useHttpsScheme?: boolean
   /** Whether to inject the drag support: the helper that starts a native window drag from elements marked with `data-webview-drag-region`, and `window.webviewjs.startDragging()` (default: true). */
   enableDragRegionHelpers?: boolean
+  /** Whether to receive native file drag-and-drop events on this webview (default: false). */
+  nativeFileDrop?: boolean
 }
+
+export type WebviewScriptThreadsafeFunction =
+  ((err: Error | null, arg: string) => void)
 
 export interface WebviewWindowPosition {
   x: number

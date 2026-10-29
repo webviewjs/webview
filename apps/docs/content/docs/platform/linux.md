@@ -15,6 +15,9 @@ sudo apt install pkg-config libwebkit2gtk-4.1-dev libsoup-3.0-dev \
 
 Other distributions need equivalent WebKitGTK 4.1, libsoup 3, GTK 3, and XDoTool development packages. See [installation](../getting-started/installation).
 
+Custom-protocol requests include HTTP bodies with WebKitGTK 2.40 or newer. See
+[custom protocol request bodies](../guides/custom-protocols#request-bodies-on-linux).
+
 ## X11 and Wayland
 
 Tao's GTK window backend can run in X11 and Wayland desktop sessions. Window placement, decorations, taskbar behavior, and capture protection depend on the window manager or Wayland compositor. Absolute positioning may be ignored by compositors.

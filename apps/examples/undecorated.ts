@@ -16,7 +16,7 @@ const _webview = window.createWebview({
             <title>Undecorated Window</title>
         </head>
         <body>
-            <h1>Undecorated Window</h1>
+            <h1 data-webview-drag-region="deep">Undecorated Window</h1>
             <p>This window has no title bar or borders.</p>
         </body>
     </html>`,

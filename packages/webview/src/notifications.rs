@@ -1,7 +1,8 @@
 use napi::{bindgen_prelude::Buffer, threadsafe_function::ThreadsafeFunction, Result};
 use napi_derive::napi;
 
-type NotificationEventThreadsafeFunction = ThreadsafeFunction<
+#[napi]
+pub type NotificationEventThreadsafeFunction = ThreadsafeFunction<
   NotificationEventPayload,
   (),
   NotificationEventPayload,

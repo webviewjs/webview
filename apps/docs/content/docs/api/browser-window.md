@@ -17,8 +17,8 @@ interface BrowserWindowOptions {
   title?: string; // default "WebviewJS"
   width?: number; // default 800
   height?: number; // default 600
-  x?: number; // default 0
-  y?: number; // default 0
+  x?: number; // initial left; defaults to 0 when only y is supplied
+  y?: number; // initial top; defaults to 0 when only x is supplied
   logical?: boolean; // default false; interpret size and position as logical pixels
   resizable?: boolean; // default true
   visible?: boolean; // default true
@@ -65,7 +65,7 @@ interface BrowserWindowOptions {
 }
 ```
 
-Specify `width` and `height` together, and `x` and `y` together. Values are physical pixels unless `logical: true` is set. The initial `fullscreen` option currently creates borderless fullscreen for either enum value; `setFullscreen(FullscreenType.Exclusive)` has a separate runtime path.
+Specify `width` and `height` together. You can set either `x` or `y`; the omitted coordinate defaults to zero when the other is supplied. If both coordinates are omitted, the native platform chooses the initial position. Values are physical pixels unless `logical: true` is set. The initial `fullscreen` option currently creates borderless fullscreen for either enum value; `setFullscreen(FullscreenType.Exclusive)` has a separate runtime path.
 
 On Windows, a window created with `transparent: true` may also need `windowsNoRedirectionBitmap: true` to avoid rendering issues such as the window intermittently becoming opaque. See [issue #59](https://github.com/webviewjs/webview/issues/59).
 
@@ -162,6 +162,10 @@ win.setContentProtection(enabled: boolean): void
 win.requestRedraw(): void
 ```
 
+`win.theme` and `win.setTheme()` change the native window appearance. To change
+the embedded WebView2 color scheme on Windows, call `webview.setTheme()` on the
+Webview instance; see [Webview appearance](./webview#bounds-and-appearance).
+
 `win.close()` is an alias for immediate disposal. Use `hide()` if the same native window should remain available for `show()`. A user clicking the OS close button follows the cancelable `close` event path described in [Application lifecycle](../guides/application-lifecycle).
 
 `setContentProtection()` requests that the window be excluded from supported screen-capture paths; enforcement depends on the platform and compositor.
@@ -203,11 +207,12 @@ Each `Monitor` contains an optional name, scale factor, physical size and positi
 win.setCursor(cursor: CursorType): void
 win.setCursorVisible(visible: boolean): void
 win.setCursorPosition(x: number, y: number): void
+win.getCursorPosition(logical?: boolean): Position
 win.setIgnoreCursorEvents(ignore: boolean): void
 win.setSkipTaskbar(skip: boolean): void
 ```
 
-`setCursorPosition()` accepts logical coordinates relative to the window. Click-through behavior from `setIgnoreCursorEvents()` is supported by Windows and macOS; other backends may reject it. `setSkipTaskbar()` is implemented on Windows and GTK-based Linux/FreeBSD; it is a no-op on other targets.
+`setCursorPosition()` accepts logical coordinates relative to the window. `getCursorPosition()` returns the current pointer position in physical pixels by default; pass `true` for logical pixels. Some Linux Wayland, iOS, and Android backends cannot report a cursor position. Click-through behavior from `setIgnoreCursorEvents()` is supported by Windows and macOS; other backends may reject it. `setSkipTaskbar()` is implemented on Windows and GTK-based Linux/FreeBSD; it is a no-op on other targets.
 
 `CursorType` includes `Default`, `Crosshair`, `Hand`, `Arrow`, `Move`, `Text`, `Wait`, `Help`, `Progress`, `NotAllowed`, `ContextMenu`, `Cell`, `VerticalText`, `Alias`, `Copy`, `NoDrop`, `Grab`, `Grabbing`, `ZoomIn`, `ZoomOut`, and resize cursors. Import the enum instead of passing its numeric values.
 
@@ -336,6 +341,11 @@ The method is synchronous and returns selected paths. It returns `[]` if the use
 | `touch`                                                | `x`, `y`, `touchId`, `phase`                                              |
 
 Event names and payload fields are stable strings/objects; availability depends on the native window system. Position and size payloads are in physical pixels. Keyboard modifier bits are Shift `1`, Ctrl `2`, Alt `4`, and Meta/Super/Command `8`. See [Application lifecycle](../guides/application-lifecycle) for the synchronous close-prevention constraint.
+
+`file-hover` and `file-drop` are window-level events. A Webview can opt in to
+its own native file-drop events with `nativeFileDrop: true`; those events are
+emitted by the Webview instance and are not forwarded to the BrowserWindow. See
+[native file drag-and-drop](./webview#native-file-drag-and-drop).
 
 ## File dialogs and platform examples
 

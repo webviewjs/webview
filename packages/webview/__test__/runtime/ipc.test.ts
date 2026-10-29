@@ -54,6 +54,20 @@ test('expose sends static JSON and dispatches sync and async methods with their 
   expect(native.webview(view).scripts[1]).toMatch(/resolve\(20,"hello 42"\)/);
 });
 
+test('exposed methods start synchronously inside the native IPC callback', () => {
+  const view = webview();
+  let called = false;
+  view.expose('native', {
+    begin() {
+      called = true;
+    },
+  });
+
+  native.webview(view).callExposed({ ns: 'native', method: 'begin', id: 21, args: [] });
+
+  expect(called).toBe(true);
+});
+
 test('exposed thrown and rejected errors are returned to the page', async () => {
   const view = webview();
   view.expose('native', {

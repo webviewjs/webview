@@ -15,7 +15,8 @@ use napi_derive::*;
 use std::sync::Arc;
 use tao::window::Window;
 use wry::{
-  http::Request, NewWindowFeatures, NewWindowResponse, PageLoadEvent, Rect, WebViewBuilder,
+  http::Request, DragDropEvent, NewWindowFeatures, NewWindowResponse, PageLoadEvent, Rect,
+  WebViewBuilder,
 };
 
 use crate::browser_window::next_protocol_id;
@@ -87,64 +88,41 @@ fn new_window_response(navigation_allowed: bool, request_allowed: bool) -> NewWi
 /// Fixed IPC body sent by the drag-region helper. It carries no arguments, so
 /// page content can only ask its own window to start a native drag.
 const DRAG_REGION_MESSAGE: &str = "__webviewjs_start_dragging__";
+const TOGGLE_MAXIMIZE_MESSAGE: &str = "__webviewjs_toggle_maximize__";
+const DRAG_REGION_MESSAGE_PLACEHOLDER: &str = "__WEBVIEWJS_DRAG_REGION_MESSAGE__";
+const TOGGLE_MAXIMIZE_MESSAGE_PLACEHOLDER: &str = "__WEBVIEWJS_TOGGLE_MAXIMIZE_MESSAGE__";
+const DRAG_REGION_OS_NAME_PLACEHOLDER: &str = "__WEBVIEWJS_OS_NAME__";
+const IPC_ALIAS_NAME_PLACEHOLDER: &str = "__WEBVIEWJS_IPC_ALIAS_NAME__";
+const EXPOSE_CONFIG_PLACEHOLDER: &str = "__WEBVIEWJS_EXPOSE_CONFIG__";
 
-/// Page-side drag support, injected before page scripts when the helpers are enabled.
-///
-/// - `data-webview-drag-region`: a primary-button press inside a drag region arms the helper, and
-///   the native drag starts on the first pointer movement past a small threshold while the button
-///   is still held. A drag started on mousedown can arrive after a fast click has been released.
-/// - `window.webviewjs.startDragging()`: the same native drag, for page code. It does nothing unless
-///   the primary button is currently down.
-///
-/// Both post `DRAG_REGION_MESSAGE`, which the IPC handler consumes before any `onIpcMessage` handler.
+fn toggle_maximize_state(
+  resizable: bool,
+  is_maximized: impl FnOnce() -> bool,
+  is_maximizable: impl FnOnce() -> bool,
+) -> Option<bool> {
+  if !resizable {
+    return None;
+  }
+  if is_maximized() {
+    return Some(false);
+  }
+  if is_maximizable() {
+    return Some(true);
+  }
+  None
+}
+
 fn drag_region_script() -> String {
-  format!(
-    r#"(() => {{
-  const DRAG_REGION_SELECTOR = '[data-webview-drag-region]';
-  const INTERACTIVE_SELECTOR = 'a[href], area[href], button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"])';
-  const DRAG_THRESHOLD = 4;
-  let press = null;
-  window.addEventListener('mousedown', (event) => {{
-    press = null;
-    if (!event.isTrusted || event.button !== 0 || event.defaultPrevented) return;
-    // composedPath() also reaches regions inside open shadow roots. It runs from the target outwards,
-    // so a control at or before the region's index sits inside that region.
-    const path = event.composedPath();
-    const region = path.findIndex((node) => node instanceof Element && node.matches(DRAG_REGION_SELECTOR));
-    if (region === -1) return;
-    const control = path.findIndex((node) => node instanceof Element && node.matches(INTERACTIVE_SELECTOR));
-    if (control !== -1 && control <= region) return;
-    event.preventDefault();
-    press = {{ x: event.clientX, y: event.clientY }};
-  }});
-  window.addEventListener('mousemove', (event) => {{
-    if (!event.isTrusted || press === null || (event.buttons & 1) === 0) return;
-    if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD) return;
-    press = null;
-    window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
-  }});
-  window.addEventListener('mouseup', () => {{
-    press = null;
-  }});
-  // Track the primary button in the capture phase, so the API sees the state before page handlers run.
-  let primaryDown = false;
-  for (const type of ['mousedown', 'mousemove', 'mouseup']) {{
-    window.addEventListener(type, (event) => {{
-      primaryDown = (event.buttons & 1) === 1;
-    }}, true);
-  }}
-  // Leave an existing global alone, for example one defined by a preload script.
-  if (!('webviewjs' in window)) {{
-    Object.defineProperty(window, 'webviewjs', {{
-      value: Object.freeze({{
-        startDragging() {{
-          if (primaryDown) window.ipc.postMessage('{DRAG_REGION_MESSAGE}');
-        }},
-      }}),
-    }});
-  }}
-}})();"#
-  )
+  let os_name = serde_json::to_string(std::env::consts::OS).expect("OS name is serializable");
+  include_str!("scripts/drag_region_script.js")
+    .replace(DRAG_REGION_MESSAGE_PLACEHOLDER, DRAG_REGION_MESSAGE)
+    .replace(TOGGLE_MAXIMIZE_MESSAGE_PLACEHOLDER, TOGGLE_MAXIMIZE_MESSAGE)
+    .replace(DRAG_REGION_OS_NAME_PLACEHOLDER, &os_name)
+}
+
+fn ipc_alias_script(ipc_name: &str) -> String {
+  let name_json = serde_json::to_string(ipc_name).unwrap_or_else(|_| format!("\"{}\"", ipc_name));
+  include_str!("scripts/ipc_alias_script.js").replace(IPC_ALIAS_NAME_PLACEHOLDER, &name_json)
 }
 
 pub(crate) fn protocol_error_response(
@@ -175,7 +153,8 @@ pub(crate) struct ProtocolRegistration {
   pub(crate) handler: ProtocolHandlerRef,
 }
 
-pub(crate) type WebviewEventThreadsafeFunction = ThreadsafeFunction<
+#[napi]
+pub type WebviewEventThreadsafeFunction = ThreadsafeFunction<
   WebviewEventPayload,
   (),
   WebviewEventPayload,
@@ -183,7 +162,8 @@ pub(crate) type WebviewEventThreadsafeFunction = ThreadsafeFunction<
   true, // CalleeHandled
   true, // Weak
 >;
-pub(crate) type WebviewScriptThreadsafeFunction = ThreadsafeFunction<
+#[napi]
+pub type WebviewScriptThreadsafeFunction = ThreadsafeFunction<
   String,
   (),
   String,
@@ -225,8 +205,51 @@ impl Default for WebviewOptions {
       auto_normalize_load_url: Some(true),
       use_https_scheme: Some(false),
       enable_drag_region_helpers: Some(true),
+      native_file_drop: Some(false),
     }
   }
+}
+
+fn should_register_native_file_drop(native_file_drop: Option<bool>) -> bool {
+  native_file_drop == Some(true)
+}
+
+fn drag_drop_event_payload(event: DragDropEvent) -> Option<WebviewEventPayload> {
+  let (event_type, paths, position) = match event {
+    DragDropEvent::Enter { paths, position } => (
+      WebviewEventType::DragEnter,
+      Some(
+        paths
+          .into_iter()
+          .map(|path| path.to_string_lossy().into_owned())
+          .collect(),
+      ),
+      Some(position),
+    ),
+    DragDropEvent::Over { position } => (WebviewEventType::DragOver, None, Some(position)),
+    DragDropEvent::Drop { paths, position } => (
+      WebviewEventType::DragDrop,
+      Some(
+        paths
+          .into_iter()
+          .map(|path| path.to_string_lossy().into_owned())
+          .collect(),
+      ),
+      Some(position),
+    ),
+    DragDropEvent::Leave => (WebviewEventType::DragLeave, None, None),
+    _ => return None,
+  };
+
+  Some(WebviewEventPayload {
+    event: event_type.name().to_owned(),
+    paths,
+    position: position.map(|(x, y)| WebviewWindowPosition {
+      x: f64::from(x),
+      y: f64::from(y),
+    }),
+    ..Default::default()
+  })
 }
 
 #[napi(js_name = "Webview")]
@@ -380,10 +403,7 @@ impl JsWebview {
     // wry always exposes `window.ipc`; create an alias under a custom name.
     if let Some(ref ipc_name) = options.ipc_name {
       if ipc_name != "ipc" {
-        let alias = format!(
-          "Object.defineProperty(window,{n},{{get:()=>window.ipc,configurable:true,enumerable:true}});",
-          n = serde_json::to_string(ipc_name).unwrap_or_else(|_| format!("\"{}\"", ipc_name))
-        );
+        let alias = ipc_alias_script(ipc_name);
         webview = webview.with_initialization_script(&alias);
       }
     }
@@ -393,6 +413,16 @@ impl JsWebview {
     let drag_region_helpers = options.enable_drag_region_helpers.unwrap_or(true);
     if drag_region_helpers {
       webview = webview.with_initialization_script(drag_region_script());
+    }
+
+    if should_register_native_file_drop(options.native_file_drop) {
+      let ev_rc = Rc::clone(&event_handler);
+      webview = webview.with_drag_drop_handler(move |event| {
+        if let Some(payload) = drag_drop_event_payload(event) {
+          dispatch_event(&ev_rc, payload);
+        }
+        true
+      });
     }
 
     // ── Navigation handler ────────────────────────────────────────────────────
@@ -601,6 +631,19 @@ impl JsWebview {
         return;
       }
 
+      if drag_region_helpers && req.body() == TOGGLE_MAXIMIZE_MESSAGE {
+        if let Some(window) = ipc_window.upgrade() {
+          if let Some(maximized) = toggle_maximize_state(
+            window.is_resizable(),
+            || window.is_maximized(),
+            || window.is_maximizable(),
+          ) {
+            window.set_maximized(maximized);
+          }
+        }
+        return;
+      }
+
       // Take a handle out of the cell rather than holding a borrow: the handler runs user
       // code, which may set or dispose the handler from inside this call.
       let handler = ipc_state_clone.borrow().clone();
@@ -746,38 +789,14 @@ impl JsWebview {
     let funcs_json = serde_json::to_string(&func_names)
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
 
-    let script = format!(
-      r#"(function(){{
-  if(!window.__webviewjs__){{
-    let __id=0;
-    const __p=new Map();
-    window.__webviewjs__={{
-      resolve:function(id,val){{const e=__p.get(id);if(e){{__p.delete(id);e[0](val);}}}},
-      reject:function(id,message,name){{const e=__p.get(id);if(e){{__p.delete(id);const err=new Error(message);err.name=name||'Error';e[1](err);}}}},
-      call:function(ns,method,args){{
-        let argsJson;
-        try{{argsJson=JSON.stringify(args);if(argsJson===undefined)throw new Error('not serialisable');}}
-        catch{{const err=new Error('Arguments are not JSON-serialisable');err.name='SerializationError';return Promise.reject(err);}}
-        return new Promise(function(res,rej){{
-          const id=++__id;
-          __p.set(id,[res,rej]);
-          window.ipc.postMessage(JSON.stringify({{__e:true,ns:ns,method:method,id:id,args:JSON.parse(argsJson)}}));
-        }});
-      }}
-    }};
-  }}
-  const __statics={statics};
-  const __funcs={funcs};
-  const __ns=Object.assign({{}},__statics);
-  for(const fn of __funcs){{
-    (function(m){{__ns[m]=function(){{return window.__webviewjs__.call({name},m,Array.from(arguments));}};}})(fn);
-  }}
-  window[{name}]=__ns;
-}})();"#,
+    let config_json = format!(
+      r#"{{"name":{name},"statics":{statics},"funcs":{funcs}}}"#,
+      name = name_json,
       statics = statics_json,
       funcs = funcs_json,
-      name = name_json,
     );
+    let script =
+      include_str!("scripts/expose_script.js").replace(EXPOSE_CONFIG_PLACEHOLDER, &config_json);
 
     self
       .webview()
@@ -803,6 +822,33 @@ impl JsWebview {
         format!("Failed to zoom: {}", e),
       )
     })
+  }
+
+  /// Set the WebView2 color scheme. This is a no-op on platforms other than Windows.
+  #[napi]
+  pub fn set_theme(&self, theme: Theme) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+      use wry::WebViewExtWindows;
+
+      let theme = match theme {
+        Theme::Light => wry::Theme::Light,
+        Theme::Dark => wry::Theme::Dark,
+        Theme::System => wry::Theme::Auto,
+      };
+
+      self.webview().set_theme(theme).map_err(|error| {
+        napi::Error::new(
+          napi::Status::GenericFailure,
+          format!("Failed to set webview theme: {error}"),
+        )
+      })?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = theme;
+
+    Ok(())
   }
 
   #[napi]
@@ -1162,5 +1208,104 @@ mod tests {
       let response = new_window_response(navigation_allowed, request_allowed);
       assert_eq!(matches!(response, NewWindowResponse::Allow), should_allow);
     }
+  }
+}
+
+#[cfg(test)]
+mod maximize_toggle_tests {
+  use super::toggle_maximize_state;
+
+  #[test]
+  fn maximize_toggle_requires_resizable_and_maximizable_window() {
+    assert_eq!(
+      toggle_maximize_state(
+        false,
+        || panic!("must not query maximized state"),
+        || panic!("must not query maximizable state"),
+      ),
+      None,
+    );
+    assert_eq!(
+      toggle_maximize_state(true, || true, || panic!("already maximized")),
+      Some(false),
+    );
+    assert_eq!(toggle_maximize_state(true, || false, || false), None);
+    assert_eq!(toggle_maximize_state(true, || false, || true), Some(true));
+  }
+}
+
+#[cfg(test)]
+mod drag_drop_tests {
+  use super::{drag_drop_event_payload, should_register_native_file_drop};
+  use crate::types::WebviewOptions;
+  use std::path::PathBuf;
+  use wry::DragDropEvent;
+
+  #[test]
+  fn native_file_drop_is_opt_in() {
+    assert!(!should_register_native_file_drop(None));
+    assert!(!should_register_native_file_drop(Some(false)));
+    assert!(should_register_native_file_drop(Some(true)));
+    assert_eq!(WebviewOptions::default().native_file_drop, Some(false));
+  }
+
+  #[test]
+  fn drag_enter_preserves_paths_and_position() {
+    let payload = drag_drop_event_payload(DragDropEvent::Enter {
+      paths: vec![PathBuf::from("/tmp/one.txt"), PathBuf::from("/tmp/folder")],
+      position: (23, 41),
+    })
+    .expect("known Wry event");
+
+    assert_eq!(payload.event, "drag-enter");
+    assert_eq!(
+      payload.paths,
+      Some(vec!["/tmp/one.txt".to_owned(), "/tmp/folder".to_owned()])
+    );
+    let position = payload.position.expect("drag position");
+    assert_eq!((position.x, position.y), (23.0, 41.0));
+  }
+
+  #[test]
+  fn drag_over_has_position_and_no_paths() {
+    let payload =
+      drag_drop_event_payload(DragDropEvent::Over { position: (7, 11) }).expect("known Wry event");
+
+    assert_eq!(payload.event, "drag-over");
+    assert!(payload.paths.is_none());
+    let position = payload.position.expect("drag position");
+    assert_eq!((position.x, position.y), (7.0, 11.0));
+  }
+
+  #[test]
+  fn drag_drop_preserves_all_paths_and_position() {
+    let payload = drag_drop_event_payload(DragDropEvent::Drop {
+      paths: vec![
+        PathBuf::from("/tmp/folder"),
+        PathBuf::from("/tmp/another.txt"),
+      ],
+      position: (101, 202),
+    })
+    .expect("known Wry event");
+
+    assert_eq!(payload.event, "drag-drop");
+    assert_eq!(
+      payload.paths,
+      Some(vec![
+        "/tmp/folder".to_owned(),
+        "/tmp/another.txt".to_owned()
+      ])
+    );
+    let position = payload.position.expect("drop position");
+    assert_eq!((position.x, position.y), (101.0, 202.0));
+  }
+
+  #[test]
+  fn drag_leave_has_no_paths_or_position() {
+    let payload = drag_drop_event_payload(DragDropEvent::Leave).expect("known Wry event");
+
+    assert_eq!(payload.event, "drag-leave");
+    assert!(payload.paths.is_none());
+    assert!(payload.position.is_none());
   }
 }

@@ -1367,6 +1367,28 @@ impl BrowserWindow {
       .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
   }
 
+  /// Returns the current cursor position. Use the window mouse-move event for live movement.
+  #[napi]
+  pub fn get_cursor_position(&self, logical: Option<bool>) -> Result<Position> {
+    self
+      .window()
+      .cursor_position()
+      .map(|position| match logical {
+        Some(true) => {
+          let logical_position = position.to_logical::<f64>(self.window().scale_factor());
+          Position {
+            x: logical_position.x as i32,
+            y: logical_position.y as i32,
+          }
+        }
+        _ => Position {
+          x: position.x as i32,
+          y: position.y as i32,
+        },
+      })
+      .map_err(|error| napi::Error::new(napi::Status::GenericFailure, error.to_string()))
+  }
+
   #[napi]
   pub fn set_ignore_cursor_events(&self, ignore: bool) -> Result<()> {
     self

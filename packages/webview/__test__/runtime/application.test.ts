@@ -37,6 +37,17 @@ test('native application events subscribe once and use isolated EventEmitters', 
   expect(first.listenerCount('custom-menu-click')).toBe(0);
 });
 
+test('macOS Dock icon methods are exposed on Application', () => {
+  const app = new Application();
+  const icon = Buffer.from('image bytes');
+
+  app.setDockIcon(icon);
+  app.removeDockIcon();
+
+  expect(calls(app, 'setDockIcon')[0].args).toEqual([icon]);
+  expect(calls(app, 'removeDockIcon').length).toBe(1);
+});
+
 test('run is idempotent, defaults to 16ms, honors ref false, and stop clears its timer', () => {
   jest.useFakeTimers();
   try {

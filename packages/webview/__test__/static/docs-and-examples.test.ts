@@ -28,6 +28,25 @@ test('Hono example connects router responses to the custom protocol', async () =
   expect(source).toMatch(/createWebview\(\{ url: 'app:\/\/localhost' \}\)/u);
 });
 
+test('ported v0 examples use the public workspace package and cover native features', async () => {
+  const [drop, protocolBody, dockIcon, filePicker] = await Promise.all([
+    readFile(new URL('../../../../apps/examples/native-file-drop.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../../../apps/examples/custom-protocol-body.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../../../apps/examples/macos-dock-icon.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../../../apps/examples/file-picker.ts', import.meta.url), 'utf8'),
+  ]);
+
+  for (const source of [drop, protocolBody, dockIcon, filePicker]) {
+    expect(source).toMatch(/from '@webviewjs\/webview'/u);
+  }
+  expect(drop).toMatch(/nativeFileDrop: true/u);
+  expect(drop).toMatch(/webview\.on\('drag-drop'/u);
+  expect(protocolBody).toMatch(/method: 'POST'/u);
+  expect(dockIcon).toMatch(/app\.setDockIcon\(icon\)/u);
+  expect(dockIcon).toMatch(/app\.removeDockIcon\(\)/u);
+  expect(filePicker).toMatch(/win\.openFileDialog/u);
+});
+
 test('package README and hosted docs document current entry points and API behavior', async () => {
   const [readme, customProtocols, applicationApi, quickStart] = await Promise.all([
     readFile(new URL('../../README.md', import.meta.url), 'utf8'),
