@@ -1,11 +1,11 @@
 import { parseArgs } from 'node:util';
 import { CliError } from './terminal.js';
 import type { PackageManager } from './package-manager.js';
-import type { TemplateName } from './project.js';
 
 export interface CliOptions {
   projectDirectory?: string;
-  template?: TemplateName;
+  example: string;
+  explicitExample: boolean;
   packageManager?: PackageManager;
   install: boolean;
   yes: boolean;
@@ -21,6 +21,7 @@ export function parseCliArgs(args: string[]): CliOptions {
     parsed = parseArgs({
       args,
       options: {
+        example: { type: 'string' },
         template: { type: 'string' },
         'no-install': { type: 'boolean' },
         'package-manager': { type: 'string' },
@@ -40,7 +41,13 @@ export function parseCliArgs(args: string[]): CliOptions {
     throw new CliError('Only one project directory can be supplied.');
   }
 
-  const template = parsed.values.template;
+  const rawExample = parsed.values.example;
+  const example = typeof rawExample === 'string' ? rawExample : undefined;
+  const rawTemplate = parsed.values.template;
+  const template = typeof rawTemplate === 'string' ? rawTemplate : undefined;
+  if (example !== undefined && template !== undefined) {
+    throw new CliError('Use either --example or the deprecated --template option, not both.');
+  }
   if (template !== undefined && template !== 'typescript' && template !== 'javascript') {
     throw new CliError(`Unknown template "${template}". Choose "typescript" or "javascript".`);
   }
@@ -58,7 +65,8 @@ export function parseCliArgs(args: string[]): CliOptions {
 
   return {
     projectDirectory: parsed.positionals[0],
-    template,
+    example: example ?? (template === 'javascript' ? 'basic-js' : template === 'typescript' ? 'basic-ts' : 'basic-ts'),
+    explicitExample: example !== undefined || template !== undefined,
     packageManager,
     install: parsed.values['no-install'] !== true,
     yes: parsed.values.yes === true,

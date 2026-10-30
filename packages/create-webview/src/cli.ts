@@ -4,13 +4,13 @@ import { detectPackageManager } from './package-manager.js';
 import type { PackageManager } from './package-manager.js';
 import {
   confirmNonEmptyDirectory,
+  promptExample,
   promptPackageManager,
   promptPackageName,
   promptProjectDirectory,
-  promptTemplate,
 } from './prompts.js';
+import { withDownloadedExample } from './examples.js';
 import { createProject, normalizePackageName } from './project.js';
-import type { TemplateName } from './project.js';
 import { CliError, formatTerminal, writeLine } from './terminal.js';
 
 export async function runCli(options: { version: string; args?: string[] }): Promise<void> {
@@ -37,7 +37,11 @@ export async function runCli(options: { version: string; args?: string[] }): Pro
     }
   }
 
-  const template: TemplateName = parsed.template ?? (interactive ? await promptTemplate('typescript') : 'typescript');
+  const example = parsed.explicitExample
+    ? parsed.example
+    : interactive
+      ? await promptExample(parsed.example as 'basic-ts' | 'basic-js')
+      : parsed.example;
   const detectedPackageManager = detectPackageManager();
   const packageManager: PackageManager =
     parsed.packageManager ??
@@ -58,17 +62,18 @@ export async function runCli(options: { version: string; args?: string[] }): Pro
 
   const confirmNonEmpty = interactive ? confirmNonEmptyDirectory : undefined;
   writeLine();
-  writeLine(`Creating ${directory}...`);
-  const project = await createProject({
-    directory,
-    packageName,
-    template,
-    packageManager,
-    install: parsed.install,
-    force: parsed.force,
-    webviewVersion: options.version,
-    confirmNonEmpty,
-  });
+  writeLine(`Creating ${directory} from ${example}...`);
+  const project = await withDownloadedExample(example, (sourceDirectory) =>
+    createProject({
+      directory: directory!,
+      packageName,
+      sourceDirectory,
+      packageManager,
+      install: parsed.install,
+      force: parsed.force,
+      confirmNonEmpty,
+    }),
+  );
 
   writeLine(formatTerminal('✓ Created project', 'green'));
   if (parsed.install) writeLine(formatTerminal('✓ Installed dependencies', 'green'));
@@ -88,7 +93,8 @@ Usage:
   create-webview [project-directory] [options]
 
 Options:
-  --template <typescript|javascript>  Choose the starter template (default: typescript)
+  --example <name|GitHub URL>          Choose a repository example (default: basic-ts)
+  --template <typescript|javascript>  Deprecated alias for basic-ts and basic-js
   --package-manager <npm|bun|pnpm|yarn>  Choose dependency installation and instructions
   --no-install                         Skip dependency installation
   --yes, -y                            Use defaults without prompts

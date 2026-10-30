@@ -24,4 +24,15 @@ test('publishes only built files, README, and MIT license', async () => {
   expect(manifest.license).toBe('MIT');
   expect(await readFile(join(packageRoot, 'README.md'), 'utf8')).toBeTruthy();
   expect(await readFile(join(packageRoot, 'LICENSE'), 'utf8')).toMatch(/^MIT License/m);
+  expect(manifest.dependencies.giget).toMatch(/^\^\d/);
+});
+
+test('keeps downloadable basic starters in the repository root with publishable dependency versions', async () => {
+  const examplesRoot = join(packageRoot, '../..', 'examples');
+  for (const example of ['basic-ts', 'basic-js']) {
+    const exampleManifest = JSON.parse(await readFile(join(examplesRoot, example, 'package.json'), 'utf8'));
+    expect(exampleManifest.dependencies['@webviewjs/webview'].startsWith('workspace:')).toBe(false);
+    expect(exampleManifest.dependencies['@webviewjs/webview']).toBeTruthy();
+    expect(await readFile(join(examplesRoot, example, 'README.md'), 'utf8')).toBeTruthy();
+  }
 });

@@ -1,0 +1,16 @@
+{
+  "name": "webview-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/main.ts",
+    "start": "node src/main.ts",
+    "build": "webview build src/main.ts --asset src/index.html"
+  },
+  "dependencies": {
+    "@webviewjs/webview": "^0.4.7"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

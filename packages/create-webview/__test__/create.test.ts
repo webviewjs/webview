@@ -1,5 +1,5 @@
 import { expect, onTestFinished, test } from 'bun:test';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, parse, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,24 +11,34 @@ async function temporaryDirectory() {
   return directory;
 }
 
-function options(directory, overrides = {}) {
+async function makeExample(directory: string, files: Record<string, string>) {
+  for (const [path, content] of Object.entries(files)) {
+    const destination = join(directory, path);
+    await mkdir(dirname(destination), { recursive: true });
+    await writeFile(destination, content);
+  }
+}
+
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const basicTypeScriptExample = join(repositoryRoot, 'examples/basic-ts');
+const basicJavaScriptExample = join(repositoryRoot, 'examples/basic-js');
+
+function options(directory: string, overrides = {}) {
   return {
     directory,
-    template: 'typescript',
+    sourceDirectory: basicTypeScriptExample,
     packageManager: 'npm',
     install: false,
-    webviewVersion: '9.8.7',
     ...overrides,
   };
 }
 
-test('creates the TypeScript project files and matching WebviewJS manifest', async () => {
+test('creates the TypeScript project files and customizes only the manifest name', async () => {
   const parent = await temporaryDirectory();
   const target = join(parent, 'my-app');
   const created = await createProject(options(target, { cwd: parent }));
 
   expect(created.packageName).toBe('my-app');
-  expect(created.template).toBe('typescript');
   for (const file of ['package.json', 'README.md', '.gitignore', 'src/main.ts', 'src/index.html']) {
     await readFile(join(target, file), 'utf8');
   }
@@ -40,9 +50,9 @@ test('creates the TypeScript project files and matching WebviewJS manifest', asy
   expect(manifest.scripts).toEqual({
     dev: 'node src/main.ts',
     start: 'node src/main.ts',
-    build: 'webview build src/main.ts --name my-app --asset src/index.html',
+    build: 'webview build src/main.ts --asset src/index.html',
   });
-  expect(manifest.dependencies['@webviewjs/webview']).toBe('9.8.7');
+  expect(manifest.dependencies['@webviewjs/webview']).toBe('^0.4.7');
   expect(manifest.engines.node).toBe('>=24');
 
   const main = await readFile(join(target, 'src/main.ts'), 'utf8');
@@ -59,20 +69,53 @@ test('creates the TypeScript project files and matching WebviewJS manifest', asy
   expect(html).toMatch(/Your native window is running\./);
   expect(html).toMatch(/<style>/);
   expect(html.endsWith('\n')).toBe(true);
+  expect(await readFile(join(target, 'README.md'), 'utf8')).toMatch(/WebviewJS starter/);
 });
 
-test('creates JavaScript entry files and scripts without a TypeScript entry', async () => {
+test('creates JavaScript entry files and preserves its own manifest versions', async () => {
   const parent = await temporaryDirectory();
   const target = join(parent, 'desktop_tool');
-  await createProject(options(target, { cwd: parent, packageName: 'desktop_tool', template: 'javascript' }));
+  await createProject(
+    options(target, { cwd: parent, packageName: 'desktop_tool', sourceDirectory: basicJavaScriptExample }),
+  );
 
   const entries = await readdir(join(target, 'src'));
   expect(entries.sort()).toEqual(['index.html', 'main.js']);
   expect(await readFile(join(target, 'src/main.js'), 'utf8')).toMatch(/async function main\(\)/);
   const manifest = JSON.parse(await readFile(join(target, 'package.json'), 'utf8'));
+  expect(manifest.name).toBe('desktop_tool');
   expect(manifest.scripts.dev).toBe('node src/main.js');
   expect(manifest.scripts.start).toBe('node src/main.js');
-  expect(manifest.scripts.build).toBe('webview build src/main.js --name desktop_tool --asset src/index.html');
+  expect(manifest.scripts.build).toBe('webview build src/main.js --asset src/index.html');
+  expect(manifest.dependencies['@webviewjs/webview']).toBe('^0.4.7');
+});
+
+test('preserves nested files, dotfiles, empty directories, and dependency versions', async () => {
+  const parent = await temporaryDirectory();
+  const source = join(parent, 'source');
+  const target = join(parent, 'new-app');
+  await makeExample(source, {
+    'package.json': JSON.stringify({
+      name: 'starter-name',
+      dependencies: { '@webviewjs/webview': '~0.4.1', 'other-package': '^3.2.0' },
+      custom: { enabled: true },
+    }),
+    '.env.example': 'VALUE=example\n',
+    'src/.hidden/config.json': '{"enabled":true}\n',
+    'assets/one/two.txt': 'deep content\n',
+  });
+  await mkdir(join(source, 'empty'), { recursive: true });
+
+  await createProject(options(target, { cwd: parent, packageName: 'custom-app', sourceDirectory: source }));
+
+  const manifest = JSON.parse(await readFile(join(target, 'package.json'), 'utf8'));
+  expect(manifest.name).toBe('custom-app');
+  expect(manifest.dependencies).toEqual({ '@webviewjs/webview': '~0.4.1', 'other-package': '^3.2.0' });
+  expect(manifest.custom).toEqual({ enabled: true });
+  expect(await readFile(join(target, '.env.example'), 'utf8')).toBe('VALUE=example\n');
+  expect(await readFile(join(target, 'src/.hidden/config.json'), 'utf8')).toBe('{"enabled":true}\n');
+  expect(await readFile(join(target, 'assets/one/two.txt'), 'utf8')).toBe('deep content\n');
+  expect(await readdir(join(target, 'empty'))).toEqual([]);
 });
 
 test('uses an empty existing directory', async () => {
@@ -116,7 +159,7 @@ test('asks before using non-empty directories and keeps unrelated files', async 
   expect(await readFile(join(target, 'src/main.ts'), 'utf8')).toBeTruthy();
 });
 
-test('force overwrites only conflicting generated files and keeps other content', async () => {
+test('force overwrites only conflicting files and keeps unrelated content', async () => {
   const parent = await temporaryDirectory();
   const target = join(parent, 'occupied');
   await mkdir(target);
@@ -126,6 +169,44 @@ test('force overwrites only conflicting generated files and keeps other content'
   await createProject(options(target, { cwd: parent, force: true }));
   expect(JSON.parse(await readFile(join(target, 'package.json'), 'utf8')).name).toBe('occupied');
   expect(await readFile(join(target, 'keep.txt'), 'utf8')).toBe('keep me\n');
+});
+
+test('rejects malformed examples and source symlinks before creating project files', async () => {
+  const parent = await temporaryDirectory();
+  const target = join(parent, 'bad-example');
+  const malformed = join(parent, 'malformed');
+  await makeExample(malformed, { 'package.json': '{broken' });
+  await expect(createProject(options(target, { cwd: parent, sourceDirectory: malformed }))).rejects.toThrow(
+    /invalid package\.json/,
+  );
+  expect(await readdir(parent)).toContain('malformed');
+  expect(await readdir(parent)).not.toContain('bad-example');
+
+  const linked = join(parent, 'linked');
+  await makeExample(linked, { 'package.json': '{"name":"linked"}' });
+  await writeFile(join(parent, 'outside.txt'), 'outside');
+  await symlink(join(parent, 'outside.txt'), join(linked, 'link.txt'));
+  await expect(
+    createProject(options(join(parent, 'linked-target'), { cwd: parent, sourceDirectory: linked })),
+  ).rejects.toThrow(/symbolic link/);
+});
+
+test('refuses destination symlink parents and symlink project roots', async () => {
+  const parent = await temporaryDirectory();
+  const target = join(parent, 'symlink-parent');
+  const external = join(parent, 'external');
+  await mkdir(target);
+  await mkdir(external);
+  await symlink(external, join(target, 'src'));
+
+  await expect(createProject(options(target, { cwd: parent, force: true }))).rejects.toThrow(/symbolic link/);
+  expect(await readdir(external)).toEqual([]);
+
+  const rootLink = join(parent, 'root-link');
+  await symlink(external, rootLink);
+  await expect(createProject(options(rootLink, { cwd: parent, force: true }))).rejects.toThrow(
+    /cannot be a symbolic link/,
+  );
 });
 
 test('uses executable and argument arrays with paths containing spaces', async () => {

@@ -3,7 +3,6 @@ import type { Interface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { CliError } from './terminal.js';
 import type { PackageManager } from './package-manager.js';
-import type { TemplateName } from './project.js';
 
 async function ask<T extends string>(
   rl: Interface,
@@ -49,14 +48,16 @@ export async function promptPackageName(defaultValue: string): Promise<string> {
   }
 }
 
-export async function promptTemplate(defaultValue: TemplateName = 'typescript'): Promise<TemplateName> {
+export type StarterExample = 'basic-ts' | 'basic-js';
+
+export async function promptExample(defaultValue: StarterExample = 'basic-ts'): Promise<StarterExample> {
   const rl = createInterface({ input: stdin, output: stdout });
   try {
     return await ask(
       rl,
-      'Template:',
-      ['typescript', 'javascript'] as const,
-      { typescript: 'TypeScript', javascript: 'JavaScript' },
+      'Example:',
+      ['basic-ts', 'basic-js'] as const,
+      { 'basic-ts': 'Basic TypeScript', 'basic-js': 'Basic JavaScript' },
       defaultValue,
     );
   } finally {

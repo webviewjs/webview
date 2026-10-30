@@ -5,7 +5,8 @@ import { detectPackageManager, installCommand } from '../dist/package-manager.js
 test('parses defaults and a positional project directory', () => {
   expect(parseCliArgs([])).toEqual({
     projectDirectory: undefined,
-    template: undefined,
+    example: 'basic-ts',
+    explicitExample: false,
     packageManager: undefined,
     install: true,
     yes: false,
@@ -17,11 +18,11 @@ test('parses defaults and a positional project directory', () => {
   expect(parseCliArgs(['my-app']).projectDirectory).toBe('my-app');
 });
 
-test('parses the template, package manager, no-install, yes, force, help, and version options', () => {
+test('parses examples, the deprecated template alias, package manager, and shared options', () => {
   const parsed = parseCliArgs([
     'my-app',
-    '--template',
-    'javascript',
+    '--example',
+    'basic-js',
     '--package-manager',
     'bun',
     '--no-install',
@@ -31,7 +32,8 @@ test('parses the template, package manager, no-install, yes, force, help, and ve
     '--version',
   ]);
 
-  expect(parsed.template).toBe('javascript');
+  expect(parsed.example).toBe('basic-js');
+  expect(parsed.explicitExample).toBe(true);
   expect(parsed.packageManager).toBe('bun');
   expect(parsed.install).toBe(false);
   expect(parsed.yes).toBe(true);
@@ -40,8 +42,11 @@ test('parses the template, package manager, no-install, yes, force, help, and ve
   expect(parsed.version).toBe(true);
 });
 
-test('rejects unsupported templates, package managers, unknown flags, and extra directories', () => {
+test('maps deprecated template choices and rejects unsupported or conflicting options', () => {
+  expect(parseCliArgs(['--template', 'typescript']).example).toBe('basic-ts');
+  expect(parseCliArgs(['--template', 'javascript']).example).toBe('basic-js');
   expect(() => parseCliArgs(['--template', 'react'])).toThrow(/Unknown template "react"/);
+  expect(() => parseCliArgs(['--template', 'typescript', '--example', 'basic-ts'])).toThrow(/Use either --example/);
   expect(() => parseCliArgs(['--package-manager', 'deno'])).toThrow(/Unknown package manager "deno"/);
   expect(() => parseCliArgs(['--unknown'])).toThrow(/unknown/);
   expect(() => parseCliArgs(['one', 'two'])).toThrow(/Only one project directory/);

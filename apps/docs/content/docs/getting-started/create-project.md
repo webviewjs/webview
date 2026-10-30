@@ -1,9 +1,9 @@
 ---
 title: 'Create a project'
-description: 'Scaffold a Node.js WebviewJS application and inspect the generated files and options.'
+description: 'Create a Node.js WebviewJS application from a repository-hosted example.'
 ---
 
-The project creator generates a small Node.js application with an HTML page and a `webview build` script.
+The project creator downloads a starter example, customizes its npm package name, and can install its dependencies.
 
 ```sh
 npm create webview@latest my-app
@@ -13,10 +13,27 @@ npm run dev
 
 The alternate command `npm create webview-app@latest` invokes the same creator. The canonical package name is `create-webview`.
 
+## Choose an example
+
+The default example is `basic-ts`. Select the JavaScript starter with:
+
+```sh
+npm create webview@latest my-app -- --example basic-js
+```
+
+Named examples resolve to `webviewjs/webview/examples/<name>` on the `main` branch. The creator also accepts a GitHub repository URL or a directory URL that points to a repository subdirectory:
+
+```sh
+npm create webview@latest my-app -- --example https://github.com/owner/repository/tree/main/path/to/example
+```
+
+New starter directories added under the repository's top-level `examples/` directory are available without publishing a new creator version. The selected example's nested files, dotfiles, scripts, and dependency versions are copied. The creator updates only the root `package.json` name to match the project directory.
+
 ## Options
 
 ```text
 create-webview [project-directory]
+  --example <name|GitHub URL>
   --template <typescript|javascript>
   --package-manager <npm|bun|pnpm|yarn>
   --no-install
@@ -26,20 +43,27 @@ create-webview [project-directory]
   --version, -v
 ```
 
-| Option                                     | Behavior                                                                                                                                                          |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--template <typescript\|javascript>`      | Select the starter source language. TypeScript is the default.                                                                                                    |
-| `--package-manager <npm\|bun\|pnpm\|yarn>` | Choose which package manager installs dependencies and which commands are printed. The creator detects the invoking manager when possible and otherwise uses npm. |
-| `--no-install`                             | Write the project files but skip dependency installation.                                                                                                         |
-| `--yes`, `-y`                              | Skip prompts and use defaults. If no directory is supplied, use `webview-app`.                                                                                    |
-| `--force`                                  | Replace only conflicting files that the creator would generate. It does not clear the directory.                                                                  |
-| `--help`, `-h`                             | Print usage.                                                                                                                                                      |
-| `--version`, `-v`                          | Print the creator version.                                                                                                                                        |
+| Option                                     | Behavior                                                                                                                                                                                     |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--example <name\|GitHub URL>`             | Select an example. The default is `basic-ts`. Named examples come from `webviewjs/webview/examples/<name>` on `main`. GitHub repository and `/tree/<branch>/<directory>` URLs are supported. |
+| `--template <typescript\|javascript>`      | Deprecated compatibility alias: `typescript` selects `basic-ts`, and `javascript` selects `basic-js`.                                                                                        |
+| `--package-manager <npm\|bun\|pnpm\|yarn>` | Choose which package manager installs dependencies and which commands are printed. The creator detects the invoking manager when possible and otherwise uses npm.                            |
+| `--no-install`                             | Write the project files but skip dependency installation.                                                                                                                                    |
+| `--yes`, `-y`                              | Skip prompts and use defaults. If no directory is supplied, use `webview-app`.                                                                                                               |
+| `--force`                                  | Replace only files supplied by the selected example. It does not clear the directory.                                                                                                        |
+| `--help`, `-h`                             | Print usage.                                                                                                                                                                                 |
+| `--version`, `-v`                          | Print the creator version.                                                                                                                                                                   |
 
-For example, generate JavaScript files and install with Bun:
+For example, create a JavaScript project and install with Bun:
 
 ```sh
-npm create webview@latest my-app -- --template javascript --package-manager bun --yes
+npm create webview@latest my-app -- --example basic-js --package-manager bun --yes
+```
+
+The compatibility alias remains available:
+
+```sh
+npm create webview@latest my-app -- --template javascript --no-install --yes
 ```
 
 Skip installation if you want to review the files first:
@@ -51,11 +75,11 @@ npm install
 npm run dev
 ```
 
-The creator refuses to overwrite generated files unless you confirm interactively or pass `--force`. It preserves unrelated files in a non-empty directory.
+The creator refuses to overwrite files unless you confirm interactively or pass `--force`. It preserves unrelated files in a non-empty directory.
 
-## Generated project
+## Included starter examples
 
-The TypeScript template contains:
+The TypeScript and JavaScript starters contain:
 
 ```text
 my-app/
@@ -63,12 +87,12 @@ my-app/
 ├── README.md
 ├── .gitignore
 └── src/
-    ├── main.ts
+    ├── main.ts (or main.js)
     └── index.html
 ```
 
-`npm run dev` runs `node src/main.ts`. `npm run build` invokes `webview build` and embeds `src/index.html` into the standalone executable. The generated `package.json` requires Node.js 24 or newer.
+`npm run dev` runs the example's Node.js entry file. `npm run build` invokes `webview build` and embeds `src/index.html` into the standalone executable. The basic examples require Node.js 24 or newer and carry a published `@webviewjs/webview` dependency range; repository workspace dependency versions are not copied into generated projects.
 
-The JavaScript template has the same structure with `src/main.js`. Both templates target Node.js. To use Bun or Deno as the application runtime, install the package for that runtime and use the corresponding import form described in [Installation](./installation); the creator does not generate Bun- or Deno-specific scripts.
+The basic examples target Node.js. To use Bun or Deno as the application runtime, install the package for that runtime and use the corresponding import form described in [Installation](./installation); the basic starters do not generate Bun- or Deno-specific scripts.
 
 See [Loading application content](../guides/loading-content) to choose between inline HTML, a remote URL, and local assets, and [Building standalone executables](../guides/building-executables) for CLI behavior.
