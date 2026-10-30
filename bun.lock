@@ -49,6 +49,18 @@
         "typescript": "^5.9.3",
       },
     },
+    "examples/basic-js": {
+      "name": "@webviewjs/example-basic-js",
+      "dependencies": {
+        "@webviewjs/webview": "workspace:*",
+      },
+    },
+    "examples/basic-ts": {
+      "name": "@webviewjs/example-basic-ts",
+      "dependencies": {
+        "@webviewjs/webview": "workspace:*",
+      },
+    },
     "packages/create-webview": {
       "name": "create-webview",
       "version": "0.0.0",
@@ -557,6 +569,10 @@
     "@vercel/analytics": ["@vercel/analytics@2.0.1", "", { "peerDependencies": { "@remix-run/react": "^2", "@sveltejs/kit": "^1 || ^2", "next": ">= 13", "nuxt": ">= 3", "react": "^18 || ^19 || ^19.0.0-rc", "svelte": ">= 4", "vue": "^3", "vue-router": "^4" }, "optionalPeers": ["@remix-run/react", "@sveltejs/kit", "next", "nuxt", "react", "svelte", "vue", "vue-router"] }, "sha512-MTQG6V9qQrt1tsDeF+2Uoo5aPjqbVPys1xvnIftXSJYG2SrwXRHnqEvVoYID7BTruDz4lCd2Z7rM1BdkUehk2g=="],
 
     "@webviewjs/docs": ["@webviewjs/docs@workspace:apps/docs"],
+
+    "@webviewjs/example-basic-js": ["@webviewjs/example-basic-js@workspace:examples/basic-js"],
+
+    "@webviewjs/example-basic-ts": ["@webviewjs/example-basic-ts@workspace:examples/basic-ts"],
 
     "@webviewjs/examples": ["@webviewjs/examples@workspace:apps/examples"],
 

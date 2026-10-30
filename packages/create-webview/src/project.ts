@@ -29,6 +29,11 @@ export interface CreatedProject {
   packageName: string;
 }
 
+interface PreparedExample {
+  entries: ExampleEntry[];
+  latestPackages: string[];
+}
+
 export function normalizePackageName(input: string): string {
   const trimmed = input.trim();
   const normalized = trimmed.toLowerCase().replace(/\s+/g, '-');
@@ -57,7 +62,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   const target = resolve(cwd, options.directory);
   await assertSafeTarget(target, cwd);
   const packageName = normalizePackageName(options.packageName ?? basename(target));
-  const entries = await readExampleEntries(options.sourceDirectory, packageName);
+  const example = await prepareExampleEntries(options.sourceDirectory, packageName);
 
   let rootStat;
   try {
@@ -84,9 +89,9 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
     }
   }
 
-  await validateDestination(target, entries, options.force === true);
+  await validateDestination(target, example.entries, options.force === true);
   try {
-    for (const entry of entries) {
+    for (const entry of example.entries) {
       const destination = destinationPath(target, entry.path);
       if (entry.kind === 'directory') {
         await mkdir(destination, { recursive: true });
@@ -104,7 +109,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   }
 
   if (options.install) {
-    const { command, args } = installCommand(options.packageManager);
+    const { command, args } = installCommand(options.packageManager, example.latestPackages);
     try {
       await (options.runner ?? runCommand)(command, args, {
         cwd: target,
@@ -119,7 +124,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   return { directory: target, packageName };
 }
 
-async function readExampleEntries(sourceDirectory: string, packageName: string): Promise<ExampleEntry[]> {
+async function prepareExampleEntries(sourceDirectory: string, packageName: string): Promise<PreparedExample> {
   const source = resolve(sourceDirectory);
   let sourceStat;
   try {
@@ -145,6 +150,7 @@ async function readExampleEntries(sourceDirectory: string, packageName: string):
     }
 
     for (const name of children) {
+      if (name === 'node_modules') continue;
       if (!isSafeEntryName(name)) {
         throw new CliError(`The example contains an unsafe path entry: ${JSON.stringify(name)}.`);
       }
@@ -191,9 +197,28 @@ async function readExampleEntries(sourceDirectory: string, packageName: string):
     throw new CliError('The downloaded example has an invalid package.json: expected a JSON object.');
   }
   manifest.name = packageName;
+
+  const latestPackages = new Set<string>();
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+    const dependencies = manifest[field];
+    if (dependencies === undefined) continue;
+    if (!isRecord(dependencies)) {
+      throw new CliError(`The downloaded example has an invalid package.json: "${field}" must be an object.`);
+    }
+    for (const [name, version] of Object.entries(dependencies)) {
+      if (typeof version !== 'string') {
+        throw new CliError(`The downloaded example has an invalid dependency version for "${name}".`);
+      }
+      if (version.startsWith('workspace:')) {
+        dependencies[name] = 'latest';
+        latestPackages.add(`${name}@latest`);
+      }
+    }
+  }
+
   packageEntry.content = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
-  return entries;
+  return { entries, latestPackages: [...latestPackages] };
 }
 
 async function validateDestination(target: string, entries: ExampleEntry[], force: boolean): Promise<void> {

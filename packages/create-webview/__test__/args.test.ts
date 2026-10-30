@@ -63,7 +63,23 @@ test('detects supported package managers from npm_config_user_agent', () => {
 
 test('maps package managers to executable and argument arrays', () => {
   expect(installCommand('npm')).toEqual({ command: 'npm', args: ['install'] });
+  expect(installCommand('npm', ['@webviewjs/webview@latest'])).toEqual({
+    command: 'npm',
+    args: ['install', '@webviewjs/webview@latest'],
+  });
   expect(installCommand('bun')).toEqual({ command: 'bun', args: ['install'] });
+  expect(installCommand('bun', ['@webviewjs/webview@latest'])).toEqual({
+    command: 'bun',
+    args: ['add', '@webviewjs/webview@latest'],
+  });
   expect(installCommand('pnpm')).toEqual({ command: 'pnpm', args: ['install'] });
+  expect(installCommand('pnpm', ['@webviewjs/webview@latest'])).toEqual({
+    command: 'pnpm',
+    args: ['add', '@webviewjs/webview@latest'],
+  });
   expect(installCommand('yarn')).toEqual({ command: 'yarn', args: [] });
+  expect(installCommand('yarn', ['@webviewjs/webview@latest'])).toEqual({
+    command: 'yarn',
+    args: ['add', '@webviewjs/webview@latest'],
+  });
 });

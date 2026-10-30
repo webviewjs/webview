@@ -5,11 +5,12 @@
   "packageManager": "bun@1.4.2",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "examples/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
+    "dev": "turbo run dev --filter='./apps/*' --filter='./packages/*'",
+    "build": "turbo run build --filter='./apps/*' --filter='./packages/*'",
     "test": "turbo run test && bun --filter @webviewjs/examples check",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",

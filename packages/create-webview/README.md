@@ -37,7 +37,10 @@ available to users without publishing a new `create-webview` version.
 
 The selected example's files and dependency versions are preserved. The creator
 sets the npm package name in its `package.json` to match the requested project
-directory; it does not rewrite names in source files.
+directory; it does not rewrite names in source files. Workspace dependency
+specifiers are converted to the `latest` npm tag. When installation is enabled,
+the selected package manager installs those packages with an explicit `@latest`
+specifier. With `--no-install`, a later `npm install` resolves the same tag.
 
 ## Options
 

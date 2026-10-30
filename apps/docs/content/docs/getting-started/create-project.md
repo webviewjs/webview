@@ -27,7 +27,7 @@ Named examples resolve to `webviewjs/webview/examples/<name>` on the `main` bran
 npm create webview@latest my-app -- --example https://github.com/owner/repository/tree/main/path/to/example
 ```
 
-New starter directories added under the repository's top-level `examples/` directory are available without publishing a new creator version. The selected example's nested files, dotfiles, scripts, and dependency versions are copied. The creator updates only the root `package.json` name to match the project directory.
+New starter directories added under the repository's top-level `examples/` directory are available without publishing a new creator version. The selected example's nested files, dotfiles, scripts, and dependency versions are copied. The creator updates the root `package.json` name to match the project directory and converts `workspace:*` dependencies to the `latest` npm tag. When installation is enabled, it passes those dependencies to the selected package manager with an explicit `@latest` specifier; with `--no-install`, a later `npm install` resolves the tag.
 
 ## Options
 

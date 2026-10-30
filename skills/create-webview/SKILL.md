@@ -57,5 +57,6 @@ asset. Host-specific native prerequisites still apply; use the
 
 The basic examples contain `package.json`, `README.md`, `.gitignore`,
 `src/index.html`, and either `src/main.ts` or `src/main.js`. The creator sets
-the project npm package name in `package.json` and preserves the example's
-dependency versions.
+the project npm package name in `package.json` and preserves valid dependency
+versions. It converts workspace dependency specifiers to the `latest` npm tag
+and asks the selected package manager to install those packages at `@latest`.

@@ -33,12 +33,13 @@ function options(directory: string, overrides = {}) {
   };
 }
 
-test('creates the TypeScript project files and customizes only the manifest name', async () => {
+test('creates the TypeScript project files and resolves workspace dependencies to npm latest', async () => {
   const parent = await temporaryDirectory();
   const target = join(parent, 'my-app');
   const created = await createProject(options(target, { cwd: parent }));
 
   expect(created.packageName).toBe('my-app');
+  expect(await readdir(target)).not.toContain('node_modules');
   for (const file of ['package.json', 'README.md', '.gitignore', 'src/main.ts', 'src/index.html']) {
     await readFile(join(target, file), 'utf8');
   }
@@ -52,7 +53,7 @@ test('creates the TypeScript project files and customizes only the manifest name
     start: 'node src/main.ts',
     build: 'webview build src/main.ts --asset src/index.html',
   });
-  expect(manifest.dependencies['@webviewjs/webview']).toBe('^0.4.7');
+  expect(manifest.dependencies['@webviewjs/webview']).toBe('latest');
   expect(manifest.engines.node).toBe('>=24');
 
   const main = await readFile(join(target, 'src/main.ts'), 'utf8');
@@ -72,7 +73,7 @@ test('creates the TypeScript project files and customizes only the manifest name
   expect(await readFile(join(target, 'README.md'), 'utf8')).toMatch(/WebviewJS starter/);
 });
 
-test('creates JavaScript entry files and preserves its own manifest versions', async () => {
+test('creates JavaScript entry files and resolves its workspace dependency to npm latest', async () => {
   const parent = await temporaryDirectory();
   const target = join(parent, 'desktop_tool');
   await createProject(
@@ -87,7 +88,7 @@ test('creates JavaScript entry files and preserves its own manifest versions', a
   expect(manifest.scripts.dev).toBe('node src/main.js');
   expect(manifest.scripts.start).toBe('node src/main.js');
   expect(manifest.scripts.build).toBe('webview build src/main.js --asset src/index.html');
-  expect(manifest.dependencies['@webviewjs/webview']).toBe('^0.4.7');
+  expect(manifest.dependencies['@webviewjs/webview']).toBe('latest');
 });
 
 test('preserves nested files, dotfiles, empty directories, and dependency versions', async () => {
@@ -209,7 +210,7 @@ test('refuses destination symlink parents and symlink project roots', async () =
   );
 });
 
-test('uses executable and argument arrays with paths containing spaces', async () => {
+test('adds workspace dependencies at the npm latest tag using argument arrays', async () => {
   const parent = await temporaryDirectory();
   const target = join(parent, 'app directory with spaces');
   const calls = [];
@@ -227,7 +228,7 @@ test('uses executable and argument arrays with paths containing spaces', async (
 
   expect(calls.length).toBe(1);
   expect(calls[0].command).toBe('pnpm');
-  expect(calls[0].args).toEqual(['install']);
+  expect(calls[0].args).toEqual(['add', '@webviewjs/webview@latest']);
   expect(calls[0].runnerOptions.cwd).toBe(target);
   expect(calls[0].runnerOptions.shell).toBe(false);
 });

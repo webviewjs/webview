@@ -1,5 +1,5 @@
 {
-  "name": "webview-app",
+  "name": "@webviewjs/example-basic-js",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "build": "webview build src/main.js --asset src/index.html"
   },
   "dependencies": {
-    "@webviewjs/webview": "^0.4.7"
+    "@webviewjs/webview": "workspace:*"
   },
   "engines": {
     "node": ">=24"

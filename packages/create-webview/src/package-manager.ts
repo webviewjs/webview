@@ -13,16 +13,22 @@ export function detectPackageManager(userAgent = process.env.npm_config_user_age
   return 'npm';
 }
 
-export function installCommand(packageManager: PackageManager): { command: string; args: string[] } {
+export function installCommand(
+  packageManager: PackageManager,
+  latestPackages: string[] = [],
+): {
+  command: string;
+  args: string[];
+} {
   switch (packageManager) {
     case 'npm':
-      return { command: 'npm', args: ['install'] };
+      return { command: 'npm', args: ['install', ...latestPackages] };
     case 'bun':
-      return { command: 'bun', args: ['install'] };
+      return { command: 'bun', args: latestPackages.length > 0 ? ['add', ...latestPackages] : ['install'] };
     case 'pnpm':
-      return { command: 'pnpm', args: ['install'] };
+      return { command: 'pnpm', args: latestPackages.length > 0 ? ['add', ...latestPackages] : ['install'] };
     case 'yarn':
-      return { command: 'yarn', args: [] };
+      return { command: 'yarn', args: latestPackages.length > 0 ? ['add', ...latestPackages] : [] };
   }
 }
 
