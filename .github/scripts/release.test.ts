@@ -210,7 +210,9 @@ test('workflow structure keeps all automatic events read-only and publishing man
   expect(release.jobs.build.uses).toBe('./.github/workflows/Build.yml');
   expect(Object.keys(release.on)).toEqual(['workflow_dispatch']);
   expect(Object.keys(release.on.workflow_dispatch.inputs).sort()).toEqual(['npm_tag', 'version']);
+  expect(release.on.workflow_dispatch.inputs.version.description).toBe('Exact 1.x SemVer version to stamp and publish');
   expect(release.on.workflow_dispatch.inputs.npm_tag.default).toBe('next');
+  expect(release.on.workflow_dispatch.inputs.npm_tag.options).toEqual(['latest', 'next', 'rc', 'beta']);
   expect(release.concurrency).toEqual({ group: 'npm-release', 'cancel-in-progress': false });
   expect(release.jobs.publish.environment).toBe('npm-release');
   expect(release.jobs.publish.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
