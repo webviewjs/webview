@@ -10,11 +10,10 @@ import {
   writePackage,
   run,
   packagePlan,
-  allPackages,
   requireArtifacts,
   verifyVersions,
-  requireUnpublished,
-  verifyPublished,
+  inspectRegistryState,
+  registryPackage,
 } from './release.mjs';
 
 // Use npm's own SemVer implementation, already installed as a NAPI CLI dependency.
@@ -66,6 +65,68 @@ export function validatePublishEnvironment(tag, env = process.env) {
   if (env.npm_config_tag !== tag || env.npm_config_provenance !== 'true' || env.npm_config_ignore_scripts !== 'true') {
     throw new Error('NAPI publishing requires explicit tag, provenance, and ignore-scripts settings.');
   }
+}
+export function publishArguments(tag, tarballPath) {
+  return [
+    'publish',
+    ...(tarballPath ? [tarballPath] : []),
+    '--ignore-scripts',
+    '--access',
+    'public',
+    '--provenance',
+    '--tag',
+    tag,
+  ];
+}
+export function publishCommand(item, tag) {
+  return {
+    args: publishArguments(tag, item.tarball ? item.path : undefined),
+    cwd: item.tarball ? '.' : item.path,
+  };
+}
+export async function publishPackages(packages, version, tag, resume, options = {}) {
+  const {
+    lookup = registryPackage,
+    publishPackage = (item) => {
+      const { args, cwd } = publishCommand(item, tag);
+      return run('npm', args, cwd);
+    },
+    registryOptions = {},
+    log = console.log,
+    initialState,
+  } = options;
+  const { state } =
+    initialState === undefined
+      ? await inspectRegistryState(packages, version, resume, { ...registryOptions, lookup, log })
+      : { state: initialState };
+  const reused = packages.filter(({ name }) => state.get(name)).map(({ name }) => name);
+  const missing = packages.filter(({ name }) => !state.get(name));
+  const newlyPublished = [];
+
+  for (const name of reused) log(`Reused existing package: ${name}@${version}`);
+  for (const { name } of missing) log(`Missing ${name}@${version}`);
+
+  try {
+    for (const item of missing) {
+      await publishPackage(item);
+      newlyPublished.push(item.name);
+      log(`Published new package: ${item.name}@${version}`);
+    }
+  } catch (error) {
+    log(`Reused existing packages: ${reused.length ? reused.join(', ') : '(none)'}`);
+    log(`Missing packages at start: ${missing.map(({ name }) => name).join(', ') || '(none)'}`);
+    log(`Published new packages: ${newlyPublished.length ? newlyPublished.join(', ') : '(none)'}`);
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Release failed after publishing ${newlyPublished.length} package(s): ${detail}. Inspect npm versions and dist-tags, then rerun with resume=true.`,
+      { cause: error },
+    );
+  }
+
+  log(`Reused existing packages: ${reused.length ? reused.join(', ') : '(none)'}`);
+  log(`Missing packages at start: ${missing.map(({ name }) => name).join(', ') || '(none)'}`);
+  log(`Published new packages: ${newlyPublished.length ? newlyPublished.join(', ') : '(none)'}`);
+  return { reused, missing: missing.map(({ name }) => name), newlyPublished };
 }
 export function stageCreator(source, destination, name, version) {
   mkdirSync(destination, { recursive: true });
@@ -122,7 +183,7 @@ export async function prepare(version) {
   for (const { name } of await packagePlan())
     if (packed.optionalDependencies?.[name] !== version)
       throw new Error(`Packed platform dependency mismatch: ${name}`);
-  tarballs.push({ name: packed.name, path });
+  tarballs.push({ name: packed.name, path, tarball: true });
   const staging = mkdtempSync(join(tmpdir(), 'webview-creators-'));
   try {
     for (const name of ['create-webview', 'create-webview-app']) {
@@ -134,7 +195,7 @@ export async function prepare(version) {
       );
       const path = resolve(output, (Array.isArray(result) ? result[0] : result[name]).filename);
       inspectTarball(path, name, version, ['dist/index.js', 'README.md', 'LICENSE']);
-      tarballs.push({ name, path });
+      tarballs.push({ name, path, tarball: true });
     }
   } finally {
     rmSync(staging, { recursive: true, force: true });
@@ -152,7 +213,7 @@ export async function prepare(version) {
       process.env.RELEASE_TAG,
     ]);
 }
-export async function publish(version, tag) {
+export async function publish(version, tag, resume = process.env.RELEASE_RESUME === 'true') {
   validatePublishEnvironment(tag);
   const plan = readPackage(`${output}/plan.json`);
   if (
@@ -162,24 +223,26 @@ export async function publish(version, tag) {
     throw new Error('Stale or invalid release plan.');
   await verifyVersions(version, true);
   const platforms = await packagePlan();
+  const packages = [...platforms, ...plan.tarballs];
   requireArtifacts(platforms, false);
   for (const item of platforms) validateManifest(readPackage(`${item.path}/package.json`), item.name, version);
   for (const item of plan.tarballs) inspectTarball(item.path, item.name, version);
-  await requireUnpublished(await allPackages(), version);
+  const { state } = await inspectRegistryState(packages, version, resume);
   try {
-    // NAPI owns platform publication. It invokes npm publish and inherits the
-    // provenance/tag/ignore-scripts environment; do not publish these again.
+    // NAPI prepares platform manifests and optionalDependencies, but leaves all
+    // npm writes to the individually guarded publisher below.
     const { NapiCli } = webviewRequire('@napi-rs/cli');
-    await new NapiCli().prePublish({ cwd: resolve(webview), tagStyle: 'npm', ghRelease: false });
-    await verifyPublished(platforms, version, tag);
-    for (const item of plan.tarballs) {
-      await requireUnpublished([item], version);
-      run('npm', ['publish', item.path, '--ignore-scripts', '--provenance', '--access', 'public', '--tag', tag]);
-    }
-    await verifyPublished(await allPackages(), version, tag);
+    await new NapiCli().prePublish({
+      cwd: resolve(webview),
+      tagStyle: 'npm',
+      ghRelease: false,
+      skipOptionalPublish: true,
+    });
+    await verifyVersions(version, true);
+    return publishPackages(packages, version, tag, resume, { initialState: state });
   } catch (error) {
     throw new Error(
-      'Release failed and may be partially published. Inspect npm versions and tags before manual recovery; reruns refuse existing versions.',
+      'Release failed and may be partially published. Inspect npm versions and tags before rerunning with resume=true.',
       { cause: error },
     );
   }

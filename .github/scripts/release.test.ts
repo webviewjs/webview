@@ -6,16 +6,20 @@ import {
   run,
   webviewRequire,
   validateRelease,
-  requireUnpublished,
   registryVersion,
+  registryPackage,
+  inspectRegistryState,
   requireArtifacts,
   readPackage,
-  verifyPublished,
   packagePlan,
+  allPackages,
 } from './release.mjs';
 import {
   validateManifest,
   validatePublishEnvironment,
+  publishArguments,
+  publishCommand,
+  publishPackages,
   stageCreator,
   packWorkspace,
   inspectTarball,
@@ -58,33 +62,282 @@ test('only manual main releases accept exact v1 semver and compatible tags', () 
     { tag: 'latest' },
     { tag: 'beta' },
     { version: '1.0.0', tag: 'rc' },
+    { resume: 'maybe' },
   ])
     expect(() => validateRelease({ ...base, ...change })).toThrow();
 });
 
-test('registry errors fail closed; only 404 means missing', async () => {
-  expect(await registryVersion('pkg', '1.0.0', async () => new Response('', { status: 404 }))).toBeNull();
-  for (const status of [401, 403, 429, 500]) {
-    await expect(registryVersion('pkg', '1.0.0', async () => new Response('', { status }))).rejects.toThrow(
-      'npm lookup failed',
-    );
-  }
-  await expect(
-    registryVersion('pkg', '1.0.0', async () => Response.json({ name: 'wrong', version: '1.0.0' })),
-  ).rejects.toThrow('Unexpected');
-  expect(await registryVersion('pkg', '1.0.0', async () => Response.json({ name: 'pkg', version: '1.0.0' }))).toEqual({
-    name: 'pkg',
-    version: '1.0.0',
+test('registry lookups retry rate limits and server failures with Retry-After backoff', async () => {
+  let attempts = 0;
+  const delays: number[] = [];
+  const manifest = { name: 'pkg', version: '1.0.0' };
+  const result = await registryVersion('pkg', '1.0.0', {
+    maxAttempts: 4,
+    sleep: async (delay: number) => void delays.push(delay),
+    log: () => {},
+    fetcher: async () => {
+      attempts += 1;
+      if (attempts === 1) return new Response('', { status: 503 });
+      if (attempts === 2) return new Response('', { status: 429, headers: { 'retry-after': '2' } });
+      return Response.json(manifest);
+    },
   });
+  expect(result).toEqual(manifest);
+  expect(attempts).toBe(3);
+  expect(delays).toEqual([500, 2000]);
 });
 
-test('partial releases cannot be silently resumed', async () => {
+test('registry lookups retry timeouts and network errors but stop after the configured bound', async () => {
+  let attempts = 0;
+  const delays: number[] = [];
+  const result = await registryVersion('pkg', '1.0.0', {
+    maxAttempts: 3,
+    sleep: async (delay: number) => void delays.push(delay),
+    log: () => {},
+    fetcher: async () => {
+      attempts += 1;
+      if (attempts === 1) throw Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+      if (attempts === 2) throw new TypeError('network is unavailable');
+      return Response.json({ name: 'pkg', version: '1.0.0' });
+    },
+  });
+  expect(result).toEqual({ name: 'pkg', version: '1.0.0' });
+  expect(delays).toEqual([500, 1000]);
+  expect(attempts).toBe(3);
+
+  attempts = 0;
   await expect(
-    requireUnpublished([{ name: 'one' }, { name: 'two' }], '1.0.0', async (name: string) =>
-      name === 'two' ? {} : null,
-    ),
-  ).rejects.toThrow('duplicate/partial release');
-  await expect(requireUnpublished([{ name: 'one' }], '1.0.0', async () => null)).resolves.toBeUndefined();
+    registryVersion('pkg', '1.0.0', {
+      maxAttempts: 2,
+      sleep: async () => {},
+      log: () => {},
+      fetcher: async () => {
+        attempts += 1;
+        return new Response('', { status: 503 });
+      },
+    }),
+  ).rejects.toThrow('2 attempt(s)');
+  expect(attempts).toBe(2);
+});
+
+test('registry lookups fail immediately on permanent errors and unexpected metadata', async () => {
+  for (const status of [401, 403]) {
+    let attempts = 0;
+    await expect(
+      registryVersion('pkg', '1.0.0', {
+        maxAttempts: 4,
+        fetcher: async () => {
+          attempts += 1;
+          return new Response('', { status });
+        },
+      }),
+    ).rejects.toThrow(`HTTP ${status}`);
+    expect(attempts).toBe(1);
+  }
+  let attempts = 0;
+  await expect(
+    registryVersion('pkg', '1.0.0', {
+      maxAttempts: 4,
+      fetcher: async () => {
+        attempts += 1;
+        return Response.json({ name: 'wrong', version: '1.0.0' });
+      },
+    }),
+  ).rejects.toThrow('unexpected registry metadata');
+  expect(attempts).toBe(1);
+});
+
+test('registry 404 is absent unless the exact version is already visible through a dist-tag', async () => {
+  expect(await registryVersion('pkg', '1.0.0', { fetcher: async () => new Response('', { status: 404 }) })).toBeNull();
+  const urls: string[] = [];
+  const existing = await registryPackage('pkg', '1.0.0', {
+    fetcher: async (input: string | URL | Request) => {
+      urls.push(String(input));
+      return String(input).endsWith('/dist-tags')
+        ? Response.json({ next: '1.0.0' })
+        : new Response('', { status: 404 });
+    },
+  });
+  expect(existing).toEqual({ name: 'pkg', version: '1.0.0' });
+  expect(urls).toHaveLength(2);
+  const missing = await registryPackage('pkg', '1.0.0', {
+    fetcher: async (input: string | URL | Request) =>
+      String(input).endsWith('/dist-tags') ? Response.json({ next: '0.9.0' }) : new Response('', { status: 404 }),
+  });
+  expect(missing).toBeNull();
+  await expect(
+    registryPackage('pkg', '1.0.0', {
+      fetcher: async (input: string | URL | Request) =>
+        String(input).endsWith('/dist-tags') ? Response.json({ next: 100 }) : new Response('', { status: 404 }),
+    }),
+  ).rejects.toThrow('unexpected registry metadata');
+});
+
+const publicationPlan = [
+  { name: '@webviewjs/webview-linux-x64-gnu', path: 'platform-linux' },
+  { name: '@webviewjs/webview-darwin-arm64', path: 'platform-macos' },
+  { name: '@webviewjs/webview', path: 'primary.tgz', tarball: true },
+  { name: 'create-webview', path: 'creator.tgz', tarball: true },
+  { name: 'create-webview-app', path: 'creator-mirror.tgz', tarball: true },
+];
+
+function publicationHarness(initiallyPublished: string[] = [], failName?: string) {
+  const published = new Set(initiallyPublished);
+  const writes: string[] = [];
+  const logs: string[] = [];
+  let failed = false;
+  return {
+    published,
+    writes,
+    logs,
+    options: {
+      lookup: async (name: string, version: string) => (published.has(name) ? { name, version } : null),
+      publishPackage: async (item: { name: string }) => {
+        if (item.name === failName && !failed) {
+          failed = true;
+          throw new Error('simulated npm publish failure');
+        }
+        if (published.has(item.name)) throw new Error(`attempted immutable republish: ${item.name}`);
+        writes.push(item.name);
+        published.add(item.name);
+      },
+      log: (message: string) => logs.push(message),
+    },
+  };
+}
+
+test('normal publication writes all missing packages in platform-primary-creator order', async () => {
+  const harness = publicationHarness();
+  const result = await publishPackages(publicationPlan, '1.0.0-rc.3', 'rc', false, harness.options);
+  expect(harness.writes).toEqual(publicationPlan.map(({ name }) => name));
+  expect(result.reused).toEqual([]);
+  expect(result.missing).toEqual(publicationPlan.map(({ name }) => name));
+  expect(result.newlyPublished).toEqual(publicationPlan.map(({ name }) => name));
+  expect(publishArguments('rc')).toEqual([
+    'publish',
+    '--ignore-scripts',
+    '--access',
+    'public',
+    '--provenance',
+    '--tag',
+    'rc',
+  ]);
+  expect(publishCommand(publicationPlan[0], 'rc')).toEqual({
+    args: publishArguments('rc'),
+    cwd: 'platform-linux',
+  });
+  expect(publishCommand(publicationPlan[2], 'rc')).toEqual({
+    args: publishArguments('rc', 'primary.tgz'),
+    cwd: '.',
+  });
+  expect(harness.logs.some((message) => message.includes('Missing'))).toBe(true);
+  expect(harness.logs.some((message) => message.includes('Published new packages'))).toBe(true);
+});
+
+test('normal publication rejects any existing exact version before npm writes', async () => {
+  const harness = publicationHarness([publicationPlan[0].name]);
+  await expect(publishPackages(publicationPlan, '1.0.0-rc.3', 'rc', false, harness.options)).rejects.toThrow(
+    'Refusing duplicate/partial release',
+  );
+  expect(harness.writes).toEqual([]);
+});
+
+test('resume reuses mixed native and primary packages and publishes only missing packages', async () => {
+  const harness = publicationHarness([publicationPlan[0].name, publicationPlan[2].name]);
+  const result = await publishPackages(publicationPlan, '1.0.0-rc.3', 'rc', true, harness.options);
+  expect(harness.writes).toEqual([publicationPlan[1].name, publicationPlan[3].name, publicationPlan[4].name]);
+  expect(result.reused).toEqual([publicationPlan[0].name, publicationPlan[2].name]);
+  expect(harness.logs.some((message) => message.includes('Reused existing package'))).toBe(true);
+  expect(harness.logs.some((message) => message.includes('Missing'))).toBe(true);
+});
+
+test('resume can publish only missing native packages before existing primary and creators', async () => {
+  const missingNative = publicationPlan[1].name;
+  const harness = publicationHarness(
+    publicationPlan.filter(({ name }) => name !== missingNative).map(({ name }) => name),
+  );
+  const result = await publishPackages(publicationPlan, '1.0.0-rc.3', 'rc', true, harness.options);
+  expect(harness.writes).toEqual([missingNative]);
+  expect(result.newlyPublished).toEqual([missingNative]);
+});
+
+test('resume can publish missing creator packages after all native and primary packages exist', async () => {
+  const harness = publicationHarness(publicationPlan.slice(0, 3).map(({ name }) => name));
+  const result = await publishPackages(publicationPlan, '1.0.0-rc.3', 'rc', true, harness.options);
+  expect(harness.writes).toEqual(['create-webview', 'create-webview-app']);
+  expect(result.newlyPublished).toEqual(['create-webview', 'create-webview-app']);
+});
+
+test('resume skips npm writes when every package version already exists', async () => {
+  const harness = publicationHarness(publicationPlan.map(({ name }) => name));
+  const result = await publishPackages(publicationPlan, '1.0.0-rc.3', 'rc', true, harness.options);
+  expect(harness.writes).toEqual([]);
+  expect(result.reused).toEqual(publicationPlan.map(({ name }) => name));
+  expect(result.newlyPublished).toEqual([]);
+});
+
+test('a failed partial release is safely recoverable with resume=true', async () => {
+  const harness = publicationHarness([], publicationPlan[1].name);
+  await expect(publishPackages(publicationPlan, '1.0.0-rc.3', 'rc', false, harness.options)).rejects.toThrow(
+    'rerun with resume=true',
+  );
+  expect(harness.writes).toEqual([publicationPlan[0].name]);
+  const resumed = await publishPackages(publicationPlan, '1.0.0-rc.3', 'rc', true, harness.options);
+  expect(resumed.reused).toEqual([publicationPlan[0].name]);
+  expect(harness.writes).toEqual(publicationPlan.map(({ name }) => name));
+});
+
+test('successful npm commands complete publication without waiting for registry visibility', async () => {
+  let lookups = 0;
+  const writes: string[] = [];
+  const result = await publishPackages(publicationPlan, '1.0.0-rc.3', 'rc', true, {
+    lookup: async () => {
+      lookups += 1;
+      return null;
+    },
+    publishPackage: async ({ name }: { name: string }) => writes.push(name),
+    log: () => {},
+  });
+  expect(result.newlyPublished).toEqual(publicationPlan.map(({ name }) => name));
+  expect(writes).toEqual(publicationPlan.map(({ name }) => name));
+  expect(lookups).toBe(publicationPlan.length);
+});
+
+test('failed native npm publication does not publish the primary or creator packages', async () => {
+  const harness = publicationHarness([], publicationPlan[1].name);
+  await expect(publishPackages(publicationPlan, '1.0.0-rc.3', 'rc', false, harness.options)).rejects.toThrow(
+    'simulated npm publish failure',
+  );
+  expect(harness.writes).toEqual([publicationPlan[0].name]);
+  expect(harness.published.has('@webviewjs/webview')).toBe(false);
+  expect(harness.published.has('create-webview')).toBe(false);
+});
+
+test('resume registry scan logs existing and missing packages and normal mode remains fail-closed', async () => {
+  const packages = publicationPlan.slice(0, 2);
+  const logs: string[] = [];
+  const options = {
+    lookup: async (name: string, version: string) => (name === packages[0].name ? { name, version } : null),
+    log: (message: string) => logs.push(message),
+  };
+  const state = await inspectRegistryState(packages, '1.0.0-rc.3', true, options);
+  expect(state.existing).toEqual([packages[0].name]);
+  expect(state.missing).toEqual([packages[1].name]);
+  expect(logs.some((message) => message.includes('Found'))).toBe(true);
+  expect(logs.some((message) => message.includes('Missing'))).toBe(true);
+  await expect(inspectRegistryState(packages, '1.0.0-rc.3', false, options)).rejects.toThrow(
+    'Refusing duplicate/partial release',
+  );
+});
+
+test('all fifteen release packages include twelve native builds and three monorepo packages', async () => {
+  const packages = await allPackages();
+  expect(packages).toHaveLength(15);
+  expect(packages.slice(-3).map(({ name }) => name)).toEqual([
+    '@webviewjs/webview',
+    'create-webview',
+    'create-webview-app',
+  ]);
 });
 
 test('every configured platform has an exact artifact and manifest plan', async () => {
@@ -163,19 +416,6 @@ test('both creator stages retain files, aliases and exact version', () => {
   expect(() => stageCreator(source, join(directory, 'bad'), 'create-webview', '1.0.0')).toThrow('alias');
 });
 
-test('post-publication checks verify version and requested tag', async () => {
-  await expect(
-    verifyPublished([{ name: 'pkg' }], '1.0.0', 'next', async (url: string) =>
-      Response.json(url.endsWith('dist-tags') ? { next: '1.0.0' } : { name: 'pkg', version: '1.0.0' }),
-    ),
-  ).resolves.toBeUndefined();
-  await expect(
-    verifyPublished([{ name: 'pkg' }], '1.0.0', 'next', async (url: string) =>
-      url.endsWith('dist-tags') ? new Response('', { status: 403 }) : Response.json({ name: 'pkg', version: '1.0.0' }),
-    ),
-  ).rejects.toThrow('dist-tag lookup failed');
-});
-
 test('Trusted Publishing needs no auth token and retains publish safety settings', () => {
   const env = {
     npm_config_tag: 'rc',
@@ -209,13 +449,28 @@ test('workflow structure keeps all automatic events read-only and publishing man
   expect(ci.jobs.build.uses).toBe('./.github/workflows/Build.yml');
   expect(release.jobs.build.uses).toBe('./.github/workflows/Build.yml');
   expect(Object.keys(release.on)).toEqual(['workflow_dispatch']);
-  expect(Object.keys(release.on.workflow_dispatch.inputs).sort()).toEqual(['npm_tag', 'version']);
+  expect(Object.keys(release.on.workflow_dispatch.inputs).sort()).toEqual(['npm_tag', 'resume', 'version']);
   expect(release.on.workflow_dispatch.inputs.version.description).toBe('Exact 1.x SemVer version to stamp and publish');
   expect(release.on.workflow_dispatch.inputs.npm_tag.default).toBe('next');
   expect(release.on.workflow_dispatch.inputs.npm_tag.options).toEqual(['latest', 'next', 'rc', 'beta']);
+  expect(release.on.workflow_dispatch.inputs.resume).toEqual({
+    description: 'Reuse exact package versions already published to npm',
+    required: false,
+    default: false,
+    type: 'boolean',
+  });
   expect(release.concurrency).toEqual({ group: 'npm-release', 'cancel-in-progress': false });
   expect(release.jobs.publish.environment).toBe('npm-release');
   expect(release.jobs.publish.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
+  expect(release.jobs.publish.env.RELEASE_RESUME).toBe('${{ inputs.resume }}');
+  expect(
+    release.jobs.validate.steps.find((step: any) => step.name === 'Validate branch, semver, and dist-tag').env
+      .RELEASE_RESUME,
+  ).toBe('${{ inputs.resume }}');
+  expect(
+    release.jobs.validate.steps.find((step: any) => step.name === 'Inspect npm registry state before building').env
+      .RELEASE_RESUME,
+  ).toBe('${{ inputs.resume }}');
   const setupNode = release.jobs.publish.steps.find((step: any) => step.uses === 'actions/setup-node@v4');
   expect(setupNode.with['node-version']).toBe(24);
   expect(setupNode.with).not.toHaveProperty('registry-url');
@@ -224,9 +479,25 @@ test('workflow structure keeps all automatic events read-only and publishing man
   ).toBe('npm install --global npm@11.21.0');
   expect(JSON.stringify(release)).not.toMatch(/NODE_AUTH_TOKEN|NPM_TOKEN/);
   expect(release.jobs.build.needs).toBe('validate');
+  expect(release.jobs.build.with).toEqual({ version: '${{ inputs.version }}', npm_tag: '${{ inputs.npm_tag }}' });
   const publishingStep = release.jobs.publish.steps.at(-1);
   expect(publishingStep.env.npm_config_provenance).toBe('true');
   expect(publishingStep.env.npm_config_ignore_scripts).toBe('true');
+  const githubRelease = release.jobs['github-release'];
+  expect(githubRelease.needs).toBe('publish');
+  expect(githubRelease.permissions).toEqual({ contents: 'write' });
+  const releaseCheckout = githubRelease.steps.find((step: any) => step.uses === 'actions/checkout@v4');
+  expect(releaseCheckout.with['fetch-depth']).toBe(0);
+  const createRelease = githubRelease.steps.find(
+    (step: any) => step.name === 'Create GitHub Release with native artifacts',
+  );
+  expect(createRelease.env.GH_TOKEN).toBe('${{ github.token }}');
+  expect(createRelease.run).toContain('assets=(packages/webview/artifacts/bindings-*/*.node)');
+  expect(createRelease.run).toContain('git merge-base --is-ancestor');
+  expect(createRelease.run).toContain('gh release upload');
+  expect(createRelease.run).toContain('release_options+=(--prerelease)');
+  expect(createRelease.run).toContain('--target "$GITHUB_SHA"');
+  expect(createRelease.run).toContain('gh release view "$release_tag" --json assets');
   for (const name of ['Validation', 'Build']) {
     expect(JSON.stringify(workflow(name))).not.toContain('NPM_TOKEN');
     expect(JSON.stringify(workflow(name))).not.toContain('release.mjs publish');

@@ -9,11 +9,17 @@ export const creator = 'packages/create-webview';
 // NAPI belongs to this workspace, not the private monorepo root.
 export const webviewRequire = createRequire(new URL('../../packages/webview/package.json', import.meta.url));
 export const registry = 'https://registry.npmjs.org';
+export const registryRetryDefaults = {
+  maxDurationMs: 90_000,
+  maxAttempts: 12,
+  baseDelayMs: 500,
+  maxDelayMs: 10_000,
+};
 const numeric = '(?:0|[1-9][0-9]*)';
 const identifier = `(?:${numeric}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)`;
 const semver = new RegExp(`^1\\.${numeric}\\.${numeric}(?:-(${identifier}(?:\\.${identifier})*))?$`);
 
-export function validateRelease({ event, ref, version, tag }) {
+export function validateRelease({ event, ref, version, tag, resume }) {
   if (event !== 'workflow_dispatch' || ref !== 'refs/heads/main') {
     throw new Error('Release requires workflow_dispatch on main.');
   }
@@ -25,6 +31,9 @@ export function validateRelease({ event, ref, version, tag }) {
   if (prerelease && tag === 'latest') throw new Error('Prereleases cannot use latest.');
   if (['rc', 'beta'].includes(tag) && prerelease?.split('.')[0] !== tag) {
     throw new Error(`${tag} requires a matching ${tag} prerelease; use next for other versions.`);
+  }
+  if (resume !== undefined && !['true', 'false'].includes(resume)) {
+    throw new Error('resume must be true or false.');
   }
 }
 
@@ -72,27 +81,162 @@ export async function allPackages() {
   ];
 }
 
-export async function registryVersion(name, version, fetcher = fetch) {
-  const response = await fetcher(`${registry}/${encodeURIComponent(name)}/${encodeURIComponent(version)}`, {
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`npm lookup failed for ${name}@${version}: HTTP ${response.status}`);
-  const manifest = await response.json();
-  if (manifest.name !== name || manifest.version !== version)
-    throw new Error(`Unexpected npm response for ${name}@${version}.`);
-  return manifest;
+function retryAfterMs(response) {
+  const value = response.headers?.get('retry-after');
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
 }
-export async function requireUnpublished(packages, version, lookup = registryVersion) {
-  const existing = [];
-  for (const { name } of packages) {
-    if (await lookup(name, version)) existing.push(name);
-  }
-  if (existing.length)
-    throw new Error(
-      `Version ${version} already exists for: ${existing.join(', ')}. Refusing duplicate/partial release. Inspect registry state and recover manually; this workflow never silently skips packages.`,
+
+function registryError(subject, status, attempts, elapsedMs, reason) {
+  return new Error(
+    `npm registry request failed for ${subject}: ${reason} (HTTP ${status}; ${attempts} attempt(s); ${Math.round(elapsedMs)}ms elapsed).`,
+  );
+}
+
+async function registryJson(url, subject, options = {}) {
+  const {
+    fetcher = globalThis.fetch,
+    validate,
+    maxDurationMs = registryRetryDefaults.maxDurationMs,
+    maxAttempts = registryRetryDefaults.maxAttempts,
+    baseDelayMs = registryRetryDefaults.baseDelayMs,
+    maxDelayMs = registryRetryDefaults.maxDelayMs,
+    sleep = (ms) => new Promise((done) => setTimeout(done, ms)),
+    now = () => performance.now(),
+    log = console.warn,
+  } = options;
+  const startedAt = now();
+  let attempts = 0;
+  let lastStatus = 'no response';
+  let lastReason = 'request duration exceeded';
+  let lastRetryAfter = null;
+
+  while (attempts < maxAttempts) {
+    const elapsedMs = now() - startedAt;
+    const remainingMs = maxDurationMs - elapsedMs;
+    if (remainingMs <= 0) break;
+
+    attempts += 1;
+    let response;
+    let shouldRetry = false;
+    try {
+      response = await fetcher(url, {
+        headers: { 'cache-control': 'no-cache, no-store' },
+        signal: AbortSignal.timeout(Math.max(1, Math.ceil(Math.min(30_000, remainingMs)))),
+      });
+    } catch (error) {
+      lastStatus = 'network error';
+      lastReason =
+        error?.name === 'TimeoutError' || error?.name === 'AbortError' ? 'request timed out' : 'request failed';
+      lastRetryAfter = null;
+      shouldRetry = true;
+    }
+
+    if (response?.status === 404) return null;
+    if (response && !response.ok) {
+      lastStatus = String(response.status);
+      lastReason = `registry returned HTTP ${response.status}`;
+      if (response.status === 429 || response.status >= 500) {
+        shouldRetry = true;
+        lastRetryAfter = retryAfterMs(response);
+      } else {
+        throw registryError(subject, lastStatus, attempts, now() - startedAt, lastReason);
+      }
+    } else if (response?.ok) {
+      let body;
+      try {
+        body = await response.json();
+      } catch {
+        throw registryError(subject, String(response.status), attempts, now() - startedAt, 'invalid JSON response');
+      }
+      if (validate && !validate(body)) {
+        throw registryError(
+          subject,
+          String(response.status),
+          attempts,
+          now() - startedAt,
+          'unexpected registry metadata',
+        );
+      }
+      return body;
+    }
+
+    if (!shouldRetry) break;
+    const elapsed = now() - startedAt;
+    const remaining = maxDurationMs - elapsed;
+    if (attempts >= maxAttempts || remaining <= 0) break;
+    const backoffMs = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempts - 1));
+    const delayMs = Math.min(remaining, Math.max(backoffMs, lastRetryAfter ?? 0));
+    log(
+      `Retrying npm registry request for ${subject}: HTTP ${lastStatus}, attempt ${attempts}/${maxAttempts}, ${Math.round(elapsed)}ms elapsed.`,
     );
+    await sleep(delayMs);
+  }
+
+  throw registryError(subject, lastStatus, attempts, now() - startedAt, lastReason);
 }
+
+export async function registryVersion(name, version, options = {}) {
+  const manifest = await registryJson(
+    `${registry}/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
+    `${name}@${version}`,
+    { ...options, validate: (body) => body?.name === name && body?.version === version },
+  );
+  return manifest ?? null;
+}
+
+export async function registryPackage(name, version, options = {}) {
+  const manifest = await registryVersion(name, version, options);
+  if (manifest) return manifest;
+
+  // A dist-tag can become visible before the exact version document propagates.
+  const distTags = await registryJson(
+    `${registry}/-/package/${encodeURIComponent(name)}/dist-tags`,
+    `${name}@${version} dist-tags`,
+    {
+      ...options,
+      validate: (body) =>
+        body !== null &&
+        typeof body === 'object' &&
+        !Array.isArray(body) &&
+        Object.values(body).every((tag) => typeof tag === 'string'),
+    },
+  );
+  if (Object.values(distTags ?? {}).includes(version)) return { name, version };
+  return null;
+}
+
+export async function registryState(packages, version, options = {}) {
+  const entries = await Promise.all(
+    packages.map(async ({ name }) => [name, await registryPackage(name, version, options)]),
+  );
+  return new Map(entries);
+}
+
+export async function inspectRegistryState(packages, version, resume = false, options = {}) {
+  const { lookup = registryPackage, log = console.log, ...registryOptions } = options;
+  const entries = await Promise.all(
+    packages.map(async ({ name }) => [name, await lookup(name, version, registryOptions)]),
+  );
+  const state = new Map(entries);
+  const existing = packages.filter(({ name }) => state.get(name)).map(({ name }) => name);
+  const missing = packages.filter(({ name }) => !state.get(name)).map(({ name }) => name);
+  if (existing.length && !resume) {
+    throw new Error(
+      `Version ${version} already exists for: ${existing.join(', ')}. Refusing duplicate/partial release; use resume=true after inspecting the registry state.`,
+    );
+  }
+  if (resume) {
+    log(`Resume registry scan for ${version}: ${existing.length} already published, ${missing.length} missing.`);
+    for (const name of existing) log(`Found ${name}@${version}`);
+    for (const name of missing) log(`Missing ${name}@${version}`);
+  }
+  return { state, existing, missing };
+}
+
 export function requireArtifacts(plan, downloaded) {
   for (const item of plan) {
     const path = downloaded
@@ -129,41 +273,18 @@ export async function verifyVersions(version, optional = false) {
         throw new Error(`Missing exact platform dependency ${name}@${version}.`);
     }
 }
-export async function verifyPublished(packages, version, tag, fetcher = fetch) {
-  for (const { name } of packages) {
-    // Registry propagation can lag a successful publish. Retry reads only, never publication.
-    let verified = false;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const manifest = await registryVersion(name, version, fetcher);
-      const response = await fetcher(`${registry}/-/package/${encodeURIComponent(name)}/dist-tags`, {
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!response.ok) throw new Error(`npm dist-tag lookup failed for ${name}: HTTP ${response.status}`);
-      if (manifest && (await response.json())[tag] === version) {
-        verified = true;
-        break;
-      }
-      if (attempt < 5) await new Promise((done) => setTimeout(done, 5000));
-    }
-    if (!verified)
-      throw new Error(
-        `Publication/tag verification failed: ${name}@${version} (${tag}). Inspect partial release manually.`,
-      );
-    console.log(`Verified ${name}@${version} (${tag})`);
-  }
-}
-
 export async function main(command) {
   const version = process.env.RELEASE_VERSION;
   const tag = process.env.RELEASE_TAG;
-  validateRelease({ event: process.env.GITHUB_EVENT_NAME, ref: process.env.GITHUB_REF, version, tag });
+  const resume = process.env.RELEASE_RESUME ?? 'false';
+  validateRelease({ event: process.env.GITHUB_EVENT_NAME, ref: process.env.GITHUB_REF, version, tag, resume });
   if (command === 'validate') return;
   if (command === 'version') return setVersions(version);
-  if (command === 'unpublished') return requireUnpublished(await allPackages(), version);
+  if (command === 'unpublished') return inspectRegistryState(await allPackages(), version, resume === 'true');
   if (command === 'artifacts') return requireArtifacts(await packagePlan(), true);
   const { prepare, publish } = await import('./release-packages.mjs');
   if (command === 'prepare') return prepare(version);
-  if (command === 'publish') return publish(version, tag);
+  if (command === 'publish') return publish(version, tag, resume === 'true');
   throw new Error(`Unknown release command: ${command}`);
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

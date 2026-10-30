@@ -18,6 +18,11 @@ on:
           - next
           - rc
           - beta
+      resume:
+        description: Reuse exact package versions already published to npm
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -44,15 +49,17 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_TAG: ${{ inputs.npm_tag }}
+          RELEASE_RESUME: ${{ inputs.resume }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile --ignore-scripts
-      - name: Reject already-published versions before building
+      - name: Inspect npm registry state before building
         run: node .github/scripts/release.mjs unpublished
         env:
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_TAG: ${{ inputs.npm_tag }}
+          RELEASE_RESUME: ${{ inputs.resume }}
 
   build:
     needs: validate
@@ -72,6 +79,7 @@ jobs:
     env:
       RELEASE_VERSION: ${{ inputs.version }}
       RELEASE_TAG: ${{ inputs.npm_tag }}
+      RELEASE_RESUME: ${{ inputs.resume }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -98,10 +106,85 @@ jobs:
           path: packages/webview/artifacts
       - name: Prepare and inspect all release packages (no publishing)
         run: node .github/scripts/release.mjs prepare
-      - name: Publish and verify every package with provenance
+      - name: Publish every missing package with provenance
         run: node .github/scripts/release.mjs publish
         env:
           npm_config_tag: ${{ inputs.npm_tag }}
           npm_config_provenance: 'true'
           npm_config_access: public
           npm_config_ignore_scripts: 'true'
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Download native artifacts from this run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bindings-*
+          path: packages/webview/artifacts
+      - name: Create GitHub Release with native artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "GitHub Releases must be created from the main branch."
+            exit 1
+          fi
+
+          release_tag="v${RELEASE_VERSION}"
+          shopt -s nullglob
+          assets=(packages/webview/artifacts/bindings-*/*.node)
+          if [[ "${#assets[@]}" -ne 12 ]]; then
+            echo "Expected 12 native release artifacts, found ${#assets[@]}."
+            exit 1
+          fi
+
+          tag_ref="refs/tags/${release_tag}"
+          if git rev-parse --verify --quiet "${tag_ref}^{commit}" >/dev/null; then
+            tag_commit="$(git rev-parse "${tag_ref}^{commit}")"
+            if ! git merge-base --is-ancestor "$tag_commit" "$GITHUB_SHA"; then
+              echo "${release_tag} does not point to a commit in this main run's history."
+              exit 1
+            fi
+          fi
+
+          if release_json="$(gh release view "$release_tag" --json assets)"; then
+            if ! git rev-parse --verify --quiet "${tag_ref}^{commit}" >/dev/null; then
+              echo "${release_tag} exists, but its Git tag is missing from the checkout."
+              exit 1
+            fi
+
+            existing_assets="$(jq -r '.assets[].name' <<< "$release_json")"
+            missing_assets=()
+            for asset in "${assets[@]}"; do
+              asset_name="${asset##*/}"
+              if ! grep -Fxq "$asset_name" <<< "$existing_assets"; then
+                missing_assets+=("$asset")
+              fi
+            done
+
+            if [[ "${#missing_assets[@]}" -gt 0 ]]; then
+              gh release upload "$release_tag" "${missing_assets[@]}"
+            else
+              echo "${release_tag} already contains all 12 native artifacts."
+            fi
+          else
+            release_options=(--target "$GITHUB_SHA" --title "$release_tag" --generate-notes)
+            if [[ "$RELEASE_VERSION" == *-* ]]; then
+              release_options+=(--prerelease)
+            fi
+            gh release create "$release_tag" "${assets[@]}" "${release_options[@]}"
+          fi

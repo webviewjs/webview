@@ -5,11 +5,13 @@ It calls the local `Build.yml`: the native matrix, FreeBSD smoke test, headless
 suite, release-script tests, Rust tests, and locked Cargo metadata validation.
 It has read-only permissions and no publishing or npm credentials.
 
-Run **Release** manually in Actions, select **main**, and enter `version` and
-`npm_tag` (default `next`). Main accepts exact `1.x` versions, rejects build
-metadata because npm strips it, and reserves `v0` for the independent v0 branch.
-`latest` requires a stable version; `rc` and `beta` require the matching
-prerelease identifier; `next` accepts stable and prerelease v1 versions.
+Run **Release CI** manually in Actions, select **main**, and enter `version`,
+`npm_tag`, and `resume` (default `false`). Main accepts exact `1.x` versions,
+rejects build metadata because npm strips it, and reserves `v0` for the
+independent v0 branch. The workflow stamps the requested version into the
+monorepo packages in its temporary checkout. `latest` requires a stable version;
+`rc` and `beta` require the matching prerelease identifier; `next` accepts stable
+and prerelease v1 versions.
 The default branch exposes the same workflow name and input names as v0;
 selecting v0 runs v0's own workflows and scripts.
 
@@ -41,15 +43,31 @@ release runs `npm publish --tag <tag>` directly and does not call `npm dist-tag`
 - `create-webview`
 - `create-webview-app`
 
-Environment protection/approvals remain optional repository policy.
+The shared `npm-release` GitHub environment must allow both `main` and `v0` if
+branch deployment rules are enabled; environment protection and approvals are
+otherwise repository policy.
 
-Release validation checks every package version against npm before native builds
-and again immediately before publishing. Only HTTP 404 means absent; auth,
-network, rate-limit, and registry errors fail the run. Existing versions cause a
-hard failure, even if only one package exists. Version changes are temporary in
-each job's checkout: primary and creator manifests are updated directly, then
-`bun run version` synchronizes the native package manifests. No changes are
-committed or pushed.
+The registry plan covers all 15 packages: 12 native packages, `@webviewjs/webview`,
+`create-webview`, and `create-webview-app`. Main scans before the native build
+and again in the publish job before npm writes. Lookups run concurrently and retry
+network errors, timeouts, HTTP 429, and HTTP 5xx responses with bounded
+exponential backoff. They honor `Retry-After`, fail immediately on permanent
+errors or unexpected metadata, and treat HTTP 404 as absent. If an exact-version
+lookup returns 404, a dist-tag lookup also checks whether npm already points any
+tag at that exact version.
+
+With `resume=false`, any existing exact package version blocks the release
+before publishing. With `resume=true`, the workflow records and logs which
+packages already exist and which are missing, then publishes only confirmed
+missing versions. It never overwrites an npm version. This supports recovery if
+only some native packages, the primary package, or either creator package made
+it to npm. If all 15 already exist, the publish job completes without npm writes.
+To recover the current `1.0.0-rc.3` partial release, dispatch that same version
+with `npm_tag=rc` and `resume=true`.
+
+Version changes are temporary in each job's checkout: primary and creator
+manifests are updated directly, then `bun run version` synchronizes the native
+package manifests. No changes are committed or pushed.
 
 The publishing job downloads `bindings-*` into `packages/webview/artifacts`,
 requires every configured target, runs `bun run artifacts`, and verifies every
@@ -66,20 +84,27 @@ the requested version, and rename the mirror to `create-webview-app`. npm packs
 these normalized stages. Every tarball is inspected and npm dry-run validated
 before any package is published.
 
-NAPI still owns native platform publishing through its npm client, inheriting
-`npm_config_tag`, `npm_config_provenance=true`, public access, and
-`npm_config_ignore_scripts=true`. GitHub release side effects are disabled.
-Platform versions and dist-tags are verified before publishing the primary and
-creator tarballs with `npm publish --ignore-scripts --provenance --access public
---tag <tag>`. Scripts never publish the private monorepo root or execute the
-native build/prepublish lifecycle a second time. Registry propagation checks
-retry reads, never writes.
+NAPI synchronizes platform manifests and optional dependencies with
+`skipOptionalPublish: true`; npm writes are then issued individually with the
+requested tag, public access, `--ignore-scripts`, and provenance. Native packages
+publish first, followed by `@webviewjs/webview`, then the two creator packages.
+The existing staging and tarball inspection remains in place. A successful
+`npm publish` command is the completion signal; the workflow does not fail while
+waiting for post-publish registry visibility.
 
-If publishing fails, the run fails with an explicit partial-release warning.
-Inspect npm versions and dist-tags for every planned package and recover manually
-under the same environment controls, or choose a new version. A rerun never
-silently skips previously published packages; npm versions cannot be overwritten.
-Do not assume a failed run published nothing.
+After npm publication completes, a separate job creates the `v<version>` GitHub
+Release and attaches the 12 native `.node` artifacts from the build. It targets
+the dispatched commit, marks prereleases, and checks that an existing Git tag is
+in the dispatched commit's main history. If the release already exists, it
+uploads only missing asset names and leaves existing assets untouched. Only this
+job has `contents: write`; the npm publishing job retains `contents: read` and
+`id-token: write`.
+
+If npm publishing fails partway through, inspect the logged package state and
+rerun the same version and tag with `resume=true`. If GitHub Release creation or
+asset upload fails, rerun with `resume=true`; npm will skip confirmed packages
+and the GitHub Release job will add only missing assets. Never assume a failed
+run published nothing.
 
 Local guard/packaging tests (no real publishing):
 
@@ -90,4 +115,4 @@ bun test ./.github/scripts/release.test.ts
 The `prepare` command performs only artifact assembly, build, staging, packing,
 and npm dry runs. It expects a disposable checkout with installed dependencies,
 release versions already assigned, all downloaded artifacts, and the release
-environment variables. The separate `publish` command is the only write path.
+environment variables. The `publish` command is the only npm package write path.
