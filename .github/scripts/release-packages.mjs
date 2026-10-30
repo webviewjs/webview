@@ -62,6 +62,11 @@ export function packWorkspace(path, destination) {
   if (!existsSync(tarball)) throw new Error(`Bun did not produce the reported tarball: ${tarball}`);
   return tarball;
 }
+export function validatePublishEnvironment(tag, env = process.env) {
+  if (env.npm_config_tag !== tag || env.npm_config_provenance !== 'true' || env.npm_config_ignore_scripts !== 'true') {
+    throw new Error('NAPI publishing requires explicit tag, provenance, and ignore-scripts settings.');
+  }
+}
 export function stageCreator(source, destination, name, version) {
   mkdirSync(destination, { recursive: true });
   for (const file of ['package.json', 'README.md', 'LICENSE', 'dist'])
@@ -148,13 +153,7 @@ export async function prepare(version) {
     ]);
 }
 export async function publish(version, tag) {
-  if (!process.env.NODE_AUTH_TOKEN) throw new Error('NPM_TOKEN is required in the npm-release environment.');
-  if (
-    process.env.npm_config_tag !== tag ||
-    process.env.npm_config_provenance !== 'true' ||
-    process.env.npm_config_ignore_scripts !== 'true'
-  )
-    throw new Error('NAPI publishing requires explicit tag, provenance, and ignore-scripts settings.');
+  validatePublishEnvironment(tag);
   const plan = readPackage(`${output}/plan.json`);
   if (
     plan.version !== version ||

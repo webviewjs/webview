@@ -14,12 +14,34 @@ The default branch exposes the same workflow name and input names as v0;
 selecting v0 runs v0's own workflows and scripts.
 
 The repository-wide `npm-release` concurrency group serializes both branches.
-Configure the **npm-release** GitHub environment and retain **NPM_TOKEN** with
-publish access to `@webviewjs/webview`, its platform packages, `create-webview`,
-and `create-webview-app`. The token may be an environment or repository secret.
-Only the publishing step receives it. Environment protection/approvals are
-optional repository policy. The publishing job needs `id-token: write` for npm
-provenance; no trusted-publishing migration or GitHub write permission is needed.
+The publishing job uses npm Trusted Publishing through GitHub Actions OIDC; it
+does not need `NPM_TOKEN` or npm registry authentication configuration. Keep the
+**npm-release** GitHub environment and `id-token: write` permission. The workflow
+pins npm CLI 11.21.0, which supports OIDC publishing with dist-tags.
+
+Configure a GitHub Actions Trusted Publisher separately on every package below
+at npmjs.com. Use organization/user `webviewjs`, repository `webview`, workflow
+filename `CI.yml`, and environment `npm-release`; allow `npm publish`. The trust
+settings are package-specific and cannot be created in repository code. The
+release runs `npm publish --tag <tag>` directly and does not call `npm dist-tag`.
+
+- `@webviewjs/webview`
+- `@webviewjs/webview-android-arm-eabi`
+- `@webviewjs/webview-android-arm64`
+- `@webviewjs/webview-darwin-arm64`
+- `@webviewjs/webview-darwin-x64`
+- `@webviewjs/webview-freebsd-x64`
+- `@webviewjs/webview-linux-arm-gnueabihf`
+- `@webviewjs/webview-linux-arm64-gnu`
+- `@webviewjs/webview-linux-ia32-gnu`
+- `@webviewjs/webview-linux-x64-gnu`
+- `@webviewjs/webview-win32-arm64-msvc`
+- `@webviewjs/webview-win32-ia32-msvc`
+- `@webviewjs/webview-win32-x64-msvc`
+- `create-webview`
+- `create-webview-app`
+
+Environment protection/approvals remain optional repository policy.
 
 Release validation checks every package version against npm before native builds
 and again immediately before publishing. Only HTTP 404 means absent; auth,

@@ -1,4 +1,5 @@
 name: Release CI
+run-name: 'Publish ${{ inputs.version }} (npm tag: ${{ inputs.npm_tag }})'
 
 on:
   workflow_dispatch:
@@ -82,7 +83,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
+      - name: Install npm CLI with Trusted Publishing support
+        run: npm install --global npm@11.21.0
       - run: bun install --frozen-lockfile --ignore-scripts
       - name: Revalidate release inputs and registry state
         run: |
@@ -100,7 +102,6 @@ jobs:
       - name: Publish and verify every package with provenance
         run: node .github/scripts/release.mjs publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           npm_config_tag: ${{ inputs.npm_tag }}
           npm_config_provenance: 'true'
           npm_config_access: public

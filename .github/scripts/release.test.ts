@@ -13,7 +13,13 @@ import {
   verifyPublished,
   packagePlan,
 } from './release.mjs';
-import { validateManifest, stageCreator, packWorkspace, inspectTarball } from './release-packages.mjs';
+import {
+  validateManifest,
+  validatePublishEnvironment,
+  stageCreator,
+  packWorkspace,
+  inspectTarball,
+} from './release-packages.mjs';
 
 const base = { event: 'workflow_dispatch', ref: 'refs/heads/main', version: '1.0.0-rc.2', tag: 'rc' };
 const temporary: string[] = [];
@@ -170,6 +176,23 @@ test('post-publication checks verify version and requested tag', async () => {
   ).rejects.toThrow('dist-tag lookup failed');
 });
 
+test('Trusted Publishing needs no auth token and retains publish safety settings', () => {
+  const env = {
+    npm_config_tag: 'rc',
+    npm_config_provenance: 'true',
+    npm_config_ignore_scripts: 'true',
+  };
+  expect(env.NODE_AUTH_TOKEN).toBeUndefined();
+  expect(() => validatePublishEnvironment('rc', env)).not.toThrow();
+  for (const change of [
+    { npm_config_tag: 'next' },
+    { npm_config_provenance: 'false' },
+    { npm_config_ignore_scripts: 'false' },
+  ]) {
+    expect(() => validatePublishEnvironment('rc', { ...env, ...change })).toThrow();
+  }
+});
+
 test('workflow structure keeps all automatic events read-only and publishing manual', async () => {
   const { YAML } = await import('bun');
   const { readFileSync } = await import('node:fs');
@@ -177,6 +200,7 @@ test('workflow structure keeps all automatic events read-only and publishing man
   const ci = workflow('Validation');
   const build = workflow('Build');
   const release = workflow('CI');
+  expect(release['run-name']).toBe('Publish ${{ inputs.version }} (npm tag: ${{ inputs.npm_tag }})');
   expect(Object.keys(ci.on).sort()).toEqual(['pull_request', 'push']);
   for (const event of ['push', 'pull_request']) expect(ci.on[event].branches).toEqual(['main', 'v[0-9]']);
   expect(ci.permissions).toEqual({ contents: 'read' });
@@ -190,6 +214,13 @@ test('workflow structure keeps all automatic events read-only and publishing man
   expect(release.concurrency).toEqual({ group: 'npm-release', 'cancel-in-progress': false });
   expect(release.jobs.publish.environment).toBe('npm-release');
   expect(release.jobs.publish.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
+  const setupNode = release.jobs.publish.steps.find((step: any) => step.uses === 'actions/setup-node@v4');
+  expect(setupNode.with['node-version']).toBe(24);
+  expect(setupNode.with).not.toHaveProperty('registry-url');
+  expect(
+    release.jobs.publish.steps.find((step: any) => step.name === 'Install npm CLI with Trusted Publishing support').run,
+  ).toBe('npm install --global npm@11.21.0');
+  expect(JSON.stringify(release)).not.toMatch(/NODE_AUTH_TOKEN|NPM_TOKEN/);
   expect(release.jobs.build.needs).toBe('validate');
   const publishingStep = release.jobs.publish.steps.at(-1);
   expect(publishingStep.env.npm_config_provenance).toBe('true');
