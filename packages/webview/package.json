@@ -76,7 +76,8 @@
     "clippy": "cargo clippy -- -D warnings",
     "docs": "cargo doc --no-deps --open",
     "update": "bun update",
-    "setup": "bash ./scripts/install-linux-deps.sh"
+    "setup": "bash ./scripts/install-linux-deps.sh",
+    "test:native:macos": "WEBVIEW_NATIVE_TESTS=1 bun test __test__/integration"
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.7.4",

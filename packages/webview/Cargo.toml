@@ -45,7 +45,7 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSAp
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSData"] }
 
 [patch.crates-io]
-tao = { git = "https://github.com/webviewjs/tao", rev = "9bb2bdc097e430f924a69add056ae55335492ab7" }
+tao = { git = "https://github.com/webviewjs/tao", rev = "73ab3e94986f045ad379faee9b2560bffd84012c" }
 
 [build-dependencies]
 napi-build = "2"
