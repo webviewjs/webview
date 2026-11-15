@@ -34,3 +34,22 @@ concurrency:
 jobs:
   build:
     uses: ./.github/workflows/Build.yml
+
+  macos-native:
+    name: macOS native Node and Bun regressions
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@stable
+      - run: bun install --frozen-lockfile
+      - name: Build the local addon
+        run: bun run build
+      - name: Run real AppKit regressions in isolated processes
+        run: bun run test:native:macos
