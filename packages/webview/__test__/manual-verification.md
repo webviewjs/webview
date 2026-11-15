@@ -3,6 +3,11 @@
 Run `bun run build` once before these checks. Launch examples from the repository
 root with `bun run apps/examples/<example>.ts`.
 
+For opt-in macOS tests through the real Node/Bun addon, see
+[integration/README.md](integration/README.md). These cover unaided WKWebView
+loading, external event pumping and shadow state; visual shadows still need
+human inspection.
+
 ## Desktop checks
 
 - **Drag regions:** Run `drag-region.ts`. Drag the titlebar background and a
